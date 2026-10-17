@@ -1,0 +1,20 @@
+{
+  "id": "TAREFA-000",
+  "kind": "bugfix",
+  "objective": "Descrever exclusivamente a correção autorizada",
+  "allowed_paths": [
+    "src/arquivo_especifico.py"
+  ],
+  "allowed_changes": [
+    "Corrigir apenas o comportamento descrito na tarefa"
+  ],
+  "forbidden_changes": [
+    "Novas funcionalidades",
+    "Refatorações não relacionadas",
+    "Mudanças de arquitetura"
+  ],
+  "acceptance": [
+    "Comportamento esperado verificado",
+    "Nenhum arquivo fora do escopo alterado"
+  ]
+}

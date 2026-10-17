@@ -217,6 +217,15 @@ def catalog(request: Request):
     return {"total":len(tasks),"by_source":dict(Counter(s for s,_ in tasks)),
             "sources":[{"source":s,"slug":v} for s,v in tasks]}
 
+@app.get("/api/catalog/checks")
+def catalog_checks(request: Request):
+    require_auth(request)
+    with psycopg.connect(DATABASE,connect_timeout=8) as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT source,slug,state,received,error,checked_at::text FROM jh_catalog_checks ORDER BY checked_at DESC LIMIT 500")
+            rows=[dict(zip(("source","slug","state","received","error","checked_at"),r)) for r in cur.fetchall()]
+    return {"total":len(rows),"items":rows}
+
 @app.post("/api/catalog/scan")
 def catalog_scan(request: Request, offset:int=0,limit:int=12):
     require_auth(request)
@@ -226,15 +235,24 @@ def catalog_scan(request: Request, offset:int=0,limit:int=12):
     batch=tasks[offset:offset+limit]
     details,found=scan(batch,workers=6)
     unique={}
+    pairset=set()
     for job in found:
         key=url_key(job["url"])
-        if key and key not in unique:unique[key]=job
+        pair=pair_key(job["company"],job["title"]) if job["company"] else ""
+        if not key or key in unique or (pair and pair in pairset):continue
+        unique[key]=job
+        if pair:pairset.add(pair)
     items=list(unique.values())
     urls=[url_key(v["url"]) for v in items]
     pairs=[pair_key(v["company"],v["title"]) for v in items if v["company"]]
     known_urls=set();known_pairs=set()
     with psycopg.connect(DATABASE,connect_timeout=7) as conn:
         with conn.cursor() as cur:
+            for entry in details:
+                cur.execute("""INSERT INTO jh_catalog_checks(source,slug,state,received,error)
+                    VALUES(%s,%s,%s,%s,%s) ON CONFLICT(source,slug) DO UPDATE SET
+                    state=EXCLUDED.state,received=EXCLUDED.received,error=EXCLUDED.error,checked_at=now()""",
+                    (entry["source"],entry["slug"],entry["state"],entry["received"],entry.get("error","")))
             if urls:
                 cur.execute("SELECT normalized_url FROM jh_history WHERE normalized_url=ANY(%s)",(urls,))
                 known_urls={r[0] for r in cur.fetchall()}

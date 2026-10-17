@@ -178,7 +178,7 @@ class Phase3ContractTests(unittest.TestCase):
 
     def test_jd_recovers_relevant_unusual_role(self):
         from search_filters import analyze_filters
-        row={"title":"Digital Transformation Lead","location":"Brasil - Remoto","published":"","description":"Lead project delivery, project planning, project governance and project stakeholders."}
+        row={"title":"Operations Enablement Lead","location":"Brasil - Remoto","published":"","description":"Lead project delivery, project planning, project governance and project stakeholders."}
         good,review,stats=analyze_filters([row],roles="Project Manager",country="BR",mode="remote",days=0)
         self.assertEqual(len(good),1)
         self.assertTrue(good[0]["jd_evidence"]["family_evidence"])

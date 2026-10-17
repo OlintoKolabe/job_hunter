@@ -22,6 +22,23 @@ export function OpportunitiesPanel(){
   finally{setScanning(false);setRunAll(false);}
  }
  async function scanCatalog(reset=false){setScanning(true);setError('');try{let offset=reset?0:cursor;let details=reset?[]:reports;let jobs=reset?[]:catalogJobs;const t=await fetch('/api/catalog/scan?offset='+offset+'&limit=12',{method:'POST'});const d=await t.json();if(!t.ok)throw Error(d.detail||'Erro na coleta');setCursor(d.next_offset);setReports([...details,...d.details]);setCatalogJobs([...jobs,...d.items]);}catch(e){setError(e.message)}finally{setScanning(false)}}
+ async function scanDue(){
+  setScanning(true);
+  let details=[],jobs=[],processed=0;
+  try{
+    for(let i=0;i<45;i++){
+      const r=await fetch('/api/catalog/scan?offset=0&limit=12&due_only=true',{method:'POST'});
+      const d=await r.json();
+      if(!r.ok)throw Error(d.detail||'Erro ao consultar o catálogo');
+      if(!d.complete&&d.details.length===0)throw Error('Busca sem avanço');
+      processed+=d.details.length;details=[...details,...d.details];jobs=[...jobs,...d.items];
+      setReports(details);setCatalogJobs(jobs);setCursor(processed);
+      if(d.complete)break;
+      if(i===44)throw Error('Limite de lotes alcançado; execute outra rodada para continuar');
+    }
+    await loadCatalog();
+  }finally{setScanning(false);}
+ }
  async function search(){
   setBusy(true);setError('');
   try{
@@ -29,9 +46,10 @@ export function OpportunitiesPanel(){
    const d=await r.json();
    if(!r.ok)throw Error(d.detail||'Falha ao consultar as vagas');
    setResult(d);
+   await scanDue();
   }catch(e){setError(e.message)}finally{setBusy(false)}
  }
- return <section className="history-pane"><div className="infra-title"><div><h3>Busca de oportunidades</h3><p>APIs públicas e catálogo ATS · coleta por lotes</p></div><button className="import-btn" onClick={search} disabled={busy}>{busy?'Consultando…':'Buscar vagas'}</button></div>
+ return <section className="history-pane"><div className="infra-title"><div><h3>Busca de oportunidades</h3><p>APIs públicas e catálogo ATS · coleta por lotes</p></div><button className="import-btn" onClick={search} disabled={busy||scanning}>{busy||scanning?'Consultando fontes…':'Buscar vagas'}</button></div>
  <div className="infra-title" style={{marginTop:25}}><div><h3>Catálogo de empresas</h3><p>{coverage?coverage.total+' quadros catalogados · '+coverage.due+' para revisar':'Carregando inventário...'}</p></div><button className="import-btn" onClick={scanAll} disabled={scanning||!coverage}>Varrer todos os quadros</button><button className="import-btn" onClick={()=>scanCatalog(cursor===0)} disabled={scanning}>{scanning?'Consultando…':cursor===0?'Iniciar varredura':'Consultar próximo lote'}</button></div>
  <label className="import-btn" style={{marginBottom:12}}>Importar cadastro_empresas.json<input type="file" hidden accept=".json,application/json" onChange={uploadCatalog}/></label>
  <p>O catálogo original fica no Neon, não no repositório público. A importação acrescenta slugs e não elimina os conhecidos.</p><p>A coleta percorre lotes de até 12 quadros, registrando sucesso, ausência de vagas e falhas. Você pode iniciar a varredura de todos os quadros ou avançar lote a lote. A execução ocorre enquanto a aba permanece aberta.</p>

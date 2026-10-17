@@ -100,6 +100,36 @@ def discovery_queries(roles,limit=12):
         if t not in out:out.append(t)
     return out[:limit]
 
+def detect_work_mode(job,evidence=None):
+    """Infer a single work mode, or leave it unknown."""
+    evidence=evidence or {"work_evidence":[]}
+    def normalize(value):
+        return re.sub(r"\s+"," ",fold(value).replace("_"," ").replace("-"," ")).strip()
+    remote=("remote","remoto","remota","home office","homeoffice","work from home","teletrabalho","telecommute","100% remoto","100% remote")
+    hybrid=("hybrid","hibrido","hibrida","hibrid","partial remote","parcialmente remoto","semipresencial")
+    onsite=("on site","onsite","presencial","in office","office based","no escritorio")
+    def found(text,patterns):
+        return any(re.search(r"(?<![a-z])"+re.escape(p)+r"(?![a-z])",text) for p in patterns)
+    def detect(text):
+        h,r,o=found(text,hybrid),found(text,remote),found(text,onsite)
+        if h or (r and o):return "hybrid"
+        if o:return "onsite"
+        if r:return "remote"
+        return None
+    for key in ("workplaceType","workArrangement","remoteType","workMode","workplace"):
+        value=job.get(key)
+        if isinstance(value,str):
+            result=detect(normalize(value))
+            if result:return result
+    # False does not establish onsite: it can also mean hybrid or unspecified.
+    if job.get("remote") is True:return "remote"
+    result=detect(normalize(job.get("location")))
+    if result:return result
+    jd=evidence.get("work_evidence") or []
+    if "onsite_only" in jd:return "onsite"
+    if "remote" in jd:return "remote"
+    return None
+
 def classify(job,terms,country,mode,days):
     title=fold(job.get("title",""))
     from jd_signals import signals
@@ -109,36 +139,8 @@ def classify(job,terms,country,mode,days):
     loc=fold(job.get("location",""))
     structured_geo=fold(" ".join(str(job.get(k) or "") for k in ("country","countryCode","countryName","city","state","region","eligibleLocations","remoteRegions")))
     loc=(loc+" "+structured_geo).strip()
-    # Work modality is a three-way classification; do not confuse "remote-first"
-    # company policies with a particular posting's structured workplace type.
-    remote_flag=job.get("remote")
-    workplace=fold(job.get("workplaceType") or job.get("workplace") or job.get("workArrangement") or "")
-    remote_words=("remote","remoto","remota","home office","home-office","homeoffice","work from home","teletrabalho","telecommute","fully remote","100% remote","100% remoto")
-    hybrid_words=("hybrid","hibrid","hibrido","hibrida")
-    onsite_words=("onsite","on-site","on site","presencial","in office","in-office","office-based","office based")
-    # Structured ATS value overrides incidental occurrences in descriptions/places.
-    def has_any(value,words):
-        return any(word in value for word in words)
-    explicit=workplace or fold(job.get("remoteType") or job.get("workMode") or "")
-    explicit_remote=has_any(explicit,remote_words)
-    explicit_hybrid=has_any(explicit,hybrid_words)
-    explicit_onsite=has_any(explicit,onsite_words)
-    if explicit_hybrid:detected="hybrid"
-    elif explicit_onsite and not explicit_remote:detected="onsite"
-    elif explicit_remote and not explicit_onsite:detected="remote"
-    elif isinstance(remote_flag,bool):detected="remote" if remote_flag else None
-    else:
-        # Location frequently contains the modality on inHire and Gupy.
-        loc_remote=has_any(loc,remote_words)
-        loc_hybrid=has_any(loc,hybrid_words)
-        loc_onsite=has_any(loc,onsite_words)
-        if loc_hybrid:detected="hybrid"
-        elif loc_onsite and not loc_remote:detected="onsite"
-        elif loc_remote and not loc_onsite:detected="remote"
-        elif "onsite_only" in evidence["work_evidence"]:detected="onsite"
-        elif "remote" in evidence["work_evidence"]:detected="remote"
-        else:detected=None
-    if mode!="all" and detected is not None and detected!=mode:
+    detected=detect_work_mode(job,evidence)
+    if mode!="all" and detected not in (None,mode):
         return "excluded","modalidade"
     mode_ok=(mode=="all" or detected==mode)
     # Brazilian job boards often use city/state alone, without a country field.
@@ -176,8 +178,8 @@ def analyze_filters(jobs,roles=DEFAULT_ROLES,country="BR",mode="remote",days=30,
     for j in jobs:
         bucket,reason=classify(j,terms,country,mode,days)
         reasons[bucket+(":"+reason if reason else "")]=reasons.get(bucket+(":"+reason if reason else ""),0)+1
-        if bucket=="confirmed":confirmed.append({**j,"jd_evidence":signals(j,roles),"description":""})
-        elif bucket=="review":review.append({**j,"jd_evidence":signals(j,roles),"description":"","needs_verification":reason.split(",")})
+        if bucket=="confirmed":confirmed.append({**j,"detected_mode":detect_work_mode(j,signals(j,roles)),"jd_evidence":signals(j,roles),"description":""})
+        elif bucket=="review":review.append({**j,"detected_mode":detect_work_mode(j,signals(j,roles)),"jd_evidence":signals(j,roles),"description":"","needs_verification":reason.split(",")})
     order=lambda j:parse_date(j.get("published")) or datetime.min.replace(tzinfo=timezone.utc)
     confirmed.sort(key=order,reverse=sort=="newest")
     review.sort(key=order,reverse=sort=="newest")

@@ -172,10 +172,11 @@ def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:
             if pairs:
                 cur.execute("SELECT pair_key FROM jh_history WHERE pair_key=ANY(%s)",(pairs,))
                 known_pairs={row[0] for row in cur.fetchall()}
-    fresh=[j for j in items if not any(b in normalized(j["company"]) for b in ("kraken","payward")) and url_key(j["url"]) not in known_urls and
-           (not j["company"] or pair_key(j["company"],j["title"]) not in known_pairs)]
+    visible=[{**j,"already_known":url_key(j["url"]) in known_urls or (bool(j["company"]) and pair_key(j["company"],j["title"]) in known_pairs)} for j in items
+             if not any(b in normalized(j["company"]) for b in ("kraken","payward"))]
+    fresh_count=sum(not j["already_known"] for j in visible)
     return {"source":"Multifuente","queried":len(sources),"total":len(items),
-        "new":len(fresh),"duplicates":len(items)-len(fresh),"items":fresh[:100],"review_items":review[:150],"filter_stats":filter_stats,"raw_count":raw_count,"details":sources,
+        "new":fresh_count,"duplicates":len(visible)-fresh_count,"items":visible[:100],"review_items":review[:150],"filter_stats":filter_stats,"raw_count":raw_count,"details":sources,
         "notice":"Vagas coletadas, ainda sem triagem de elegibilidade Brasil/remoto ou score."}
 
 
@@ -326,11 +327,13 @@ def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False
             if pairs:
                 cur.execute("SELECT pair_key FROM jh_history WHERE pair_key=ANY(%s)",(pairs,))
                 known_pairs={r[0] for r in cur.fetchall()}
-    fresh=[j for j in items if url_key(j["url"]) not in known_urls and (not j["company"] or pair_key(j["company"],j["title"]) not in known_pairs)]
+    visible=[{**j,"already_known":url_key(j["url"]) in known_urls or (bool(j["company"]) and pair_key(j["company"],j["title"]) in known_pairs)} for j in items
+             if not any(b in normalized(j["company"]) for b in ("kraken","payward"))]
+    fresh_count=sum(not j["already_known"] for j in visible)
     return {"total_sources":len(tasks),"due_only":due_only,"offset":offset,"next_offset":offset+len(batch),
             "complete":offset+len(batch)>=len(tasks),"details":details,
-            "found":len(items),"new":len(fresh),"duplicates":len(items)-len(fresh),"raw_count":raw_count,"filter_stats":filter_stats,
-            "review_items":review[:150],"items":fresh[:80],"notice":"Vagas candidatas: remoto/Brasil e requisitos ainda aguardam análise completa."}
+            "found":len(items),"new":fresh_count,"duplicates":len(visible)-fresh_count,"raw_count":raw_count,"filter_stats":filter_stats,
+            "review_items":review[:150],"items":visible[:80],"notice":"Vagas candidatas: remoto/Brasil e requisitos ainda aguardam análise completa."}
 
 @app.get("/api/history")
 def history(request: Request, q: str="", state: str="", limit:int=50, offset:int=0):

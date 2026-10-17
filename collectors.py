@@ -123,9 +123,8 @@ def pull(source,slug,location='brazil'):
                 jobs.append(value)
     if source=="inHire" and not jobs:
         raise ValueError("inHire returned no parsed jobs; API response format requires verification")
-    # Avoid counting unrelated engineering jobs as matches
-    target=[j for j in jobs if TITLE_RE.search(j["title"])]
-    return {"source":source,"term":slug,"status":"ok","received":len(jobs),"target":len(target)},target
+    # Keep all parsed jobs. Role relevance belongs to search_filters, not the collector.
+    return {"source":source,"term":slug,"status":"ok","received":len(jobs),"target":len(jobs)},jobs
 
 def collect(terms=None,country="BR",only_source="all"):
     country_locations={"BR":"Brazil","AR":"Argentina","CL":"Chile","CO":"Colombia","MX":"Mexico","PE":"Peru","UY":"Uruguay","PY":"Paraguay","BO":"Bolivia","EC":"Ecuador","CR":"Costa Rica","PA":"Panama","GT":"Guatemala","DO":"Dominican Republic","VE":"Venezuela","US":"United States","CA":"Canada","PT":"Portugal","ES":"Spain","GB":"United Kingdom"}

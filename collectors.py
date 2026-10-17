@@ -95,12 +95,32 @@ def pull(source,slug,location='brazil'):
             if value:jobs.append(value)
     elif source=="inHire":
         payload=fetch_json("https://api.inhire.app/job-posts/public/pages",{"X-Tenant":slug})
-        for j in as_list(payload):
+        if isinstance(payload,list):
+            if not payload:raise ValueError("Tenant inHire inexistente ou resposta vazia")
+            records=payload
+            tenant_name=slug
+        elif isinstance(payload,dict):
+            records=payload.get("jobsPage")
+            tenant_name=payload.get("tenantName") or slug
+            if isinstance(records,dict):
+                records=records.get("jobs") or records.get("items") or records.get("content")
+            if records is None:
+                records=as_list(payload)
+        else:records=[]
+        if not isinstance(records,list):raise ValueError("Formato inHire jobsPage inesperado")
+        for j in records:
             if not isinstance(j,dict):continue
-            value=item(slug,j.get("title") or j.get("name"),
-                j.get("url") or j.get("jobUrl") or j.get("publicUrl") or j.get("link"),
-                j.get("location") or j.get("workplaceType"),source,j.get("createdAt"))
-            if value:jobs.append(value)
+            title=j.get("displayName") or j.get("title") or j.get("name")
+            id_=j.get("jobId") or j.get("id")
+            job_slug=re.sub(r"[^a-z0-9]+","-",str(title or "").lower()).strip("-")
+            url=j.get("publicUrl") or j.get("jobUrl") or (f"https://{slug}.inhire.app/vagas/{id_}/{job_slug}" if id_ and job_slug else "")
+            loc=j.get("location") or ""
+            if isinstance(loc,dict):loc=" ".join(str(v) for v in loc.values() if isinstance(v,str))
+            workplace=j.get("workplaceType") or ""
+            value=item(tenant_name,title,url,(str(loc)+" "+str(workplace)).strip(),source,j.get("publishedAt") or j.get("createdAt"))
+            if value:
+                value["workplaceType"]=workplace
+                jobs.append(value)
     if source=="inHire" and not jobs:
         raise ValueError("inHire returned no parsed jobs; API response format requires verification")
     # Avoid counting unrelated engineering jobs as matches

@@ -17,7 +17,7 @@ def read(url,headers=None,size=750000):
         return body,res.status
 def source_tasks():
     tasks=[(s,slug) for s,slugs in SEED.items() for slug in slugs]
-    return tasks
+    return [(source,slug) for source,slug in tasks if slug.casefold() not in ("kraken","kraken.com","payward")]
 
 class BoardHTML(HTMLParser):
     def __init__(self):super().__init__();self.links=[];self.href=None;self.buffer=[]

@@ -76,7 +76,7 @@ def classify(job,terms,country,mode,days):
     else:mode_ok=True
     # Brazilian job boards often use city/state alone, without a country field.
     br_places=("sao paulo","rio de janeiro","belo horizonte","curitiba","porto alegre","brasilia","goiania","recife","fortaleza","salvador","campinas","florianopolis","uberlandia","belem","manaus","vitoria","ribeirao preto")
-    brazil_evidence=any(place in loc for place in br_places) or bool(re.search(r"\\b(br|brazil|brasil)\\b",loc))
+    brazil_evidence=any(place in loc for place in br_places) or bool(re.search(r"\b(br|brazil|brasil)\b",loc))
     if country=="GLOBAL":country_ok=True
     elif country=="LATAM":
         country_ok=any(fold(x) in loc for x in LATAM) or any(x in loc for x in REGIONAL) or brazil_evidence

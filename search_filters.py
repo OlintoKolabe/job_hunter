@@ -109,21 +109,38 @@ def classify(job,terms,country,mode,days):
     loc=fold(job.get("location",""))
     structured_geo=fold(" ".join(str(job.get(k) or "") for k in ("country","countryCode","countryName","city","state","region","eligibleLocations","remoteRegions")))
     loc=(loc+" "+structured_geo).strip()
-    # Structured remote/location flags are distinct from a country label.
+    # Work modality is a three-way classification; do not confuse "remote-first"
+    # company policies with a particular posting's structured workplace type.
     remote_flag=job.get("remote")
-    workplace=fold(job.get("workplaceType") or job.get("workplace") or job.get("employmentType") or "")
-    mode_text=loc+" "+workplace
-    # A remote-first company alone does not prove a role is remote if onsite is explicit.
-    remote_flag=remote_flag if isinstance(remote_flag,bool) else None
-    if mode=="remote":
-        if "onsite_only" in evidence["work_evidence"] and "remote" not in evidence["work_evidence"]:return "excluded","modalidade"
-        if remote_flag is False or (any(x in mode_text for x in ONSITE) and not any(x in mode_text for x in REMOTE)) or (any(x in workplace for x in HYBRID) and not any(x in mode_text for x in REMOTE)):return "excluded","modalidade"
-        mode_ok=remote_flag is True or any(x in mode_text for x in REMOTE) or "remote" in evidence["work_evidence"]
-    elif mode=="hybrid":
-        mode_ok=any(x in mode_text for x in HYBRID)
-    elif mode=="onsite":
-        mode_ok=any(x in mode_text for x in ONSITE)
-    else:mode_ok=True
+    workplace=fold(job.get("workplaceType") or job.get("workplace") or job.get("workArrangement") or "")
+    remote_words=("remote","remoto","remota","home office","home-office","homeoffice","work from home","teletrabalho","telecommute","fully remote","100% remote","100% remoto")
+    hybrid_words=("hybrid","hibrid","hibrido","hibrida")
+    onsite_words=("onsite","on-site","on site","presencial","in office","in-office","office-based","office based")
+    # Structured ATS value overrides incidental occurrences in descriptions/places.
+    def has_any(value,words):
+        return any(word in value for word in words)
+    explicit=workplace or fold(job.get("remoteType") or job.get("workMode") or "")
+    explicit_remote=has_any(explicit,remote_words)
+    explicit_hybrid=has_any(explicit,hybrid_words)
+    explicit_onsite=has_any(explicit,onsite_words)
+    if explicit_hybrid:detected="hybrid"
+    elif explicit_onsite and not explicit_remote:detected="onsite"
+    elif explicit_remote and not explicit_onsite:detected="remote"
+    elif isinstance(remote_flag,bool):detected="remote" if remote_flag else None
+    else:
+        # Location frequently contains the modality on inHire and Gupy.
+        loc_remote=has_any(loc,remote_words)
+        loc_hybrid=has_any(loc,hybrid_words)
+        loc_onsite=has_any(loc,onsite_words)
+        if loc_hybrid:detected="hybrid"
+        elif loc_onsite and not loc_remote:detected="onsite"
+        elif loc_remote and not loc_onsite:detected="remote"
+        elif "onsite_only" in evidence["work_evidence"]:detected="onsite"
+        elif "remote" in evidence["work_evidence"]:detected="remote"
+        else:detected=None
+    if mode!="all" and detected is not None and detected!=mode:
+        return "excluded","modalidade"
+    mode_ok=(mode=="all" or detected==mode)
     # Brazilian job boards often use city/state alone, without a country field.
     br_places=("sao paulo","rio de janeiro","belo horizonte","curitiba","porto alegre","brasilia","goiania","recife","fortaleza","salvador","campinas","florianopolis","uberlandia","belem","manaus","vitoria","ribeirao preto")
     brazil_evidence=any(place in loc for place in br_places) or bool(re.search(r"\b(br|brazil|brasil)\b",loc))

@@ -60,7 +60,7 @@ ROLE_KEYS={
  "growth":("growth","crescimento","acquisition"),
  "business":("business analyst","analista de negocios","analista de negocio","business operations"),
 }
-NON_TARGET_TITLE=re.compile(r"\\b(developer|engineer|scientist|researcher|designer|intern|estagiario|estagiaria|recruiter|account executive|sdr|devops|backend|frontend)\\b")
+NON_TARGET_TITLE=re.compile(r"\b(developer|engineer|scientist|researcher|designer|intern|estagiario|estagiaria|recruiter|account executive|sdr|devops|backend|frontend)\b")
 def requested_families(terms):
     families=set()
     for term in terms:
@@ -129,7 +129,7 @@ def classify(job,terms,country,mode,days):
     else:
         country_ok=(brazil_evidence if country=="BR" else any(x in loc for x in TOKENS.get(country,[]))) or any(x in loc for x in REGIONAL)
     # Known foreign-only locations must not be rebranded as Brazil-eligible.
-    if country in ("BR","LATAM") and loc and not country_ok and any(x in loc for x in ("united states only","us only","europe only","canada only")):
+    if country in ("BR","LATAM") and loc and not country_ok and any(x in loc for x in ("united states only","us only","usa only","u.s. only","europe only","canada only")):
         return "excluded","pais"
     published=parse_date(job.get("published"))
     date_ok=not days or (published is not None and datetime.now(timezone.utc)-timedelta(days=days)<=published<=datetime.now(timezone.utc)+timedelta(days=1))

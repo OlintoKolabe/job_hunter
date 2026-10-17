@@ -247,6 +247,46 @@ class Phase3ContractTests(unittest.TestCase):
             self.assertEqual(confirmed[0]["detected_mode"],mode)
             self.assertEqual(len(review),0)
 
+    def test_brazil_latam_region_decisions(self):
+        from search_filters import geo_verdict
+        checks=[
+            ({"location":"São Paulo, SP"},"BR","eligible"),
+            ({"location":"Brazil - remote"},"BR","eligible"),
+            ({"countryCode":"BR"},"BR","eligible"),
+            ({"location":"LATAM Remote"},"BR","eligible"),
+            ({"location":"Latin America"},"BR","eligible"),
+            ({"location":"Global Remote"},"BR","eligible"),
+            ({"location":"Argentina - remoto"},"BR","excluded"),
+            ({"location":"Chile"},"BR","excluded"),
+            ({"location":"Americas"},"BR","unknown"),
+            ({"location":"LATAM excluding Brazil"},"BR","excluded"),
+            ({"location":""},"BR","unknown"),
+            ({"location":"Argentina"},"LATAM","eligible"),
+            ({"location":"Colombia"},"LATAM","eligible"),
+            ({"location":"Brasil"},"LATAM","eligible"),
+            ({"location":"México"},"LATAM","eligible"),
+            ({"location":"Latin America"},"LATAM","eligible"),
+            ({"location":"Europe only"},"LATAM","excluded"),
+            ({"location":""},"LATAM","unknown"),
+        ]
+        for job,region,expected in checks:
+            with self.subTest(job=job,region=region):
+                self.assertEqual(geo_verdict(job,region),expected)
+
+    def test_geo_filter_does_not_modify_modes(self):
+        from search_filters import analyze_filters
+        rows=[
+           {"title":"Product Owner","location":"Argentina","workplaceType":"remote"},
+           {"title":"Product Owner","location":"Brasil","workplaceType":"remote"},
+           {"title":"Product Owner","location":"LATAM","workplaceType":"hybrid"}
+        ]
+        confirmed,review,_=analyze_filters(rows,"Product Owner","BR","remote",0)
+        self.assertEqual([j["location"] for j in confirmed],["Brasil"])
+        confirmed,review,_=analyze_filters(rows,"Product Owner","LATAM","remote",0)
+        self.assertEqual([j["location"] for j in confirmed],["Argentina","Brasil"])
+        confirmed,review,_=analyze_filters(rows,"Product Owner","BR","hybrid",0)
+        self.assertEqual([j["location"] for j in confirmed],["LATAM"])
+
     def test_mcp_not_claimed_integrated(self):
         self.assertIn("Render",CONNECTORS["Indeed MCP"])
         self.assertIn("Render",CONNECTORS["Firecrawl"])

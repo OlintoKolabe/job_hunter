@@ -18,6 +18,7 @@ from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from pydantic import BaseModel
 import psycopg
 from collectors import collect
+from catalog_engine import source_tasks,scan
 
 app = FastAPI(docs_url=None, redoc_url=None)
 DIST = Path(__file__).resolve().parent / "dist"
@@ -163,6 +164,45 @@ def search_jobs(request: Request):
     return {"source":"Multifuente","queried":len(sources),"total":len(items),
         "new":len(fresh),"duplicates":len(items)-len(fresh),"items":fresh[:100],"details":sources,
         "notice":"Vagas coletadas, ainda sem triagem de elegibilidade Brasil/remoto ou score."}
+
+
+@app.get("/api/catalog")
+def catalog(request: Request):
+    require_auth(request)
+    from collections import Counter
+    tasks=source_tasks()
+    return {"total":len(tasks),"by_source":dict(Counter(s for s,_ in tasks)),
+            "sources":[{"source":s,"slug":v} for s,v in tasks]}
+
+@app.post("/api/catalog/scan")
+def catalog_scan(request: Request, offset:int=0,limit:int=12):
+    require_auth(request)
+    tasks=source_tasks()
+    offset=max(0,min(offset,len(tasks)))
+    limit=max(1,min(limit,15))
+    batch=tasks[offset:offset+limit]
+    details,found=scan(batch,workers=6)
+    unique={}
+    for job in found:
+        key=url_key(job["url"])
+        if key and key not in unique:unique[key]=job
+    items=list(unique.values())
+    urls=[url_key(v["url"]) for v in items]
+    pairs=[pair_key(v["company"],v["title"]) for v in items if v["company"]]
+    known_urls=set();known_pairs=set()
+    with psycopg.connect(DATABASE,connect_timeout=7) as conn:
+        with conn.cursor() as cur:
+            if urls:
+                cur.execute("SELECT normalized_url FROM jh_history WHERE normalized_url=ANY(%s)",(urls,))
+                known_urls={r[0] for r in cur.fetchall()}
+            if pairs:
+                cur.execute("SELECT pair_key FROM jh_history WHERE pair_key=ANY(%s)",(pairs,))
+                known_pairs={r[0] for r in cur.fetchall()}
+    fresh=[j for j in items if url_key(j["url"]) not in known_urls and (not j["company"] or pair_key(j["company"],j["title"]) not in known_pairs)]
+    return {"total_sources":len(tasks),"offset":offset,"next_offset":offset+len(batch),
+            "complete":offset+len(batch)>=len(tasks),"details":details,
+            "found":len(items),"new":len(fresh),"duplicates":len(items)-len(fresh),
+            "items":fresh[:80],"notice":"Vagas candidatas: remoto/Brasil e requisitos ainda aguardam análise completa."}
 
 @app.get("/api/history")
 def history(request: Request, q: str="", state: str="", limit:int=50, offset:int=0):

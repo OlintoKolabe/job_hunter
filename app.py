@@ -168,6 +168,20 @@ def search_jobs(request: Request):
 
 
 
+
+SOURCE_CADENCE_DAYS={"inhire":3,"quickin":3,"dynamite":3,"greenhouse":7,"greenhouse_eu":30,
+ "ashby":7,"lever":7,"gupy":7,"linkedin_guest":7,"teamtailor":14,"recruitee":30,
+ "smartrecruiters":30,"workable_account":7,"personio":30,"bamboohr":30,
+ "zoho":30,"trakstar":30,"compleo":30,"solides":30}
+
+def source_freshness(source, checked_at):
+    from datetime import datetime,timezone,timedelta
+    days=SOURCE_CADENCE_DAYS.get(source,30)
+    if not checked_at:return {"interval_days":days,"due":True,"next_check":None}
+    next_time=checked_at+timedelta(days=days)
+    return {"interval_days":days,"due":next_time<=datetime.now(timezone.utc),
+            "next_check":next_time.isoformat()}
+
 def active_source_tasks():
     tasks=set(source_tasks())
     with psycopg.connect(DATABASE,connect_timeout=8) as conn:
@@ -214,8 +228,23 @@ def catalog(request: Request):
     require_auth(request)
     from collections import Counter
     tasks=active_source_tasks()
-    return {"total":len(tasks),"by_source":dict(Counter(s for s,_ in tasks)),
-            "sources":[{"source":s,"slug":v} for s,v in tasks]}
+    with psycopg.connect(DATABASE,connect_timeout=8) as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT source,slug,state,received,error,checked_at FROM jh_catalog_checks")
+            history={(r[0],r[1]):r[2:] for r in cur.fetchall()}
+    sources=[]
+    due=0
+    for source,slug in tasks:
+        h=history.get((source,slug))
+        timing=source_freshness(source,h[3] if h else None)
+        if timing["due"]:due+=1
+        sources.append({"source":source,"slug":slug,"state":h[0] if h else "nao_verificado",
+             "last_received":h[1] if h else 0,"last_error":h[2] if h else "",
+             "checked_at":h[3].isoformat() if h else None,**timing})
+    return {"total":len(tasks),"due":due,"by_source":dict(Counter(s for s,_ in tasks)),
+            "sources":sources,"mcp_status":{
+              "Scrapling":"sem ponte MCP no Render","Indeed":"MCP disponível apenas no ChatGPT",
+              "Nimble":"exige acesso autenticado e quota","Firecrawl":"exige chave e quota no Render"}}
 
 @app.get("/api/catalog/checks")
 def catalog_checks(request: Request):

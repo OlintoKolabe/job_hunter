@@ -21,6 +21,7 @@ import psycopg
 from psycopg.types.json import Jsonb
 from collectors import collect
 from catalog_engine import source_tasks,scan
+from catalog_bootstrap import maybe_start
 
 app = FastAPI(docs_url=None, redoc_url=None)
 DIST = Path(__file__).resolve().parent / "dist"
@@ -29,6 +30,10 @@ SECRET = os.environ.get("APP_SECRET", "")
 PASSWORD = os.environ.get("APP_PASSWORD", "")
 DATABASE = os.environ.get("DATABASE_URL", "")
 serializer = URLSafeTimedSerializer(SECRET) if SECRET else None
+
+@app.on_event("startup")
+def bootstrap_catalog_if_requested():
+    maybe_start(DATABASE)
 
 class ChangePassword(BaseModel):
     current_password: str

@@ -119,6 +119,33 @@ class Phase3ContractTests(unittest.TestCase):
         self.assertIn('"items":visible[:100]',code)
         self.assertIn('"items":visible[:80]',code)
 
+    def test_brazilian_city_and_remote_synonyms(self):
+        from search_filters import analyze_filters
+        rows=[
+         {"title":"Líder de Produtos","location":"São Paulo - Homeoffice","published":""},
+         {"title":"Marketing Ops Manager","location":"Belo Horizonte - 100% remoto","published":""},
+         {"title":"Product Manager","location":"Brazil - Remote-first","published":""},
+         {"title":"Growth Developer","location":"Brasil Remoto","published":""}
+        ]
+        confirmed,review,why=analyze_filters(rows,country="BR",mode="remote",days=0)
+        self.assertEqual([x["title"] for x in confirmed],["Líder de Produtos","Marketing Ops Manager","Product Manager"])
+        self.assertEqual(review,[])
+
+    def test_any_period_does_not_require_publication(self):
+        from search_filters import analyze_filters
+        rows=[{"title":"Product Owner","location":"Brasil | Teletrabalho","published":""}]
+        confirmed,review,_=analyze_filters(rows,country="BR",mode="remote",days=0)
+        self.assertEqual(len(confirmed),1)
+        recent,review,_=analyze_filters(rows,country="BR",mode="remote",days=30)
+        self.assertFalse(recent)
+        self.assertEqual(len(review),1)
+
+    def test_collectors_preserve_titles_before_relevance(self):
+        from collectors import pull
+        with patch("collectors.fetch_json",return_value={"jobs":[{"title":"Líder de Produtos","absolute_url":"https://example.com/1","location":{"name":"São Paulo"}}]}):
+            detail,jobs=pull("Greenhouse","board")
+        self.assertEqual(len(jobs),1)
+
     def test_mcp_not_claimed_integrated(self):
         self.assertIn("Render",CONNECTORS["Indeed MCP"])
         self.assertIn("Render",CONNECTORS["Firecrawl"])

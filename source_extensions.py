@@ -97,10 +97,28 @@ def extra(source,slug):
         for j in jobs:j["source"]="LinkedIn guest"
         return jobs,"validado" if jobs else "pendente",len(jobs)
     if source=="gupy":
-        url="https://portal.gupy.io/job-search/term="+urllib.parse.quote(slug)
-        jobs=html_links(url,r"/job/|/jobs/")
-        for j in jobs:j["source"]="Gupy (sem currículo PDF)"
-        return jobs,"validado" if jobs else "pendente",len(jobs)
+        jobs=[];received=0
+        for offset in (0,100,200):
+            url="https://employability-portal.gupy.io/api/v1/jobs?"+urllib.parse.urlencode({"jobName":slug,"limit":100,"offset":offset})
+            payload=fetch_json(url)
+            records=(payload.get("data") or payload.get("jobs") or payload.get("results") or []) if isinstance(payload,dict) else payload
+            if isinstance(records,dict):records=records.get("jobs") or records.get("results") or records.get("data") or []
+            if not isinstance(records,list):raise ValueError("Gupy formato inesperado")
+            received+=len(records)
+            for j in records:
+                if not isinstance(j,dict):continue
+                title=j.get("name") or j.get("title")
+                company=j.get("careerPageName") or j.get("companyName") or j.get("company") or ""
+                link=j.get("jobUrl") or j.get("applyUrl") or j.get("url")
+                if not link:continue
+                mode=j.get("workplaceType") or ""
+                loc=" ".join(str(x) for x in (j.get("city"),j.get("state"),"Brasil",mode) if x)
+                val=item(company,title,link,loc,"Gupy",j.get("publishedAt") or j.get("publishedDate") or j.get("createdAt"))
+                if val:
+                    val["workplaceType"]=mode
+                    jobs.append(val)
+            if len(records)<100:break
+        return [j for j in jobs if TITLE_RE.search(j["title"])],"validado" if received else "pendente",received
     raise ValueError("adaptador inexistente: "+source)
 
 # Nonintegrated MCPs must be presented as unavailable, never as scanned.

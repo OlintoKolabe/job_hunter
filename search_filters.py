@@ -148,6 +148,7 @@ def classify(job,terms,country,mode,days):
     return "confirmed",""
 
 def analyze_filters(jobs,roles=DEFAULT_ROLES,country="BR",mode="remote",days=30,sort="newest"):
+    from jd_signals import signals
     terms=search_terms(roles)
     if len(roles)>700:raise ValueError("Filtros de cargo excessivamente longos")
     if country not in COUNTRY_NAMES:raise ValueError("País desconhecido")

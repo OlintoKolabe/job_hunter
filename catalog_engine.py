@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from html.parser import HTMLParser
 from xml.etree import ElementTree
 from collectors import pull, TITLE_RE, item
+from source_extensions import extra as expanded_pull
 
 SEED=json.loads((Path(__file__).parent/"catalog_seed.json").read_text())
 HEADERS={"User-Agent":"Mozilla/5.0 (compatible; JobHunter/0.3)","Accept":"application/json,text/html,application/xml"}
@@ -105,10 +106,13 @@ def run_task(source,slug):
             detail,jobs=pull(source.capitalize() if source!="inhire" else "inHire",slug)
             return {"source":source,"slug":slug,"state":"validado" if detail["received"] else "sem_vagas",
                 "received":detail["received"],"target":len(jobs)},jobs
+        if source in ("smartrecruiters","teamtailor","recruitee","personio","workable_account","dynamite","linkedin_guest","gupy"):
+            jobs,state,count=expanded_pull(source,slug)
+            return {"source":source,"slug":slug,"state":state,"received":count,"target":len(jobs)},jobs
         jobs,_=extra_pull(source,slug)
         return {"source":source,"slug":slug,"state":"validado" if jobs else "sem_vagas","received":len(jobs),"target":len(jobs)},jobs
     except urllib.error.HTTPError as e:
-        return {"source":source,"slug":slug,"state":"migrado_ou_inativo" if e.code==404 else "pendente","received":0,"error":str(e.code)},[]
+        return {"source":source,"slug":slug,"state":"pendente","received":0,"error":str(e.code)},[]
     except Exception as e:
         return {"source":source,"slug":slug,"state":"pendente","received":0,"error":str(e)[:140]},[]
 

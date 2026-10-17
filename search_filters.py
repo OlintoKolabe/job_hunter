@@ -134,7 +134,7 @@ def detect_work_mode(job,evidence=None):
 BR_CITIES=("sao paulo","rio de janeiro","belo horizonte","curitiba","porto alegre","brasilia","goiania","recife","fortaleza","salvador","campinas","florianopolis","uberlandia","belem","manaus","vitoria","ribeirao preto")
 LATAM_MARKERS=("latam","latin america","america latina","latinoamerica","south america","america do sul")
 GLOBAL_MARKERS=("worldwide","anywhere in the world","global remote","remote worldwide")
-FOREIGN_ONLY_MARKERS=("united states only","us only","usa only","u.s. only","europe only","canada only","must be based in the us","must reside in the us")
+FOREIGN_ONLY_MARKERS=("remote us","remote usa","remote - us","remote - usa","us remote","usa remote","remote, us","us-based","us based","usa based","united states only","us only","usa only","u.s. only","europe only","canada only","must be based in the us","must reside in the us")
 BRAZIL_EXCLUSIONS=("except brazil","excluding brazil","not available in brazil","excluindo brasil","exceto brasil","fora do brasil")
 LATAM_CODES={"BR","AR","BO","CL","CO","CR","EC","GT","MX","PA","PY","PE","DO","UY","VE"}
 
@@ -156,17 +156,21 @@ def geo_verdict(job,country,evidence=None):
         if country in ("BR","LATAM"):return "excluded"
     if country=="BR" and any(contains_phrase(loc,p) for p in BRAZIL_EXCLUSIONS):
         return "excluded"
+    # A bare "US"/"USA" is an explicit US job location, not unknown Brazil eligibility.
+    us_only=any(contains_phrase(loc,p) for p in ("us","usa","united states","u.s.","united states of america"))
     br=any(contains_phrase(loc,p) for p in ("brazil","brasil","br")) or any(contains_phrase(loc,p) for p in BR_CITIES) or "brazil" in jd_geo
     regional=any(contains_phrase(loc,p) for p in LATAM_MARKERS)
     global_eligible=any(contains_phrase(loc,p) for p in GLOBAL_MARKERS)
     codes={code for code,aliases in TOKENS.items() if any(contains_phrase(loc,p) for p in aliases)}
     if br:codes.add("BR")
     if country=="BR":
+        if us_only and not (br or regional or global_eligible):return "excluded"
         if br or regional or global_eligible:return "eligible"
         # If the vacancy explicitly names a different country but not BR/LATAM, don't silently confirm Brazil.
         if codes and "BR" not in codes:return "excluded"
         return "unknown"
     if country=="LATAM":
+        if us_only and not (regional or global_eligible or bool(codes & LATAM_CODES)):return "excluded"
         return "eligible" if regional or global_eligible or bool(codes & LATAM_CODES) else "unknown"
     if any(contains_phrase(loc,p) for p in TOKENS.get(country,())) or global_eligible:
         return "eligible"

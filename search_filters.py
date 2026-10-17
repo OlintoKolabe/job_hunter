@@ -73,6 +73,8 @@ def requested_families(terms):
                 if any(term==alias for alias in aliases):families.add(family)
     return families
 def role_match(title,terms):
+    title=fold(title)
+    terms=[fold(t) for t in terms]
     if not terms:return True
     if NON_TARGET_TITLE.search(title):return False
     families=requested_families(terms)

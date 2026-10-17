@@ -169,10 +169,10 @@ async def history_import(request: Request):
                 company=(item.get("empresa") or "").strip()[:300]
                 title=(item.get("cargo") or "").strip()[:300]
                 url=(item.get("url") or "").strip()[:2000]
-                if not company or not title:
+                if not url and (not company or not title):
                     invalid+=1;continue
-                uk=url_key(url);pk=pair_key(company,title)
-                cur.execute("SELECT 1 FROM jh_history WHERE pair_key=%s OR (normalized_url=%s AND %s<>'') LIMIT 1",(pk,uk,uk))
+                uk=url_key(url);pk=pair_key(company,title) if company and title else ""
+                cur.execute("SELECT 1 FROM jh_history WHERE (pair_key=%s AND %s<>'') LIMIT 1",(pk,pk,uk,uk))
                 if cur.fetchone():
                     duplicates+=1;continue
                 cur.execute("""INSERT INTO jh_history(url,normalized_url,empresa,cargo,pair_key,estado,data,fonte,motivo)

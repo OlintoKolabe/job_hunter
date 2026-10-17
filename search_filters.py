@@ -54,7 +54,7 @@ def classify(job,terms,country,mode,days):
     workplace=fold(job.get("workplaceType") or job.get("workplace") or "")
     mode_text=loc+" "+workplace
     if mode=="remote":
-        if remote_flag is False or any(x in workplace for x in HYBRID+ONSITE):return "excluded","modalidade"
+        if remote_flag is False or (any(x in mode_text for x in ONSITE) and not any(x in mode_text for x in REMOTE)) or (any(x in workplace for x in HYBRID) and not any(x in mode_text for x in REMOTE)):return "excluded","modalidade"
         mode_ok=remote_flag is True or any(x in mode_text for x in REMOTE)
     elif mode=="hybrid":
         mode_ok=any(x in mode_text for x in HYBRID)

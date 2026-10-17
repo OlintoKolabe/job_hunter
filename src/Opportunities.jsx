@@ -32,7 +32,8 @@ export function OpportunitiesPanel(){
   finally{setBusy(false)}
  }
  const sourceKey=v=>String(v||'').toLowerCase().replace(/[^a-z0-9]/g,'');
- const visibleReviews=reviews.filter(v=>source==='all'||sourceKey(v.source)===sourceKey(source)||source==='greenhouse'&&sourceKey(v.source)==='greenhouseeu');
+ const visibleReviews=reviews.filter(v=>(source==='all'||sourceKey(v.source)===sourceKey(source)||source==='greenhouse'&&sourceKey(v.source)==='greenhouseeu')&&(mode==='all'||!(v.needs_verification||[]).includes('modalidade')));
+ const unknownModeCount=reviews.filter(v=>(v.needs_verification||[]).includes('modalidade')).length;
  const combined=new Map();results.forEach(v=>combined.set(v.url,{...v,confirmed:true}));visibleReviews.forEach(v=>{if(!combined.has(v.url))combined.set(v.url,{...v,confirmed:false})});
  const ordered=[...combined.values()].sort((a,b)=>{
    const date=v=>{const x=Date.parse(v.published||'');return Number.isFinite(x)?x:0};
@@ -51,7 +52,7 @@ export function OpportunitiesPanel(){
   <button className="import-btn" disabled={busy||!roles.trim()} onClick={search}>{busy?'Pesquisando vagas e verificando quadros…':'Buscar oportunidades'}</button>
   {message&&<p className="notice" role="status">{message}{checked>0?' · Quadros verificados agora: '+checked:''}</p>}
   {error&&<p className="notice" role="alert">{error}</p>}
-  {(results.length>0||reviews.length>0||completed)&&<><div className="history-stats"><span>Oportunidades identificadas: <b>{ordered.length}</b></span><span>Confirmadas: <b>{results.length}</b></span><span>Precisam de confirmação: <b>{visibleReviews.filter(v=>!results.some(r=>r.url===v.url)).length}</b></span><span>Anúncios analisados: <b>{rawScanned}</b></span><span>Quadros consultados: <b>{checked}</b></span></div>
+  {(results.length>0||reviews.length>0||completed)&&<><div className="history-stats"><span>Oportunidades identificadas: <b>{ordered.length}</b></span><span>Confirmadas: <b>{results.length}</b></span><span>Precisam de confirmação: <b>{visibleReviews.filter(v=>!results.some(r=>r.url===v.url)).length}</b></span><span>Anúncios analisados: <b>{rawScanned}</b></span><span>Quadros consultados: <b>{checked}</b></span>{mode!=='all'&&<span>Modalidade não comprovada (fora da lista): <b>{unknownModeCount}</b></span>}</div>
   {ordered.length===0?<p>Nenhuma vaga correspondente foi identificada nos quadros consultados. Abra Fontes e Auditoria dos filtros para ver falhas e exclusões.</p>:
   <><p>Panorama de vagas relacionadas aos cargos selecionados. A marcação "A confirmar" significa que faltam provas de modalidade, país ou data — não é uma confirmação de elegibilidade.</p>
   <div className="table-wrap"><table><thead><tr><th>Cargo e situação</th><th>Empresa</th><th>Local informado</th><th>Data</th><th>Fonte</th></tr></thead><tbody>{ordered.map(v=><tr key={v.url}><td><a href={v.url} target="_blank" rel="noopener noreferrer">{v.title}</a><small style={{display:'block',fontWeight:600,marginTop:4}}>{v.confirmed?'Confirmada':'A confirmar: '+(v.needs_verification||[]).join(', ')}</small>{v.jd_evidence?.family_evidence?.length>0&&<small style={{display:'block',opacity:.75}}>JD: {v.jd_evidence.family_evidence.flatMap(e=>e.evidence).slice(0,2).join(' / ')}</small>}</td><td>{v.company||'Não informada'}{v.already_known&&<small style={{display:'block',opacity:.65}}>Já conhecida</small>}</td><td>{v.location||'Não informada'}</td><td>{v.published?String(v.published).slice(0,10):'—'}</td><td>{v.source||'—'}</td></tr>)}</tbody></table></div></>}

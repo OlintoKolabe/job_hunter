@@ -8,7 +8,7 @@ LATAM={"brazil","brasil","argentina","chile","colombia","colômbia","peru","urug
 COUNTRIES=[("LATAM","América Latina"),("BR","Brasil"),("AR","Argentina"),("BO","Bolívia"),("CL","Chile"),("CO","Colômbia"),("CR","Costa Rica"),("EC","Equador"),("GT","Guatemala"),("MX","México"),("PA","Panamá"),("PY","Paraguai"),("PE","Peru"),("DO","República Dominicana"),("UY","Uruguai"),("VE","Venezuela"),("US","Estados Unidos"),("CA","Canadá"),("PT","Portugal"),("ES","Espanha"),("GB","Reino Unido"),("GLOBAL","Global")]
 COUNTRY_NAMES=dict(COUNTRIES)
 TOKENS={"BR":["brazil","brasil"],"AR":["argentina"],"BO":["bolivia"],"CL":["chile"],"CO":["colombia"],"CR":["costa rica"],"EC":["ecuador"],"GT":["guatemala"],"MX":["mexico"],"PA":["panama"],"PY":["paraguay","paraguai"],"PE":["peru"],"DO":["dominican republic","republica dominicana"],"UY":["uruguay","uruguai"],"VE":["venezuela"],"US":["united states","usa","u.s."],"CA":["canada"],"PT":["portugal"],"ES":["spain","espanha"],"GB":["united kingdom","uk","england"]}
-REMOTE=["remote","remoto","remota","home office","home-office","work from home","work-from-home","anywhere","teletrabalho"]
+REMOTE=["remote","remoto","remota","home office","home-office","homeoffice","home based","work from home","work-from-home","work remotely","work remotely from","fully remote","remote first","remote-first","100% remote","100% remoto","full remote","teletrabalho","telecommute","telecommuting","virtual position","distributed team","anywhere"]
 HYBRID=["hybrid","hibrido","híbrido"]
 ONSITE=["on-site","onsite","on site","presencial","in-office","in office"]
 REGIONAL=["latam","latin america","america latina","americas","remote worldwide","worldwide","anywhere in the world","global remote"]
@@ -31,16 +31,16 @@ def parse_date(value):
     except (ValueError,OverflowError,OSError):return None
 
 TITLE_ALIASES={
- "product manager":["product manager","gerente de produto","gestor de produto","product lead"],
- "product owner":["product owner","dono de produto"],
- "project manager":["project manager","gerente de projetos","gestor de projetos","gestao de projetos"],
+ "product manager":["product manager","gerente de produto","gestor de produto","product lead","product management","product analyst","analista de produto","analista de produtos","especialista de produto","especialista de produtos","lider de produto","lider de produtos","estrategista de produto","gerencia de produtos"],
+ "product owner":["product owner","dono de produto","product ownership","po senior","po pleno"],
+ "project manager":["project manager","gerente de projetos","gestor de projetos","gestao de projetos","gerenciamento de projetos","coordenador de projetos","coordenadora de projetos","lider de projetos","project lead","project coordinator","program manager","delivery manager","implementation project"],
  "gerente de projetos":["gerente de projetos","project manager","gestor de projetos"],
- "product marketing":["product marketing","marketing de produto","product marketer"],
+ "product marketing":["product marketing","marketing de produto","product marketer","marketing de produtos","product marketing specialist"],
  "business analyst":["business analyst","analista de negocios","analista de negocio"],
  "analista de negocios":["analista de negocios","business analyst","analista de negocio"],
  "pmo":["pmo","project management office"],
- "growth":["growth manager","growth lead","head of growth","head de growth","growth marketing","gerente de growth","coordenador de growth","growth specialist","especialista de growth","growth strategist"],
- "marketing":["marketing manager","marketing lead","head of marketing","head de marketing","gerente de marketing","diretor de marketing","marketing director","product marketing","marketing specialist","especialista de marketing","coordenador de marketing"],
+ "growth":["growth manager","growth lead","head of growth","head de growth","growth marketing","gerente de growth","coordenador de growth","growth specialist","especialista de growth","growth strategist","growth marketer","growth operations","acquisition manager","lifecycle marketing"],
+ "marketing":["marketing manager","marketing lead","head of marketing","head de marketing","gerente de marketing","diretor de marketing","marketing director","product marketing","marketing specialist","especialista de marketing","coordenador de marketing","coordenadora de marketing","analista de marketing","marketing operations","marketing ops","demand generation","field marketing","lifecycle marketing","acquisition marketing"],
 }
 # Broader role discovery, without treating unrelated engineering/science jobs as matches.
 NON_TARGET_TITLE=re.compile(r"\b(developer|engineer|scientist|researcher|designer|intern|estagiario|estagiaria|recruiter|sales|account executive|sdr|devops|software|backend|frontend)\b")
@@ -64,7 +64,7 @@ def classify(job,terms,country,mode,days):
     loc=fold(job.get("location",""))
     # Structured remote/location flags are distinct from a country label.
     remote_flag=job.get("remote")
-    workplace=fold(job.get("workplaceType") or job.get("workplace") or "")
+    workplace=fold(job.get("workplaceType") or job.get("workplace") or job.get("employmentType") or "")
     mode_text=loc+" "+workplace
     if mode=="remote":
         if remote_flag is False or (any(x in mode_text for x in ONSITE) and not any(x in mode_text for x in REMOTE)) or (any(x in workplace for x in HYBRID) and not any(x in mode_text for x in REMOTE)):return "excluded","modalidade"
@@ -74,11 +74,14 @@ def classify(job,terms,country,mode,days):
     elif mode=="onsite":
         mode_ok=any(x in mode_text for x in ONSITE)
     else:mode_ok=True
+    # Brazilian job boards often use city/state alone, without a country field.
+    br_places=("sao paulo","rio de janeiro","belo horizonte","curitiba","porto alegre","brasilia","goiania","recife","fortaleza","salvador","campinas","florianopolis","uberlandia","belem","manaus","vitoria","ribeirao preto")
+    brazil_evidence=any(place in loc for place in br_places) or bool(re.search(r"\\b(br|brazil|brasil)\\b",loc))
     if country=="GLOBAL":country_ok=True
     elif country=="LATAM":
-        country_ok=any(fold(x) in loc for x in LATAM) or any(x in loc for x in REGIONAL)
+        country_ok=any(fold(x) in loc for x in LATAM) or any(x in loc for x in REGIONAL) or brazil_evidence
     else:
-        country_ok=any(x in loc for x in TOKENS.get(country,[])) or any(x in loc for x in REGIONAL)
+        country_ok=(brazil_evidence if country=="BR" else any(x in loc for x in TOKENS.get(country,[]))) or any(x in loc for x in REGIONAL)
     # Known foreign-only locations must not be rebranded as Brazil-eligible.
     if country in ("BR","LATAM") and loc and not country_ok and any(x in loc for x in ("united states only","us only","europe only","canada only")):
         return "excluded","pais"

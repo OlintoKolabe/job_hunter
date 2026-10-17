@@ -106,7 +106,7 @@ def run_task(source,slug):
             detail,jobs=pull(source.capitalize() if source!="inhire" else "inHire",slug)
             return {"source":source,"slug":slug,"state":"validado" if detail["received"] else "sem_vagas",
                 "received":detail["received"],"target":len(jobs)},jobs
-        if source in ("smartrecruiters","teamtailor","recruitee","personio","workable_account","dynamite","linkedin_guest","gupy"):
+        if source in ("smartrecruiters","teamtailor","recruitee","personio","workable_account","dynamite","linkedin_guest","gupy","kaszek","jobbol"):
             jobs,state,count=expanded_pull(source,slug)
             return {"source":source,"slug":slug,"state":state,"received":count,"target":len(jobs)},jobs
         jobs,_=extra_pull(source,slug)

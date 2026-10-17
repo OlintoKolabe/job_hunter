@@ -20,7 +20,7 @@ from pydantic import BaseModel
 import psycopg
 from psycopg.types.json import Jsonb
 from collectors import collect
-from search_filters import analyze_filters,apply_filters,search_terms,DEFAULT_ROLES,COUNTRIES
+from search_filters import analyze_filters,apply_filters,search_terms,discovery_queries,DEFAULT_ROLES,COUNTRIES
 from catalog_engine import source_tasks,scan
 from catalog_bootstrap import maybe_start
 
@@ -156,7 +156,7 @@ def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:
     require_auth(request)
     allowed_sources={"all","inhire","quickin","gupy","greenhouse","ashby","lever","bamboohr","dynamite","linkedin_guest","jobgether","workable"}
     if source not in allowed_sources:raise HTTPException(400,"Fonte não reconhecida")
-    items,sources=collect(search_terms(roles),country,source) if source in ("all","jobgether","workable") else ([],[])
+    items,sources=collect(discovery_queries(roles),country,source) if source in ("all","jobgether","workable") else ([],[])
     raw_count=len(items)
     try: items,review,filter_stats=analyze_filters(items,roles,country,mode,days,sort)
     except ValueError as e: raise HTTPException(400,str(e))

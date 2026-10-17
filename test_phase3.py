@@ -112,6 +112,13 @@ class Phase3ContractTests(unittest.TestCase):
         self.assertTrue(all(d["source"]=="inHire" for d in details))
         self.assertTrue(all(call.args[0]=="inHire" for call in p.call_args_list))
 
+    def test_history_does_not_remove_matching_search_results(self):
+        from pathlib import Path
+        code=Path("app.py").read_text()
+        self.assertIn('"already_known"',code)
+        self.assertIn('"items":visible[:100]',code)
+        self.assertIn('"items":visible[:80]',code)
+
     def test_mcp_not_claimed_integrated(self):
         self.assertIn("Render",CONNECTORS["Indeed MCP"])
         self.assertIn("Render",CONNECTORS["Firecrawl"])

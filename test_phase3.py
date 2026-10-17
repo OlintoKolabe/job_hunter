@@ -233,6 +233,20 @@ class Phase3ContractTests(unittest.TestCase):
         self.assertEqual(good[0]["workplaceType"] if "workplaceType" in good[0] else "", "")
         self.assertFalse(review)
 
+    def test_work_mode_source_of_truth(self):
+        from search_filters import detect_work_mode,analyze_filters
+        self.assertEqual(detect_work_mode({"workplaceType":"hybrid","location":"Brazil remote"}),"hybrid")
+        self.assertEqual(detect_work_mode({"workplaceType":"On-site","location":"Brazil"}),"onsite")
+        self.assertEqual(detect_work_mode({"workplaceType":"Remote","location":"Brazil"}),"remote")
+        self.assertEqual(detect_work_mode({"location":"Brasil - Híbrido / remoto parcial"}),"hybrid")
+        self.assertEqual(detect_work_mode({"remote":False,"location":"Brasil"}),None)
+        rows=[{"title":"Product Owner","location":"Brasil","workplaceType":x,"published":""} for x in ("hybrid","remote","onsite")]
+        for mode in ("hybrid","remote","onsite"):
+            confirmed,review,reasons=analyze_filters(rows,"Product Owner","BR",mode,0)
+            self.assertEqual(len(confirmed),1)
+            self.assertEqual(confirmed[0]["detected_mode"],mode)
+            self.assertEqual(len(review),0)
+
     def test_mcp_not_claimed_integrated(self):
         self.assertIn("Render",CONNECTORS["Indeed MCP"])
         self.assertIn("Render",CONNECTORS["Firecrawl"])

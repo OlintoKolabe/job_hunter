@@ -154,13 +154,9 @@ def extract_jobs(data):
 @app.post("/api/search-jobs")
 def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:str="remote",days:int=30,sort:str="newest",source:str="all"):
     require_auth(request)
-    if source not in ("all","jobgether","workable"):
-        items,sources=[],[]
-    else:
-        items,sources=collect(search_terms(roles),country)
-        if source!="all":
-            items=[v for v in items if v["source"].lower()==source]
-            sources=[v for v in sources if v["source"].lower()==source]
+    allowed_sources={"all","inhire","quickin","gupy","greenhouse","ashby","lever","bamboohr","dynamite","linkedin_guest","jobgether","workable"}
+    if source not in allowed_sources:raise HTTPException(400,"Fonte não reconhecida")
+    items,sources=collect(search_terms(roles),country,source) if source in ("all","jobgether","workable") else ([],[])
     raw_count=len(items)
     try: items,review,filter_stats=analyze_filters(items,roles,country,mode,days,sort)
     except ValueError as e: raise HTTPException(400,str(e))
@@ -280,6 +276,7 @@ def catalog_checks(request: Request):
 @app.post("/api/catalog/scan")
 def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False,roles:str=DEFAULT_ROLES,country:str="BR",mode:str="remote",days:int=30,sort:str="newest",source:str="all"):
     require_auth(request)
+    if source not in {"all","inhire","quickin","gupy","greenhouse","ashby","lever","bamboohr","dynamite","linkedin_guest","jobgether","workable"}:raise HTTPException(400,"Fonte não reconhecida")
     tasks=active_source_tasks()
     if source!="all":
         tasks=[(src,slug) for src,slug in tasks if src==source or (source=="greenhouse" and src=="greenhouse_eu")]

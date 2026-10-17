@@ -14,7 +14,7 @@ BOARDS={
  "inHire": ("amcom","zallpy","radix","brq","trinca","vinta"),
  "Lever": ("jobgether",),
 }
-TITLE_RE=re.compile(r"product|project|marketing|growth|business analyst|gerente de projetos|analista de neg[oó]cios|pmo",re.I)
+TITLE_RE=re.compile(r"product|project|marketing|growth|business analyst|gerente de (projetos|produto)|gestor de (projetos|produto)|analista de neg[oó]cios|pmo",re.I)
 
 def fetch_json(url,headers=None):
     req=urllib.request.Request(url,headers={"Accept":"application/json","User-Agent":"Mozilla/5.0 JobHunter/0.3",**(headers or {})})
@@ -103,8 +103,9 @@ def pull(source,slug):
     target=[j for j in jobs if TITLE_RE.search(j["title"])]
     return {"source":source,"term":slug,"status":"ok","received":len(jobs),"target":len(target)},target
 
-def collect():
-    tasks=[("Jobgether",t) for t in TERMS]+[("Workable",t) for t in ("product manager","product owner")]+[(source,slug) for source,slugs in BOARDS.items() for slug in slugs]
+def collect(terms=None,country="BR"):
+    terms=[str(t).strip()[:100] for t in (terms or TERMS) if str(t).strip()][:12]
+    tasks=[("Jobgether",t) for t in terms]+[("Workable",t) for t in terms]+[(source,slug) for source,slugs in BOARDS.items() for slug in slugs]
     found={};details=[]
     with ThreadPoolExecutor(max_workers=8) as pool:
         futures={pool.submit(pull,source,slug):(source,slug) for source,slug in tasks}

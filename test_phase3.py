@@ -34,6 +34,12 @@ class Phase3ContractTests(unittest.TestCase):
             state,_=run_task("inhire","dummy")
         self.assertEqual(state["state"],"pendente")
 
+    def test_scrapling_guarded_without_enable_flag(self):
+        from scrapling_fallback import js_fallback
+        with patch.dict("os.environ",{"JH_SCRAPLING_JS":"0"}):
+            with self.assertRaisesRegex(RuntimeError,"desativado"):
+                js_fallback("quickin","test")
+
     def test_mcp_not_claimed_integrated(self):
         self.assertIn("Render",CONNECTORS["Indeed MCP"])
         self.assertIn("Render",CONNECTORS["Firecrawl"])

@@ -250,7 +250,7 @@ def catalog(request: Request):
              "checked_at":h[3].isoformat() if h else None,**timing})
     return {"total":len(tasks),"due":due,"by_source":dict(Counter(s for s,_ in tasks)),
             "sources":sources,"mcp_status":{
-              "Scrapling":"sem ponte MCP no Render","Indeed":"MCP disponível apenas no ChatGPT",
+              "Scrapling":("Biblioteca local instalada; fallback JS habilitado" if os.environ.get("JH_SCRAPLING_JS")=="1" else "Biblioteca local instalada; fallback JS protegido por configuração"),"Indeed":"MCP disponível apenas no ChatGPT",
               "Nimble":"exige acesso autenticado e quota","Firecrawl":"exige chave e quota no Render"}}
 
 @app.get("/api/catalog/checks")

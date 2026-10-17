@@ -96,6 +96,22 @@ class Phase3ContractTests(unittest.TestCase):
         confirmed,review,reasons=analyze_filters(entries,"Growth","BR","remote",30)
         self.assertEqual([x["title"] for x in confirmed],["Growth Manager"])
 
+    def test_relevant_marketing_roles_not_lost(self):
+        from search_filters import role_match, search_terms
+        self.assertTrue(role_match("analista de marketing",search_terms("Marketing")))
+        self.assertTrue(role_match("coordenador de growth",search_terms("Growth")))
+        self.assertFalse(role_match("staff data scientist, growth",search_terms("Growth")))
+        self.assertFalse(role_match("shopify growth developer",search_terms("Growth")))
+
+    def test_source_scoped_before_network(self):
+        from collectors import collect
+        with patch("collectors.pull") as p:
+            p.return_value=({"source":"inHire","term":"amcom","status":"ok","received":0},[])
+            _,details=collect(["product owner"],"BR","inhire")
+        self.assertTrue(details)
+        self.assertTrue(all(d["source"]=="inHire" for d in details))
+        self.assertTrue(all(call.args[0]=="inHire" for call in p.call_args_list))
+
     def test_mcp_not_claimed_integrated(self):
         self.assertIn("Render",CONNECTORS["Indeed MCP"])
         self.assertIn("Render",CONNECTORS["Firecrawl"])

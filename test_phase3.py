@@ -40,6 +40,21 @@ class Phase3ContractTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError,"desativado"):
                 js_fallback("quickin","test")
 
+    def test_search_filters_require_actual_location_and_mode(self):
+        from search_filters import apply_filters
+        rows=[{"title":"Product Manager","location":"Brazil - Remote","published":"2026-10-17","url":"https://x/a"},
+              {"title":"Product Manager","location":"São Paulo - Hybrid","published":"2026-10-17","url":"https://x/b"},
+              {"title":"Product Manager","location":"","published":"2026-10-17","url":"https://x/c"}]
+        matched=apply_filters(rows,"Product Manager","BR","remote",30,"newest")
+        self.assertEqual([j["url"] for j in matched],["https://x/a"])
+
+    def test_latam_and_reverse_chronology(self):
+        from search_filters import apply_filters
+        rows=[{"title":"Product Owner","location":"LATAM Remote","published":"2026-10-16"},
+              {"title":"Product Owner","location":"Brazil Remote","published":"2026-10-15"}]
+        matched=apply_filters(rows,"Product Owner","LATAM","remote",30,"oldest")
+        self.assertEqual([j["published"] for j in matched],["2026-10-15","2026-10-16"])
+
     def test_mcp_not_claimed_integrated(self):
         self.assertIn("Render",CONNECTORS["Indeed MCP"])
         self.assertIn("Render",CONNECTORS["Firecrawl"])

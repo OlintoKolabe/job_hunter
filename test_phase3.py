@@ -29,6 +29,11 @@ class Phase3ContractTests(unittest.TestCase):
             state,_=run_task("quickin","sample")
         self.assertEqual(state["state"],"pendente")
 
+    def test_inhire_unparsed_is_pending(self):
+        with patch("collectors.fetch_json",return_value={"data":{"items":[]}}):
+            state,_=run_task("inhire","dummy")
+        self.assertEqual(state["state"],"pendente")
+
     def test_mcp_not_claimed_integrated(self):
         self.assertIn("Render",CONNECTORS["Indeed MCP"])
         self.assertIn("Render",CONNECTORS["Firecrawl"])

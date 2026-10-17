@@ -35,10 +35,10 @@ def as_list(payload):
                 if result:return result
     return []
 
-def item(company,title,url,location,source,published=""):
+def item(company,title,url,location,source,published="",description=""):
     if not isinstance(url,str) or not url.startswith(("https://","http://")) or not title:return None
     return {"company":str(company or "")[:200],"title":str(title)[:300],"url":url[:2000],
-            "location":str(location or "")[:200],"published":str(published or "")[:80],"source":source}
+            "location":str(location or "")[:200],"published":str(published or "")[:80],"source":source,"description":str(description or "")[:18000]}
 
 def pull(source,slug,location='brazil'):
     jobs=[]
@@ -53,7 +53,7 @@ def pull(source,slug,location='brazil'):
             if isinstance(c,dict):c=c.get("name","")
             value=item(c,j.get("title") or j.get("jobTitle") or j.get("position"),
                 j.get("url") or j.get("jobUrl") or j.get("applyUrl") or j.get("hostedUrl"),
-                j.get("location") or j.get("country"),source,j.get("publishedAt") or j.get("createdAt"))
+                j.get("location") or j.get("country"),source,j.get("publishedAt") or j.get("createdAt"),j.get("description") or j.get("jobDescription") or j.get("content") or "")
             if value:jobs.append(value)
     elif source=="Workable":
         params={"query":slug,"limit":20}
@@ -65,7 +65,7 @@ def pull(source,slug,location='brazil'):
             c=j.get("company") or j.get("companyName") or ""
             if isinstance(c,dict):c=c.get("name","")
             value=item(c,j.get("title") or j.get("jobTitle"),j.get("url") or j.get("jobUrl") or j.get("applicationUrl"),
-                j.get("location") or j.get("workplace"),source,j.get("publishedAt"))
+                j.get("location") or j.get("workplace"),source,j.get("publishedAt"),j.get("descriptionHtml") or j.get("description") or "")
             if value:jobs.append(value)
     elif source=="Ashby":
         payload=fetch_json("https://api.ashbyhq.com/posting-api/job-board/"+urllib.parse.quote(slug))
@@ -82,7 +82,7 @@ def pull(source,slug,location='brazil'):
             if not isinstance(j,dict):continue
             location=j.get("location") or {}
             if isinstance(location,dict):location=location.get("name","")
-            value=item(slug,j.get("title"),j.get("absolute_url"),location,source,j.get("first_published"))
+            value=item(slug,j.get("title"),j.get("absolute_url"),location,source,j.get("first_published"),j.get("content") or "")
             if value:jobs.append(value)
     elif source=="Lever":
         payload=fetch_json("https://api.lever.co/v0/postings/"+urllib.parse.quote(slug)+"?mode=json"+("&location=Brazil" if slug.casefold()=="jobgether" else ""))
@@ -91,7 +91,7 @@ def pull(source,slug,location='brazil'):
         for j in as_list(payload):
             if not isinstance(j,dict):continue
             cats=j.get("categories") or {}
-            value=item(slug,j.get("text"),j.get("hostedUrl"),cats.get("location") or "",source,j.get("createdAt"))
+            value=item(slug,j.get("text"),j.get("hostedUrl"),cats.get("location") or "",source,j.get("createdAt"),j.get("descriptionPlain") or j.get("description") or "")
             if value:jobs.append(value)
     elif source=="inHire":
         payload=fetch_json("https://api.inhire.app/job-posts/public/pages",{"X-Tenant":slug})
@@ -117,7 +117,7 @@ def pull(source,slug,location='brazil'):
             loc=j.get("location") or ""
             if isinstance(loc,dict):loc=" ".join(str(v) for v in loc.values() if isinstance(v,str))
             workplace=j.get("workplaceType") or ""
-            value=item(tenant_name,title,url,(str(loc)+" "+str(workplace)).strip(),source,j.get("publishedAt") or j.get("createdAt"))
+            value=item(tenant_name,title,url,(str(loc)+" "+str(workplace)).strip(),source,j.get("publishedAt") or j.get("createdAt"),j.get("description") or j.get("jobDescription") or "")
             if value:
                 value["workplaceType"]=workplace
                 jobs.append(value)

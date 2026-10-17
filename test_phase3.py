@@ -209,6 +209,30 @@ class Phase3ContractTests(unittest.TestCase):
         self.assertEqual(len(good),0)
         self.assertEqual(len(review),1)
 
+    def test_work_modes_are_mutually_exclusive(self):
+        from search_filters import analyze_filters
+        rows=[
+          {"title":"Product Owner","location":"Brasil","workplaceType":"remote","published":""},
+          {"title":"Product Owner","location":"Brasil","workplaceType":"hybrid","published":""},
+          {"title":"Product Owner","location":"Brasil","workplaceType":"on-site","published":""},
+          {"title":"Product Owner","location":"Brasil","published":""},
+          {"title":"Product Owner","location":"Brasil - Híbrido / remoto parcial","published":""},
+        ]
+        for selection,expected in (("remote","remote"),("hybrid","hybrid"),("onsite","on-site")):
+            good,review,stats=analyze_filters(rows,"Product Owner","BR",selection,0)
+            self.assertEqual([j["workplaceType"] for j in good],[expected])
+            self.assertEqual(len(review),1)
+            self.assertIn("modalidade",review[0]["needs_verification"])
+
+    def test_jd_fills_missing_mode_but_does_not_override_hybrid(self):
+        from search_filters import analyze_filters
+        rows=[{"title":"Product Manager","location":"Brasil","description":"This is a fully remote role. Lead product strategy and product discovery."},
+              {"title":"Product Manager","location":"Brasil","workplaceType":"hybrid","description":"Our company is remote first and our teams work from home."}]
+        good,review,_=analyze_filters(rows,"Product Manager","BR","remote",0)
+        self.assertEqual(len(good),1)
+        self.assertEqual(good[0]["workplaceType"] if "workplaceType" in good[0] else "", "")
+        self.assertFalse(review)
+
     def test_mcp_not_claimed_integrated(self):
         self.assertIn("Render",CONNECTORS["Indeed MCP"])
         self.assertIn("Render",CONNECTORS["Firecrawl"])

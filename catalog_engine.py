@@ -44,7 +44,7 @@ def extra_pull(source,slug):
             raw,_=read("https://job-boards.eu.greenhouse.io/"+urllib.parse.quote(slug))
             p=BoardHTML();p.feed(raw.decode("utf-8","replace"))
             for href,title in p.links:
-                if TITLE_RE.search(title):
+                if title.strip():
                     url=urllib.parse.urljoin("https://job-boards.eu.greenhouse.io/"+slug,href)
                     value=item(slug,title,url,"",source)
                     if value:jobs.append(value)
@@ -52,7 +52,7 @@ def extra_pull(source,slug):
         for j in data.get("jobs",[]):
             location=j.get("location") or {}
             val=item(slug,j.get("title"),j.get("absolute_url"),location.get("name","") if isinstance(location,dict) else location,source)
-            if val and TITLE_RE.search(val["title"]):jobs.append(val)
+            if val:jobs.append(val)
         return jobs,"ok"
     if source=="bamboohr":
         raw,_=read("https://"+slug+".bamboohr.com/careers/list")
@@ -75,7 +75,7 @@ def extra_pull(source,slug):
             p=BoardHTML();p.feed(raw.decode("utf-8","replace"))
             new=0
             for href,title in p.links:
-                if ("/jobs/" not in href and "/job/" not in href) or not TITLE_RE.search(title):continue
+                if ("/jobs/" not in href and "/job/" not in href)  :continue
                 url=urllib.parse.urljoin(base,href)
                 if url in seen:continue
                 seen.add(url);new+=1

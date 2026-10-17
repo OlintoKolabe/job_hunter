@@ -174,7 +174,7 @@ def active_source_tasks():
         with conn.cursor() as cur:
             cur.execute("SELECT source,slug FROM jh_catalog_source")
             tasks.update(cur.fetchall())
-    return sorted(tasks)
+    return sorted((source,slug) for source,slug in tasks if slug.casefold() not in ("kraken","kraken.com","payward"))
 
 @app.post("/api/catalog/import")
 async def catalog_import(request: Request):

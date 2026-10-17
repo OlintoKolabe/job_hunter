@@ -50,6 +50,7 @@ export function OpportunitiesPanel(){
   }catch(e){setError(e.message)}finally{setBusy(false)}
  }
  return <section className="history-pane"><div className="infra-title"><div><h3>Busca de oportunidades</h3><p>APIs públicas e catálogo ATS · coleta por lotes</p></div><button className="import-btn" onClick={search} disabled={busy||scanning}>{busy||scanning?'Consultando fontes…':'Buscar vagas'}</button></div>
+ <details className="catalog-diagnostics"><summary>Verificações de quadros</summary>
  <div className="infra-title" style={{marginTop:25}}><div><h3>Catálogo de empresas</h3><p>{coverage?coverage.total+' quadros catalogados · '+coverage.due+' para revisar':'Carregando inventário...'}</p></div><button className="import-btn" onClick={scanAll} disabled={scanning||!coverage}>Varrer todos os quadros</button><button className="import-btn" onClick={()=>scanCatalog(cursor===0)} disabled={scanning}>{scanning?'Consultando…':cursor===0?'Iniciar varredura':'Consultar próximo lote'}</button></div>
  <label className="import-btn" style={{marginBottom:12}}>Importar cadastro_empresas.json<input type="file" hidden accept=".json,application/json" onChange={uploadCatalog}/></label>
  <p>O catálogo original fica no Neon, não no repositório público. A importação acrescenta slugs e não elimina os conhecidos.</p><p>A coleta percorre lotes de até 12 quadros, registrando sucesso, ausência de vagas e falhas. Você pode iniciar a varredura de todos os quadros ou avançar lote a lote. A execução ocorre enquanto a aba permanece aberta.</p>
@@ -58,6 +59,7 @@ export function OpportunitiesPanel(){
  {reports.length>0&&<><p className="notice">Verificados {cursor} de {coverage?.total||'?'} quadros · {catalogJobs.length} candidatas coletadas nos lotes (antes da triagem).</p>
  <div className="table-wrap"><table><thead><tr><th>ATS</th><th>Slug</th><th>Estado</th><th>Vagas coletadas</th></tr></thead><tbody>{reports.map((r,i)=><tr key={i}><td>{r.source}</td><td>{r.slug}</td><td>{r.state}</td><td>{r.received}{r.error?' — '+r.error:''}</td></tr>)}</tbody></table></div>
  <h3 style={{marginTop:24}}>Vagas encontradas pelo catálogo</h3><div className="table-wrap"><table><thead><tr><th>Empresa</th><th>Cargo</th><th>Origem</th></tr></thead><tbody>{catalogJobs.map((v,i)=><tr key={i}><td>{v.company}</td><td><a href={v.url} target="_blank" rel="noopener noreferrer">{v.title}</a></td><td>{v.source}</td></tr>)}</tbody></table></div></>}
+ </details>
  <p>Apenas coleta e deduplicação nesta entrega. O sistema ainda <strong>não valida o anúncio completo nem confirma elegibilidade remota</strong>.</p>
  {error&&<p role="alert" className="notice">{error}</p>}
  {result&&<><div className="history-stats"><span>Coletadas: <b>{result.total}</b></span><span>Inéditas: <b>{result.new}</b></span><span>Já conhecidas: <b>{result.duplicates}</b></span></div><p className="notice">{result.notice}</p>

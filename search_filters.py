@@ -43,12 +43,12 @@ TITLE_ALIASES={
  "marketing":["marketing manager","marketing lead","head of marketing","head de marketing","gerente de marketing","diretor de marketing","marketing director","product marketing","marketing specialist","especialista de marketing","coordenador de marketing"],
 }
 # Broader role discovery, without treating unrelated engineering/science jobs as matches.
-NON_TARGET_TITLE=re.compile(r"\\b(developer|engineer|scientist|researcher|designer|intern|estagiario|estagiaria|recruiter|sales|account executive|sdr|devops|software|backend|frontend)\\b")
+NON_TARGET_TITLE=re.compile(r"\b(developer|engineer|scientist|researcher|designer|intern|estagiario|estagiaria|recruiter|sales|account executive|sdr|devops|software|backend|frontend)\b")
 RELATED_TITLE=re.compile(r"(product|produto|project|projetos|marketing|growth|pmo|negocios|business analy)")
 def role_match(title,terms):
     if not terms:return True
-    if any(any(alias in title for alias in TITLE_ALIASES.get(t,[t])) for t in terms):return True
     if NON_TARGET_TITLE.search(title):return False
+    if any(any(alias in title for alias in TITLE_ALIASES.get(t,[t])) for t in terms):return True
     requested=" ".join(terms)
     areas=[]
     if "product" in requested or "produto" in requested:areas+=["product","produto"]

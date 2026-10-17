@@ -19,8 +19,8 @@ TITLE_RE=re.compile(r"product|project|marketing|growth|business analyst|gerente 
 def fetch_json(url,headers=None):
     req=urllib.request.Request(url,headers={"Accept":"application/json","User-Agent":"Mozilla/5.0 JobHunter/0.3",**(headers or {})})
     with urllib.request.urlopen(req,timeout=9) as response:
-        data=response.read(2_000_001)
-        if len(data)>2_000_000:
+        data=response.read(6_000_001)
+        if len(data)>6_000_000:
             raise ValueError("response above 2MB")
     return json.loads(data)
 
@@ -73,7 +73,7 @@ def pull(source,slug):
             value=item(slug,j.get("title"),j.get("jobUrl") or j.get("applyUrl"),loc,source,j.get("publishedAt"))
             if value:jobs.append(value)
     elif source=="Greenhouse":
-        payload=fetch_json("https://boards-api.greenhouse.io/v1/boards/"+urllib.parse.quote(slug)+"/jobs?content=true")
+        payload=fetch_json("https://boards-api.greenhouse.io/v1/boards/"+urllib.parse.quote(slug)+"/jobs?content=false")
         for j in as_list(payload):
             if not isinstance(j,dict):continue
             location=j.get("location") or {}
@@ -81,7 +81,7 @@ def pull(source,slug):
             value=item(slug,j.get("title"),j.get("absolute_url"),location,source,j.get("first_published"))
             if value:jobs.append(value)
     elif source=="Lever":
-        payload=fetch_json("https://api.lever.co/v0/postings/"+urllib.parse.quote(slug)+"?mode=json")
+        payload=fetch_json("https://api.lever.co/v0/postings/"+urllib.parse.quote(slug)+"?mode=json"+("&location=Brazil" if slug.casefold()=="jobgether" else ""))
         if isinstance(payload,dict) and payload.get("ok") is False:
             raise ValueError("Slug Lever rejeitado apesar de HTTP 200")
         for j in as_list(payload):

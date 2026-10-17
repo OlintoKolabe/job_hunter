@@ -8,10 +8,10 @@ LATAM={"brazil","brasil","argentina","chile","colombia","colômbia","peru","urug
 COUNTRIES=[("LATAM","América Latina"),("BR","Brasil"),("AR","Argentina"),("BO","Bolívia"),("CL","Chile"),("CO","Colômbia"),("CR","Costa Rica"),("EC","Equador"),("GT","Guatemala"),("MX","México"),("PA","Panamá"),("PY","Paraguai"),("PE","Peru"),("DO","República Dominicana"),("UY","Uruguai"),("VE","Venezuela"),("US","Estados Unidos"),("CA","Canadá"),("PT","Portugal"),("ES","Espanha"),("GB","Reino Unido"),("GLOBAL","Global")]
 COUNTRY_NAMES=dict(COUNTRIES)
 TOKENS={"BR":["brazil","brasil"],"AR":["argentina"],"BO":["bolivia"],"CL":["chile"],"CO":["colombia"],"CR":["costa rica"],"EC":["ecuador"],"GT":["guatemala"],"MX":["mexico"],"PA":["panama"],"PY":["paraguay","paraguai"],"PE":["peru"],"DO":["dominican republic","republica dominicana"],"UY":["uruguay","uruguai"],"VE":["venezuela"],"US":["united states","usa","u.s."],"CA":["canada"],"PT":["portugal"],"ES":["spain","espanha"],"GB":["united kingdom","uk","england"]}
-REMOTE=["remote","remoto","remota","home office","home-office","homeoffice","home based","work from home","work-from-home","work remotely","work remotely from","fully remote","remote first","remote-first","100% remote","100% remoto","full remote","teletrabalho","telecommute","telecommuting","virtual position","distributed team","anywhere"]
-HYBRID=["hybrid","hibrido","híbrido"]
-ONSITE=["on-site","onsite","on site","presencial","in-office","in office"]
-REGIONAL=["latam","latin america","america latina","americas","remote worldwide","worldwide","anywhere in the world","global remote"]
+REMOTE=["remote","remoto","remota","home office","home-office","homeoffice","home based","work from home","work-from-home","work remotely","work remotely from","fully remote","remote first","remote-first","100% remote","100% remoto","full remote","teletrabalho","telecommute","telecommuting","remotely","trabalho remoto","trabalho a distancia","trabalho à distância","trabalho em casa","trabalho de casa","any location","work anywhere","work at home","virtual position","distributed team","anywhere"]
+HYBRID=["hybrid","hibrido","híbrido","flexible hybrid","modelo hibrido","parcialmente presencial"]
+ONSITE=["on-site","onsite","on site","presencial","in-office","in office","office based","office-based","on premises"]
+REGIONAL=["latam","latin america","america latina","americas","remote worldwide","worldwide","anywhere in the world","global remote","remote latin america","south america","america do sul","americas remote","latinoamerica","latinoamerica remote"]
 
 def fold(x):
     return unicodedata.normalize("NFKD",str(x or "")).encode("ascii","ignore").decode().lower()
@@ -45,27 +45,52 @@ TITLE_ALIASES={
 # Broader role discovery, without treating unrelated engineering/science jobs as matches.
 NON_TARGET_TITLE=re.compile(r"\b(developer|engineer|scientist|researcher|designer|intern|estagiario|estagiaria|recruiter|sales|account executive|sdr|devops|software|backend|frontend)\b")
 RELATED_TITLE=re.compile(r"(product|produto|project|projetos|marketing|growth|pmo|negocios|business analy)")
+# Families are semantic OR-groups. Selection of multiple families is also OR.
+ROLE_FAMILIES={
+ "product":("product manager","product owner","product lead","head of product","head de produto","product management","product operations","product ops","product analyst","product specialist","product strategist","gerente de produto","gerente de produtos","gestor de produto","gestao de produto","lider de produto","lider de produtos","coordenador de produto","coordenadora de produto","especialista de produto","especialista de produtos","analista de produto","analista de produtos","estrategista de produto","consultor de produto","consultora de produto","product growth","gerente de plataforma de produto"),
+ "projects":("project manager","program manager","programme manager","project lead","project coordinator","project management","project specialist","project analyst","delivery manager","delivery lead","implementation manager","implementation project","transformation manager","digital transformation lead","gerente de projeto","gerente de projetos","gestor de projetos","gestora de projetos","gestao de projetos","gerenciamento de projetos","coordenador de projeto","coordenador de projetos","coordenadora de projetos","lider de projetos","analista de projetos","especialista de projetos","escritorio de projetos","pmo"),
+ "marketing":("marketing","market intelligence","inteligencia de mercado","demand generation","demand gen","performance marketing","lifecycle","crm manager","gerente de crm","acquisition","aquisicao","retention marketing","retencao","field marketing","brand manager","gestor de marca","gestao de marca","product marketing","marketing de produto","marketing de produtos","go to market","go-to-market","gtm manager"),
+ "growth":("growth manager","growth lead","growth marketer","head of growth","growth marketing","growth specialist","growth operations","growth strategist","gerente de growth","coordenador de growth","especialista de growth","gerente de crescimento","gestor de crescimento","acquisition manager","lifecycle marketing","revenue growth","growth product","growth ops"),
+ "business":("business analyst","business analysis","business operations","business ops","business process","business transformation","analista de negocios","analista de negocio","consultor de negocios","consultora de negocios","gestor de negocios","gestao de negocios","analista de processos","consultor de processos"),
+}
+ROLE_KEYS={
+ "product":("product manager","product owner","produto","product","po"),
+ "projects":("project manager","projeto","project","program manager","pmo","delivery manager"),
+ "marketing":("marketing","mercadologia","market intelligence","crm"),
+ "growth":("growth","crescimento","acquisition"),
+ "business":("business analyst","analista de negocios","analista de negocio","business operations"),
+}
+NON_TARGET_TITLE=re.compile(r"\\b(developer|engineer|scientist|researcher|designer|intern|estagiario|estagiaria|recruiter|account executive|sdr|devops|backend|frontend)\\b")
+def requested_families(terms):
+    families=set()
+    for term in terms:
+        matched=False
+        for family,aliases in ROLE_KEYS.items():
+            if any(alias in term for alias in aliases):
+                families.add(family);matched=True
+        if not matched:
+            for family,aliases in ROLE_FAMILIES.items():
+                if any(term==alias for alias in aliases):families.add(family)
+    return families
 def role_match(title,terms):
     if not terms:return True
     if NON_TARGET_TITLE.search(title):return False
-    if any(any(alias in title for alias in TITLE_ALIASES.get(t,[t])) for t in terms):return True
-    requested=" ".join(terms)
-    areas=[]
-    if "product" in requested or "produto" in requested:areas+=["product","produto"]
-    if "project" in requested or "projeto" in requested or "pmo" in requested:areas+=["project","projeto","pmo"]
-    if "marketing" in requested:areas+=["marketing"]
-    if "growth" in requested:areas+=["growth"]
-    if "business analyst" in requested or "negocio" in requested:areas+=["business analy","negocio"]
-    return any(x in title for x in areas)
-
+    families=requested_families(terms)
+    if any(alias in title for fam in families for alias in ROLE_FAMILIES[fam]):return True
+    # Any custom free-text role the user typed still matches literally.
+    return any(len(t)>=3 and t in title for t in terms)
 def classify(job,terms,country,mode,days):
     title=fold(job.get("title",""))
     if not role_match(title,terms):return "excluded","cargo"
     loc=fold(job.get("location",""))
+    structured_geo=fold(" ".join(str(job.get(k) or "") for k in ("country","countryCode","countryName","city","state","region","eligibleLocations","remoteRegions")))
+    loc=(loc+" "+structured_geo).strip()
     # Structured remote/location flags are distinct from a country label.
     remote_flag=job.get("remote")
     workplace=fold(job.get("workplaceType") or job.get("workplace") or job.get("employmentType") or "")
     mode_text=loc+" "+workplace
+    # A remote-first company alone does not prove a role is remote if onsite is explicit.
+    remote_flag=remote_flag if isinstance(remote_flag,bool) else None
     if mode=="remote":
         if remote_flag is False or (any(x in mode_text for x in ONSITE) and not any(x in mode_text for x in REMOTE)) or (any(x in workplace for x in HYBRID) and not any(x in mode_text for x in REMOTE)):return "excluded","modalidade"
         mode_ok=remote_flag is True or any(x in mode_text for x in REMOTE)

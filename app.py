@@ -1,5 +1,11 @@
 import os
 import secrets
+import csv
+import io
+import hashlib
+import unicodedata
+from urllib.parse import urlsplit
+
 from pathlib import Path
 from fastapi import FastAPI, Request, Response, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
@@ -16,19 +22,57 @@ PASSWORD = os.environ.get("APP_PASSWORD", "")
 DATABASE = os.environ.get("DATABASE_URL", "")
 serializer = URLSafeTimedSerializer(SECRET) if SECRET else None
 
+class ChangePassword(BaseModel):
+    current_password: str
+    new_password: str
+
 class Credentials(BaseModel):
     password: str
 
+def password_digest(password, salt):
+    return hashlib.pbkdf2_hmac("sha256", password.encode(), bytes.fromhex(salt), 600000).hex()
+
+def auth_record():
+    with psycopg.connect(DATABASE, connect_timeout=8) as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT password_hash,password_salt,version FROM jh_auth WHERE id=1")
+            return cur.fetchone()
+
+def check_password(value, record):
+    if record:
+        return secrets.compare_digest(password_digest(value, record[1]), record[0])
+    return bool(PASSWORD) and secrets.compare_digest(value, PASSWORD)
+
 def require_auth(request: Request):
-    if not (serializer and PASSWORD):
-        raise HTTPException(503, "A autenticação ainda não foi configurada")
-    value = request.cookies.get(COOKIE)
+    if not serializer or not DATABASE:
+        raise HTTPException(503, "Acesso indisponível")
     try:
-        user = serializer.loads(value or "", max_age=60*60*24*7)
+        value = serializer.loads(request.cookies.get(COOKIE) or "", max_age=604800)
+        record = auth_record()
+        expected = f"owner:{record[2] if record else 0}"
+        if not secrets.compare_digest(str(value), expected):
+            raise HTTPException(401, "Sessão expirada")
     except (BadSignature, SignatureExpired):
         raise HTTPException(401, "Acesso não autorizado")
-    if user != "owner":
-        raise HTTPException(401, "Acesso não autorizado")
+    except psycopg.Error:
+        raise HTTPException(503, "Banco indisponível")
+    return True
+
+def normalized(value):
+    return ''.join(ch for ch in unicodedata.normalize("NFKD", (value or "").casefold()) if not unicodedata.combining(ch)).strip()
+
+def url_key(value):
+    v=(value or "").strip()
+    if not v:
+        return ""
+    if "://" not in v:
+        v="https://"+v
+    x=urlsplit(v)
+    host=x.netloc.casefold().removeprefix("www.").removeprefix("br.")
+    return (host+x.path.rstrip("/")+(("?"+x.query) if x.query else "")).strip().lower()
+
+def pair_key(empresa,cargo):
+    return " ".join(normalized(empresa).split())+"|"+ " ".join(normalized(cargo).split())
 
 @app.get("/health")
 def health():
@@ -41,12 +85,102 @@ def me(request: Request):
 
 @app.post("/api/login")
 def login(payload: Credentials, response: Response):
-    if not (serializer and PASSWORD):
-        raise HTTPException(503, "Senha não configurada no servidor")
-    if not secrets.compare_digest(payload.password, PASSWORD):
+    if not serializer or not DATABASE:
+        raise HTTPException(503, "Acesso não configurado")
+    try:
+        record=auth_record()
+    except psycopg.Error:
+        raise HTTPException(503, "Banco indisponível")
+    if not check_password(payload.password,record):
         raise HTTPException(401, "Senha incorreta")
-    response.set_cookie(COOKIE, serializer.dumps("owner"), httponly=True, secure=True, samesite="lax", max_age=604800)
+    response.set_cookie(COOKIE,serializer.dumps(f"owner:{record[2] if record else 0}"),httponly=True,secure=True,samesite="lax",max_age=604800)
     return {"authenticated":True}
+
+@app.post("/api/change-password")
+def change_password(payload: ChangePassword, request: Request, response: Response):
+    require_auth(request)
+    if len(payload.new_password)<12 or len(payload.new_password)>128:
+        raise HTTPException(400,"A nova senha deve ter entre 12 e 128 caracteres")
+    if secrets.compare_digest(payload.current_password,payload.new_password):
+        raise HTTPException(400,"A nova senha deve ser diferente")
+    with psycopg.connect(DATABASE,connect_timeout=8) as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT password_hash,password_salt,version FROM jh_auth WHERE id=1 FOR UPDATE")
+            rec=cur.fetchone()
+            if not check_password(payload.current_password,rec):
+                raise HTTPException(401,"Senha atual incorreta")
+            salt=secrets.token_hex(16)
+            digest=password_digest(payload.new_password,salt)
+            version=(rec[2]+1) if rec else 1
+            cur.execute("""INSERT INTO jh_auth(id,password_hash,password_salt,version)
+                VALUES (1,%s,%s,%s) ON CONFLICT(id) DO UPDATE SET
+                password_hash=EXCLUDED.password_hash,password_salt=EXCLUDED.password_salt,
+                version=EXCLUDED.version,updated_at=now()""",(digest,salt,version))
+    response.set_cookie(COOKIE,serializer.dumps(f"owner:{version}"),httponly=True,secure=True,samesite="lax",max_age=604800)
+    return {"ok":True}
+
+@app.get("/api/history")
+def history(request: Request, q: str="", state: str="", limit:int=50, offset:int=0):
+    require_auth(request)
+    limit=max(1,min(limit,100));offset=max(0,offset)
+    where=[];params=[]
+    if q:
+        where.append("(empresa ILIKE %s OR cargo ILIKE %s OR url ILIKE %s)")
+        params.extend(["%"+q[:100]+"%"]*3)
+    if state:
+        where.append("estado=%s");params.append(state[:60])
+    clause=" WHERE "+" AND ".join(where) if where else ""
+    with psycopg.connect(DATABASE,connect_timeout=8) as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM jh_history"+clause,params)
+            total=cur.fetchone()[0]
+            cur.execute("SELECT id,url,empresa,cargo,estado,data,fonte,motivo FROM jh_history"+clause+" ORDER BY id DESC LIMIT %s OFFSET %s",params+[limit,offset])
+            rows=[dict(zip(("id","url","empresa","cargo","estado","data","fonte","motivo"),r)) for r in cur.fetchall()]
+    return {"total":total,"items":rows}
+
+@app.get("/api/history-stats")
+def history_stats(request: Request):
+    require_auth(request)
+    with psycopg.connect(DATABASE,connect_timeout=8) as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT estado,COUNT(*) FROM jh_history GROUP BY estado")
+            counts=dict(cur.fetchall())
+    return {"total":sum(counts.values()),"states":counts}
+
+@app.post("/api/history-import")
+async def history_import(request: Request):
+    require_auth(request)
+    body=await request.body()
+    if len(body)>2_000_000:
+        raise HTTPException(413,"Arquivo acima de 2 MB")
+    try:
+        parsed=list(csv.DictReader(io.StringIO(body.decode("utf-8-sig"))))
+    except (UnicodeDecodeError,csv.Error):
+        raise HTTPException(400,"CSV inválido ou não UTF-8")
+    required={"url","empresa","cargo","estado","data","fonte","motivo"}
+    if not parsed or not required.issubset(parsed[0].keys()):
+        raise HTTPException(400,"Colunas obrigatórias ausentes")
+    if len(parsed)>20000:
+        raise HTTPException(413,"Muitas linhas")
+    inserted=0;duplicates=0;invalid=0
+    with psycopg.connect(DATABASE,connect_timeout=12) as conn:
+        with conn.cursor() as cur:
+            for item in parsed:
+                company=(item.get("empresa") or "").strip()[:300]
+                title=(item.get("cargo") or "").strip()[:300]
+                url=(item.get("url") or "").strip()[:2000]
+                if not company or not title:
+                    invalid+=1;continue
+                uk=url_key(url);pk=pair_key(company,title)
+                cur.execute("SELECT 1 FROM jh_history WHERE pair_key=%s OR (normalized_url=%s AND %s<>'') LIMIT 1",(pk,uk,uk))
+                if cur.fetchone():
+                    duplicates+=1;continue
+                cur.execute("""INSERT INTO jh_history(url,normalized_url,empresa,cargo,pair_key,estado,data,fonte,motivo)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT DO NOTHING RETURNING id""",
+                    (url,uk,company,title,pk,*(str(item.get(k) or "")[:2000] for k in ("estado","data","fonte","motivo"))))
+                if cur.fetchone():inserted+=1
+                else:duplicates+=1
+    return {"received":len(parsed),"inserted":inserted,"duplicates":duplicates,"invalid":invalid}
 
 @app.post("/api/logout")
 def logout(response: Response):
@@ -57,13 +191,13 @@ def logout(response: Response):
 def status(request: Request):
     require_auth(request)
     if not DATABASE:
-        return {"database":"not_configured","mode":"phase1","history":"not_imported"}
+        return {"database":"not_configured","mode":"phase2"}
     try:
         with psycopg.connect(DATABASE, connect_timeout=5) as conn:
             with conn.cursor() as cur:
                 cur.execute("select 1")
                 cur.fetchone()
-        return {"database":"connected","mode":"phase1","history":"not_imported"}
+        return {"database":"connected","mode":"phase2"}
     except Exception:
         return {"database":"unavailable","mode":"phase1","history":"not_imported"}
 

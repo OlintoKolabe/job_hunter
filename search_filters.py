@@ -30,36 +30,75 @@ def parse_date(value):
         return datetime.fromisoformat(str(value).replace("Z","+00:00")).replace(tzinfo=timezone.utc) if datetime.fromisoformat(str(value).replace("Z","+00:00")).tzinfo is None else datetime.fromisoformat(str(value).replace("Z","+00:00")).astimezone(timezone.utc)
     except (ValueError,OverflowError,OSError):return None
 
-def matches(job,terms,country,mode,days):
-    title=fold(job.get("title",""))
-    if terms and not any(t in title for t in terms):return False
-    loc=fold(job.get("location",""))
-    if not loc:return False
-    # Require actual evidence for the selected work arrangement.
-    if mode=="remote" and not any(x in loc for x in REMOTE):return False
-    if mode=="hybrid" and not any(x in loc for x in HYBRID):return False
-    if mode=="onsite" and not any(x in loc for x in ONSITE):return False
-    if mode not in ("remote","hybrid","onsite","all"):return False
-    if country=="GLOBAL":pass
-    elif country=="LATAM":
-        if not(any(fold(x) in loc for x in LATAM) or any(x in loc for x in REGIONAL)):return False
-    else:
-        if country not in TOKENS:return False
-        if not(any(x in loc for x in TOKENS[country]) or any(x in loc for x in REGIONAL)):return False
-    if days:
-        published=parse_date(job.get("published"))
-        if not published:return False
-        if published<datetime.now(timezone.utc)-timedelta(days=days):return False
-        if published>datetime.now(timezone.utc)+timedelta(days=1):return False
-    return True
+TITLE_ALIASES={
+ "product manager":["product manager","gerente de produto","gestor de produto","product lead"],
+ "product owner":["product owner","dono de produto"],
+ "project manager":["project manager","gerente de projetos","gestor de projetos","gestao de projetos"],
+ "gerente de projetos":["gerente de projetos","project manager","gestor de projetos"],
+ "product marketing":["product marketing","marketing de produto","product marketer"],
+ "business analyst":["business analyst","analista de negocios","analista de negocio"],
+ "analista de negocios":["analista de negocios","business analyst","analista de negocio"],
+ "pmo":["pmo","project management office"],
+ "growth":["growth","crescimento"],
+ "marketing":["marketing","mercadologia"],
+}
+def role_match(title,terms):
+    return not terms or any(any(alias in title for alias in TITLE_ALIASES.get(t,[t])) for t in terms)
 
-def apply_filters(jobs,roles=DEFAULT_ROLES,country="BR",mode="remote",days=30,sort="newest"):
+def classify(job,terms,country,mode,days):
+    title=fold(job.get("title",""))
+    if not role_match(title,terms):return "excluded","cargo"
+    loc=fold(job.get("location",""))
+    # Structured remote/location flags are distinct from a country label.
+    remote_flag=job.get("remote")
+    workplace=fold(job.get("workplaceType") or job.get("workplace") or "")
+    mode_text=loc+" "+workplace
+    if mode=="remote":
+        if remote_flag is False or any(x in workplace for x in HYBRID+ONSITE):return "excluded","modalidade"
+        mode_ok=remote_flag is True or any(x in mode_text for x in REMOTE)
+    elif mode=="hybrid":
+        mode_ok=any(x in mode_text for x in HYBRID)
+    elif mode=="onsite":
+        mode_ok=any(x in mode_text for x in ONSITE)
+    else:mode_ok=True
+    if country=="GLOBAL":country_ok=True
+    elif country=="LATAM":
+        country_ok=any(fold(x) in loc for x in LATAM) or any(x in loc for x in REGIONAL)
+    else:
+        country_ok=any(x in loc for x in TOKENS.get(country,[])) or any(x in loc for x in REGIONAL)
+    # Known foreign-only locations must not be rebranded as Brazil-eligible.
+    if country in ("BR","LATAM") and loc and not country_ok and any(x in loc for x in ("united states only","us only","europe only","canada only")):
+        return "excluded","pais"
+    published=parse_date(job.get("published"))
+    date_ok=not days or (published is not None and datetime.now(timezone.utc)-timedelta(days=days)<=published<=datetime.now(timezone.utc)+timedelta(days=1))
+    if days and published and not date_ok:return "excluded","data"
+    unknown=[]
+    if not mode_ok:unknown.append("modalidade")
+    if not country_ok:unknown.append("pais")
+    if days and not published:unknown.append("data")
+    if unknown:return "review",",".join(unknown)
+    return "confirmed",""
+
+def analyze_filters(jobs,roles=DEFAULT_ROLES,country="BR",mode="remote",days=30,sort="newest"):
     terms=search_terms(roles)
     if len(roles)>700:raise ValueError("Filtros de cargo excessivamente longos")
     if country not in COUNTRY_NAMES:raise ValueError("País desconhecido")
     if mode not in ("remote","hybrid","onsite","all"):raise ValueError("Regime inválido")
     if days not in (0,1,3,7,15,30,60,90):raise ValueError("Período inválido")
     if sort not in ("newest","oldest"):raise ValueError("Ordem inválida")
-    found=[j for j in jobs if matches(j,terms,country,mode,days)]
-    found.sort(key=lambda j:parse_date(j.get("published")) or datetime.min.replace(tzinfo=timezone.utc),reverse=sort=="newest")
-    return found
+    confirmed=[];review=[];reasons={}
+    for j in jobs:
+        bucket,reason=classify(j,terms,country,mode,days)
+        reasons[bucket+(":"+reason if reason else "")]=reasons.get(bucket+(":"+reason if reason else ""),0)+1
+        if bucket=="confirmed":confirmed.append(j)
+        elif bucket=="review":review.append({**j,"needs_verification":reason.split(",")})
+    order=lambda j:parse_date(j.get("published")) or datetime.min.replace(tzinfo=timezone.utc)
+    confirmed.sort(key=order,reverse=sort=="newest")
+    review.sort(key=order,reverse=sort=="newest")
+    return confirmed,review,reasons
+
+def matches(job,terms,country,mode,days):
+    return classify(job,terms,country,mode,days)[0]=="confirmed"
+
+def apply_filters(jobs,roles=DEFAULT_ROLES,country="BR",mode="remote",days=30,sort="newest"):
+    return analyze_filters(jobs,roles,country,mode,days,sort)[0]

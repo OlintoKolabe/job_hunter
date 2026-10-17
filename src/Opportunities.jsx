@@ -3,22 +3,22 @@ const defaultRoles='Product Manager, Product Owner, Project Manager, Gerente de 
 const initialCountries=[{value:'LATAM',label:'América Latina'},{value:'BR',label:'Brasil'}];
 export function OpportunitiesPanel(){
  const [roles,setRoles]=useState(defaultRoles),[days,setDays]=useState('30'),[country,setCountry]=useState('BR'),[countries,setCountries]=useState(initialCountries),[mode,setMode]=useState('remote'),[sort,setSort]=useState('newest');
- const [busy,setBusy]=useState(false),[results,setResults]=useState([]),[message,setMessage]=useState(''),[error,setError]=useState(''),[checked,setChecked]=useState(0),[counts,setCounts]=useState({new:0,total:0}),[completed,setCompleted]=useState(false);
+ const [reviews,setReviews]=useState([]),[filterStats,setFilterStats]=useState({}),[rawScanned,setRawScanned]=useState(0),[busy,setBusy]=useState(false),[results,setResults]=useState([]),[message,setMessage]=useState(''),[error,setError]=useState(''),[checked,setChecked]=useState(0),[counts,setCounts]=useState({new:0,total:0}),[completed,setCompleted]=useState(false);
  useEffect(()=>{fetch('/api/search-filters').then(r=>r.ok?r.json():null).then(d=>{if(d?.countries)setCountries(d.countries)}).catch(()=>{})},[]);
  const query=()=>new URLSearchParams({roles,country,mode,days,sort}).toString();
  async function search(){
-  setBusy(true);setError('');setResults([]);setChecked(0);setCompleted(false);setMessage('Consultando fontes e quadros…');
-  const qs=query();const all=new Map();let count=0;let completedAll=false;
+  setBusy(true);setError('');setResults([]);setReviews([]);setFilterStats({});setRawScanned(0);setChecked(0);setCompleted(false);setMessage('Consultando fontes e quadros…');
+  const qs=query();const all=new Map();const uncertain=new Map();const totals={};let inspected=0;const record=(d)=>{(d.review_items||[]).forEach(j=>uncertain.set(j.url,j));for(const [key,n] of Object.entries(d.filter_stats||{})){totals[key]=(totals[key]||0)+n}inspected+=d.raw_count||0;setReviews([...uncertain.values()]);setFilterStats({...totals});setRawScanned(inspected)};let count=0;let completedAll=false;
   try{
    const r=await fetch('/api/search-jobs?'+qs,{method:'POST'});const d=await r.json();
    if(!r.ok)throw Error(d.detail||'Falha nas fontes gerais');
-   (d.items||[]).forEach(j=>all.set(j.url,j));count+=d.total||0;
+   (d.items||[]).forEach(j=>all.set(j.url,j));record(d);count+=d.total||0;
    setResults([...all.values()]);setCounts({new:all.size,total:count});
    let offset=0;
    for(let n=0;n<45;n++){
     const v=await fetch('/api/catalog/scan?offset='+offset+'&limit=12&'+qs,{method:'POST'});
     const batch=await v.json();if(!v.ok)throw Error(batch.detail||'Falha na consulta aos quadros');
-    (batch.items||[]).forEach(j=>all.set(j.url,j));
+    (batch.items||[]).forEach(j=>all.set(j.url,j));record(batch);
     offset=batch.next_offset;if(!Number.isFinite(offset))throw Error('Paginação inválida');
     count+=batch.found||0;setResults([...all.values()]);setChecked(x=>x+(batch.details||[]).length);setCounts({new:all.size,total:count});
     if(batch.complete){completedAll=true;break}
@@ -45,9 +45,11 @@ export function OpportunitiesPanel(){
   <button className="import-btn" disabled={busy||!roles.trim()} onClick={search}>{busy?'Pesquisando vagas e verificando quadros…':'Buscar oportunidades'}</button>
   {message&&<p className="notice" role="status">{message}{checked>0?' · Quadros verificados agora: '+checked:''}</p>}
   {error&&<p className="notice" role="alert">{error}</p>}
-  {(results.length>0||completed)&&<><div className="history-stats"><span>Oportunidades exibidas: <b>{ordered.length}</b></span><span>Consultas de quadros nesta busca: <b>{checked}</b></span></div>
+  {(results.length>0||reviews.length>0||completed)&&<><div className="history-stats"><span>Correspondências confirmadas: <b>{ordered.length}</b></span><span>Para conferir: <b>{reviews.length}</b></span><span>Anúncios analisados: <b>{rawScanned}</b></span><span>Consultas de quadros nesta busca: <b>{checked}</b></span></div>
   {ordered.length===0?<p>Nenhuma vaga com país, modalidade e data confirmados corresponde a estes filtros. Ajuste-os para ampliar a busca.</p>:
   <div className="table-wrap"><table><thead><tr><th>Cargo</th><th>Empresa</th><th>Local informado</th><th>Publicação</th><th>Fonte</th></tr></thead><tbody>{ordered.map(v=><tr key={v.url}><td><a href={v.url} target="_blank" rel="noopener noreferrer">{v.title}</a></td><td>{v.company||'Não informada'}</td><td>{v.location||'Não informada'}</td><td>{v.published?String(v.published).slice(0,10):'—'}</td><td>{v.source}</td></tr>)}</tbody></table></div>}
+  {reviews.length>0&&<details className="catalog-diagnostics"><summary>{reviews.length} vagas potencialmente relevantes — precisam de confirmação</summary><p>Faltam dados de país, modalidade ou publicação nas listagens. Não foram classificadas como elegíveis e podem incluir vagas fora do critério.</p><div className="table-wrap"><table><thead><tr><th>Vaga</th><th>Empresa</th><th>Local informado</th><th>Falta verificar</th></tr></thead><tbody>{reviews.map(v=><tr key={v.url}><td><a href={v.url} target="_blank" rel="noopener noreferrer">{v.title}</a></td><td>{v.company||'—'}</td><td>{v.location||'—'}</td><td>{(v.needs_verification||[]).join(', ')}</td></tr>)}</tbody></table></div></details>}
+  <details className="catalog-diagnostics"><summary>Auditoria dos filtros</summary><p>Total bruto analisado: {rawScanned}. As exclusões são contadas por motivo, antes da deduplicação com o histórico.</p>{Object.entries(filterStats).map(([reason,n])=><p key={reason}>{reason}: <b>{n}</b></p>)}</details>
   </>}
  </section>
 }

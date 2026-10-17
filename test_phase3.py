@@ -287,6 +287,29 @@ class Phase3ContractTests(unittest.TestCase):
         confirmed,review,_=analyze_filters(rows,"Product Owner","BR","hybrid",0)
         self.assertEqual([j["location"] for j in confirmed],["LATAM"])
 
+    def test_us_remote_is_not_brazil_or_latam(self):
+        from search_filters import analyze_filters,geo_verdict
+        for location in ("Remote US","Remote - US","US Remote","Remote, USA","United States - Remote"):
+            for country in ("BR","LATAM"):
+                with self.subTest(location=location,country=country):
+                    self.assertEqual(geo_verdict({"location":location},country),"excluded")
+                    good,review,why=analyze_filters(
+                        [{"title":"Product Manager","location":location,"workplaceType":"remote","published":""}],
+                        "Product Manager",country,"remote",0)
+                    self.assertEqual(good,[])
+                    self.assertEqual(review,[])
+        self.assertEqual(geo_verdict({"location":"LATAM / Remote US"},"BR"),"excluded")
+        self.assertEqual(geo_verdict({"location":"LATAM Remote"},"BR"),"eligible")
+        self.assertEqual(geo_verdict({"location":"Brasil Remote"},"BR"),"eligible")
+
+    def test_unknown_geo_is_review_not_confirmation(self):
+        from search_filters import analyze_filters
+        good,review,_=analyze_filters(
+            [{"title":"Product Owner","location":"Remote","workplaceType":"remote"}],
+            "Product Owner","BR","remote",0)
+        self.assertEqual(good,[])
+        self.assertEqual(review[0]["needs_verification"],["pais"])
+
     def test_mcp_not_claimed_integrated(self):
         self.assertIn("Render",CONNECTORS["Indeed MCP"])
         self.assertIn("Render",CONNECTORS["Firecrawl"])

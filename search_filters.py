@@ -130,6 +130,49 @@ def detect_work_mode(job,evidence=None):
     if "remote" in jd:return "remote"
     return None
 
+
+BR_CITIES=("sao paulo","rio de janeiro","belo horizonte","curitiba","porto alegre","brasilia","goiania","recife","fortaleza","salvador","campinas","florianopolis","uberlandia","belem","manaus","vitoria","ribeirao preto")
+LATAM_MARKERS=("latam","latin america","america latina","latinoamerica","south america","america do sul")
+GLOBAL_MARKERS=("worldwide","anywhere in the world","global remote","remote worldwide")
+FOREIGN_ONLY_MARKERS=("united states only","us only","usa only","u.s. only","europe only","canada only","must be based in the us","must reside in the us")
+BRAZIL_EXCLUSIONS=("except brazil","excluding brazil","not available in brazil","excluindo brasil","exceto brasil","fora do brasil")
+LATAM_CODES={"BR","AR","BO","CL","CO","CR","EC","GT","MX","PA","PY","PE","DO","UY","VE"}
+
+def contains_phrase(text,phrase):
+    return re.search(r"(?<![a-z])"+re.escape(fold(phrase))+r"(?![a-z])",text) is not None
+
+def geo_verdict(job,country,evidence=None):
+    """Return eligible, unknown or excluded, without treating regional tags as global."""
+    evidence=evidence or {"geography_evidence":[]}
+    if country=="GLOBAL":return "eligible"
+    parts=[]
+    for key in ("location","country","countryCode","countryName","city","state","region","eligibleLocations","remoteRegions"):
+        value=job.get(key)
+        if isinstance(value,str):parts.append(value)
+        elif isinstance(value,list):parts.extend(str(v) for v in value if isinstance(v,str))
+    loc=fold(" ".join(parts))
+    jd_geo=evidence.get("geography_evidence") or []
+    if any(contains_phrase(loc,p) for p in FOREIGN_ONLY_MARKERS) or "foreign_only" in jd_geo:
+        if country in ("BR","LATAM"):return "excluded"
+    if country=="BR" and any(contains_phrase(loc,p) for p in BRAZIL_EXCLUSIONS):
+        return "excluded"
+    br=any(contains_phrase(loc,p) for p in ("brazil","brasil","br")) or any(contains_phrase(loc,p) for p in BR_CITIES) or "brazil" in jd_geo
+    regional=any(contains_phrase(loc,p) for p in LATAM_MARKERS)
+    global_eligible=any(contains_phrase(loc,p) for p in GLOBAL_MARKERS)
+    codes={code for code,aliases in TOKENS.items() if any(contains_phrase(loc,p) for p in aliases)}
+    if br:codes.add("BR")
+    if country=="BR":
+        if br or regional or global_eligible:return "eligible"
+        # If the vacancy explicitly names a different country but not BR/LATAM, don't silently confirm Brazil.
+        if codes and "BR" not in codes:return "excluded"
+        return "unknown"
+    if country=="LATAM":
+        return "eligible" if regional or global_eligible or bool(codes & LATAM_CODES) else "unknown"
+    if any(contains_phrase(loc,p) for p in TOKENS.get(country,())) or global_eligible:
+        return "eligible"
+    if codes and country not in codes:return "excluded"
+    return "unknown"
+
 def classify(job,terms,country,mode,days):
     title=fold(job.get("title",""))
     from jd_signals import signals
@@ -143,21 +186,11 @@ def classify(job,terms,country,mode,days):
     if mode!="all" and detected not in (None,mode):
         return "excluded","modalidade"
     mode_ok=(mode=="all" or detected==mode)
-    # Brazilian job boards often use city/state alone, without a country field.
-    br_places=("sao paulo","rio de janeiro","belo horizonte","curitiba","porto alegre","brasilia","goiania","recife","fortaleza","salvador","campinas","florianopolis","uberlandia","belem","manaus","vitoria","ribeirao preto")
-    brazil_evidence=any(place in loc for place in br_places) or bool(re.search(r"\b(br|brazil|brasil)\b",loc))
-    if "foreign_only" in evidence["geography_evidence"] and country in ("BR","LATAM"):return "excluded","pais"
-    if country=="GLOBAL":country_ok=True
-    elif country=="LATAM":
-        country_ok=any(fold(x) in loc for x in LATAM) or any(x in loc for x in REGIONAL) or brazil_evidence
-    else:
-        country_ok=(brazil_evidence if country=="BR" else any(x in loc for x in TOKENS.get(country,[]))) or any(x in loc for x in REGIONAL)
-    # Known foreign-only locations must not be rebranded as Brazil-eligible.
-    if country in ("BR","LATAM") and loc and not country_ok and any(x in loc for x in ("united states only","us only","usa only","u.s. only","europe only","canada only")):
-        return "excluded","pais"
+    geo=geo_verdict(job,country,evidence)
+    if geo=="excluded":return "excluded","pais"
+    country_ok=geo=="eligible"
     published=parse_date(job.get("published"))
     date_ok=not days or (published is not None and datetime.now(timezone.utc)-timedelta(days=days)<=published<=datetime.now(timezone.utc)+timedelta(days=1))
-    if "brazil" in evidence["geography_evidence"] and country in ("BR","LATAM"):country_ok=True
     if days and published and not date_ok:return "excluded","data"
     unknown=[]
     if not mode_ok:unknown.append("modalidade")

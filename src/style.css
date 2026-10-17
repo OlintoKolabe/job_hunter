@@ -10,3 +10,12 @@
 @media(max-width:650px){.filters{flex-direction:column}.history-pane{padding:17px}}
 
 .catalog-diagnostics{margin-top:20px;border:1px solid #dae4f1;border-radius:12px;background:#fafcff;padding:0 16px}.catalog-diagnostics>summary{list-style:revert;cursor:pointer;padding:16px 4px;font-weight:700;color:#254879}.catalog-diagnostics[open]{padding-bottom:18px}.catalog-diagnostics>summary:focus-visible{outline:2px solid #3170cf;outline-offset:3px}
+
+/* Phase 3: search filters separate from technical Sources */
+.jh-filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin:18px 0 16px}
+.jh-field{display:flex;flex-direction:column;gap:8px;min-width:0;font-weight:600;font-size:13px;color:#304563}
+.jh-field span{display:block}
+.jh-field select,.jh-field textarea{box-sizing:border-box;width:100%;border:1px solid #c8d6e6;border-radius:9px;padding:11px;background:#fff;color:#172b49;font:inherit;font-weight:400}
+.jh-field select:focus-visible,.jh-field textarea:focus-visible{outline:2px solid #3476d1;outline-offset:2px}
+.jh-roles{grid-column:1/-1}
+.jh-roles textarea{resize:vertical;min-height:78px}

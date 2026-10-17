@@ -39,8 +39,8 @@ TITLE_ALIASES={
  "business analyst":["business analyst","analista de negocios","analista de negocio"],
  "analista de negocios":["analista de negocios","business analyst","analista de negocio"],
  "pmo":["pmo","project management office"],
- "growth":["growth","crescimento"],
- "marketing":["marketing","mercadologia"],
+ "growth":["growth manager","growth lead","head of growth","head de growth","growth marketing","gerente de growth","coordenador de growth","growth specialist","especialista de growth","growth strategist"],
+ "marketing":["marketing manager","marketing lead","head of marketing","head de marketing","gerente de marketing","diretor de marketing","marketing director","product marketing","marketing specialist","especialista de marketing","coordenador de marketing"],
 }
 def role_match(title,terms):
     return not terms or any(any(alias in title for alias in TITLE_ALIASES.get(t,[t])) for t in terms)

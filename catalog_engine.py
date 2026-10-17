@@ -7,6 +7,7 @@ from html.parser import HTMLParser
 from xml.etree import ElementTree
 from collectors import pull, TITLE_RE, item
 from source_extensions import extra as expanded_pull
+from scrapling_fallback import js_fallback
 
 SEED=json.loads((Path(__file__).parent/"catalog_seed.json").read_text())
 HEADERS={"User-Agent":"Mozilla/5.0 (compatible; JobHunter/0.3)","Accept":"application/json,text/html,application/xml"}
@@ -108,8 +109,15 @@ def run_task(source,slug):
                 "received":detail["received"],"target":len(jobs)},jobs
         if source in ("smartrecruiters","teamtailor","recruitee","personio","workable_account","dynamite","linkedin_guest","gupy","kaszek","jobbol"):
             jobs,state,count=expanded_pull(source,slug)
+            if not jobs and source in ("dynamite","gupy","kaszek","jobbol"):
+                try:
+                    fallback=js_fallback(source,slug)
+                    if fallback:jobs=fallback;state="validado";count=len(jobs)
+                except RuntimeError:pass
             return {"source":source,"slug":slug,"state":state,"received":count,"target":len(jobs)},jobs
         jobs,_=extra_pull(source,slug)
+        if not jobs and source=="quickin":
+            jobs=js_fallback(source,slug)
         uncertain=source in ("quickin","zoho","solides","trakstar","compleo")
         state=("validado" if jobs else ("pendente" if uncertain else "sem_vagas"))
         return {"source":source,"slug":slug,"state":state,"received":len(jobs),"target":len(jobs)},jobs

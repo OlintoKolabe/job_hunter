@@ -88,6 +88,14 @@ class Phase3ContractTests(unittest.TestCase):
         self.assertEqual(jobs[0]["company"],"Empresa Brasileira")
         self.assertIn("Brasil",jobs[0]["location"])
 
+    def test_generic_growth_engineer_is_not_default_role(self):
+        from search_filters import analyze_filters
+        entries=[{"title":"Staff Data Scientist, Growth","location":"Brazil Remote","published":"2026-10-17"},
+                 {"title":"Growth Manager","location":"Brazil Remote","published":"2026-10-17"},
+                 {"title":"Shopify Growth Developer","location":"Brazil Remote","published":"2026-10-17"}]
+        confirmed,review,reasons=analyze_filters(entries,"Growth","BR","remote",30)
+        self.assertEqual([x["title"] for x in confirmed],["Growth Manager"])
+
     def test_mcp_not_claimed_integrated(self):
         self.assertIn("Render",CONNECTORS["Indeed MCP"])
         self.assertIn("Render",CONNECTORS["Firecrawl"])

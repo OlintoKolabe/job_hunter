@@ -176,6 +176,39 @@ class Phase3ContractTests(unittest.TestCase):
         self.assertEqual(len(confirmed),2)
         self.assertFalse(review)
 
+    def test_jd_recovers_relevant_unusual_role(self):
+        from search_filters import analyze_filters
+        row={"title":"Digital Transformation Lead","location":"Brasil - Remoto","published":"","description":"Lead project delivery, project planning, project governance and project stakeholders."}
+        good,review,stats=analyze_filters([row],roles="Project Manager",country="BR",mode="remote",days=0)
+        self.assertEqual(len(good),1)
+        self.assertTrue(good[0]["jd_evidence"]["family_evidence"])
+        self.assertEqual(good[0]["description"],"")
+
+    def test_jd_does_not_make_generic_role_relevant(self):
+        from search_filters import analyze_filters
+        row={"title":"Chef de cozinha","location":"Brasil Remoto","published":"","description":"We value collaboration with product teams and other stakeholders."}
+        good,review,stats=analyze_filters([row],roles="Product Manager",country="BR",mode="remote",days=0)
+        self.assertFalse(good+review)
+
+    def test_jd_geo_remote_and_spanish_evidence(self):
+        from search_filters import analyze_filters
+        base={"title":"Product Manager","location":"","published":"","description":"Fully remote role, work from Brazil. Lead product strategy and product discovery."}
+        good,review,_=analyze_filters([base],roles="Product Manager",country="BR",mode="remote",days=0)
+        self.assertEqual(len(good),1)
+        blocked={**base,"description":base["description"]+" Fluent Spanish required."}
+        good,review,stats=analyze_filters([blocked],roles="Product Manager",country="BR",mode="remote",days=0)
+        self.assertEqual(len(good)+len(review),0)
+        optional={**base,"description":base["description"]+" Spanish preferred."}
+        good,review,stats=analyze_filters([optional],roles="Product Manager",country="BR",mode="remote",days=0)
+        self.assertEqual(len(good),1)
+
+    def test_jd_unavailable_remains_unverified(self):
+        from search_filters import analyze_filters
+        row={"title":"Product Owner","location":"","published":"","description":""}
+        good,review,_=analyze_filters([row],roles="Product Owner",country="BR",mode="remote",days=0)
+        self.assertEqual(len(good),0)
+        self.assertEqual(len(review),1)
+
     def test_mcp_not_claimed_integrated(self):
         self.assertIn("Render",CONNECTORS["Indeed MCP"])
         self.assertIn("Render",CONNECTORS["Firecrawl"])

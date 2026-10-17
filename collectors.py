@@ -27,7 +27,7 @@ def fetch_json(url,headers=None):
 def as_list(payload):
     if isinstance(payload,list):return payload
     if isinstance(payload,dict):
-        for key in ("jobs","jobPosts","postings","results","items","data"):
+        for key in ("jobs","jobPosts","jobPostings","postings","results","items","data","content","records","rows","page"):
             found=payload.get(key)
             if isinstance(found,list):return found
             if isinstance(found,dict):
@@ -97,6 +97,8 @@ def pull(source,slug):
                 j.get("url") or j.get("jobUrl") or j.get("publicUrl") or j.get("link"),
                 j.get("location") or j.get("workplaceType"),source,j.get("createdAt"))
             if value:jobs.append(value)
+    if source=="inHire" and not jobs:
+        raise ValueError("inHire returned no parsed jobs; API response format requires verification")
     # Avoid counting unrelated engineering jobs as matches
     target=[j for j in jobs if TITLE_RE.search(j["title"])]
     return {"source":source,"term":slug,"status":"ok","received":len(jobs),"target":len(target)},target

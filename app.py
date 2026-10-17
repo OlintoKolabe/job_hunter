@@ -18,6 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from pydantic import BaseModel
 import psycopg
+from psycopg.types.json import Jsonb
 from collectors import collect
 from catalog_engine import source_tasks,scan
 
@@ -219,9 +220,10 @@ async def catalog_import(request: Request):
                     if isinstance(slug,str) and re.fullmatch(r"[a-zA-Z0-9_.-]{2,100}",slug):imported.add((kind,slug))
     with psycopg.connect(DATABASE,connect_timeout=10) as conn:
         with conn.cursor() as cur:
+            cur.execute("INSERT INTO jh_catalog_document(id,document) VALUES(1,%s) ON CONFLICT(id) DO UPDATE SET document=EXCLUDED.document,imported_at=now()", (Jsonb(data),))
             for ats,slug in sorted(imported):
                 cur.execute("INSERT INTO jh_catalog_source(source,slug) VALUES(%s,%s) ON CONFLICT DO NOTHING",(ats,slug))
-    return {"imported":len(imported),"total_active":len(active_source_tasks())}
+    return {"imported":len(imported),"document_keys":len(data),"total_active":len(active_source_tasks())}
 
 @app.get("/api/catalog")
 def catalog(request: Request):

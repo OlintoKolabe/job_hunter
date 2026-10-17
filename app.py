@@ -20,6 +20,7 @@ from pydantic import BaseModel
 import psycopg
 from psycopg.types.json import Jsonb
 from collectors import collect
+from search_filters import apply_filters,DEFAULT_ROLES,COUNTRIES
 from catalog_engine import source_tasks,scan
 from catalog_bootstrap import maybe_start
 
@@ -151,9 +152,11 @@ def extract_jobs(data):
     return []
 
 @app.post("/api/search-jobs")
-def search_jobs(request: Request):
+def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:str="remote",days:int=30,sort:str="newest"):
     require_auth(request)
     items,sources=collect()
+    try: items=apply_filters(items,roles,country,mode,days,sort)
+    except ValueError as e: raise HTTPException(400,str(e))
     with psycopg.connect(DATABASE,connect_timeout=8) as conn:
         with conn.cursor() as cur:
             keys=[url_key(j["url"]) for j in items]
@@ -230,6 +233,11 @@ async def catalog_import(request: Request):
                 cur.execute("INSERT INTO jh_catalog_source(source,slug) VALUES(%s,%s) ON CONFLICT DO NOTHING",(ats,slug))
     return {"imported":len(imported),"document_keys":len(data),"total_active":len(active_source_tasks())}
 
+@app.get("/api/search-filters")
+def available_filters(request: Request):
+    require_auth(request)
+    return {"roles":DEFAULT_ROLES,"countries":[{"value":k,"label":v} for k,v in COUNTRIES]}
+
 @app.get("/api/catalog")
 def catalog(request: Request):
     require_auth(request)
@@ -263,7 +271,7 @@ def catalog_checks(request: Request):
     return {"total":len(rows),"items":rows}
 
 @app.post("/api/catalog/scan")
-def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False):
+def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False,roles:str=DEFAULT_ROLES,country:str="BR",mode:str="remote",days:int=30,sort:str="newest"):
     require_auth(request)
     tasks=active_source_tasks()
     if due_only:
@@ -293,7 +301,8 @@ def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False
         if not key or key in unique or (pair and pair in pairset):continue
         unique[key]=job
         if pair:pairset.add(pair)
-    items=list(unique.values())
+    try: items=apply_filters(list(unique.values()),roles,country,mode,days,sort)
+    except ValueError as e:raise HTTPException(400,str(e))
     urls=[url_key(v["url"]) for v in items]
     pairs=[pair_key(v["company"],v["title"]) for v in items if v["company"]]
     known_urls=set();known_pairs=set()

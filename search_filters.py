@@ -79,6 +79,25 @@ def role_match(title,terms):
     if any(alias in title for fam in families for alias in ROLE_FAMILIES[fam]):return True
     # Any custom free-text role the user typed still matches literally.
     return any(len(t)>=3 and t in title for t in terms)
+# Small bilingual discovery set per selected family, not the entire synonym lexicon.
+DISCOVERY={
+ "product":("product manager","product owner","gerente de produto","especialista de produtos"),
+ "projects":("project manager","gerente de projetos","pmo"),
+ "marketing":("marketing manager","gerente de marketing","marketing ops"),
+ "growth":("growth manager","growth marketing","gerente de growth"),
+ "business":("business analyst","analista de negocios","business operations"),
+}
+def discovery_queries(roles,limit=12):
+    terms=search_terms(roles)
+    out=[]
+    for family in ("product","projects","marketing","growth","business"):
+        if family in requested_families(terms):
+            for t in DISCOVERY[family]:
+                if t not in out:out.append(t)
+    for t in terms:
+        if t not in out:out.append(t)
+    return out[:limit]
+
 def classify(job,terms,country,mode,days):
     title=fold(job.get("title",""))
     if not role_match(title,terms):return "excluded","cargo"

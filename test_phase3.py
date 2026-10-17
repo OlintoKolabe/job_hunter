@@ -209,6 +209,14 @@ class Phase3ContractTests(unittest.TestCase):
         self.assertEqual(len(good),0)
         self.assertEqual(len(review),1)
 
+    def test_panorama_does_not_hide_unverified_matches(self):
+        from pathlib import Path
+        ui=Path("src/Opportunities.jsx").read_text()
+        self.assertIn("visibleReviews.forEach",ui)
+        self.assertIn("A confirmar:",ui)
+        self.assertIn("useState('0'),[country",ui)
+        self.assertIn("combined.values()",ui)
+
     def test_mcp_not_claimed_integrated(self):
         self.assertIn("Render",CONNECTORS["Indeed MCP"])
         self.assertIn("Render",CONNECTORS["Firecrawl"])

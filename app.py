@@ -17,6 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from pydantic import BaseModel
 import psycopg
+from collectors import collect
 
 app = FastAPI(docs_url=None, redoc_url=None)
 DIST = Path(__file__).resolve().parent / "dist"
@@ -144,37 +145,7 @@ def extract_jobs(data):
 @app.post("/api/search-jobs")
 def search_jobs(request: Request):
     require_auth(request)
-    found={}
-    sources=[]
-    for term in SEARCH_TERMS:
-        query=urllib.parse.urlencode({"keyword":term,"locations":"brazil","sort":"date","limit":25})
-        endpoint=JOBGETHER_API+"?"+query
-        try:
-            req=urllib.request.Request(endpoint,headers={"Accept":"application/json","User-Agent":"JobHunter/0.3 (personal job search)"})
-            with urllib.request.urlopen(req,timeout=12) as resp:
-                if resp.status != 200:raise ValueError("HTTP "+str(resp.status))
-                raw=resp.read(1_500_001)
-                if len(raw)>1_500_000:raise ValueError("Resposta excessivamente grande")
-                data=json.loads(raw)
-            jobs=extract_jobs(data)
-            sources.append({"term":term,"status":"ok","received":len(jobs)})
-            for job in jobs:
-                if not isinstance(job,dict):continue
-                company=job.get("companyName") or job.get("company") or job.get("employer") or ""
-                if isinstance(company,dict):company=company.get("name") or ""
-                title=job.get("title") or job.get("jobTitle") or job.get("position") or ""
-                link=job.get("url") or job.get("jobUrl") or job.get("applyUrl") or job.get("hostedUrl") or ""
-                if not title or not isinstance(link,str) or not link.startswith(("https://","http://")):continue
-                key=url_key(link)
-                if not key:continue
-                if key not in found:
-                    found[key]={"company":str(company)[:200],"title":str(title)[:300],"url":link[:2000],
-                        "location":str(job.get("location") or job.get("country") or "")[:200],
-                        "published":str(job.get("publishedAt") or job.get("createdAt") or "")[:80],
-                        "source":"Jobgether"}
-        except (urllib.error.URLError,ValueError,TimeoutError,json.JSONDecodeError) as exc:
-            sources.append({"term":term,"status":"error","detail":str(exc)[:180]})
-    items=list(found.values())
+    items,sources=collect()
     with psycopg.connect(DATABASE,connect_timeout=8) as conn:
         with conn.cursor() as cur:
             keys=[url_key(j["url"]) for j in items]
@@ -189,7 +160,7 @@ def search_jobs(request: Request):
                 known_pairs={row[0] for row in cur.fetchall()}
     fresh=[j for j in items if url_key(j["url"]) not in known_urls and
            (not j["company"] or pair_key(j["company"],j["title"]) not in known_pairs)]
-    return {"source":"Jobgether","queried":len(SEARCH_TERMS),"total":len(items),
+    return {"source":"Multifuente","queried":len(sources),"total":len(items),
         "new":len(fresh),"duplicates":len(items)-len(fresh),"items":fresh[:100],"details":sources,
         "notice":"Vagas coletadas, ainda sem triagem de elegibilidade Brasil/remoto ou score."}
 

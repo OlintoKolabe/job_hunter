@@ -146,6 +146,36 @@ class Phase3ContractTests(unittest.TestCase):
             detail,jobs=pull("Greenhouse","board")
         self.assertEqual(len(jobs),1)
 
+    def test_equivalence_families_in_three_languages(self):
+        from search_filters import role_match,search_terms
+        self.assertTrue(role_match("especialista de produtos",search_terms("Product Manager")))
+        self.assertTrue(role_match("coordenadora de projetos",search_terms("Project Manager")))
+        self.assertTrue(role_match("Marketing Ops Manager",search_terms("Marketing")))
+        self.assertTrue(role_match("Growth Marketer",search_terms("Growth")))
+        self.assertTrue(role_match("Analista de Negócios",search_terms("Business Analyst")))
+        self.assertFalse(role_match("Growth Data Scientist",search_terms("Growth")))
+        self.assertFalse(role_match("Frontend Developer - Product",search_terms("Product Manager")))
+
+    def test_bilingual_discovery_queries(self):
+        from search_filters import discovery_queries
+        q=discovery_queries("Product Manager, Project Manager, Marketing, Growth")
+        self.assertIn("gerente de produto",q)
+        self.assertIn("gerente de projetos",q)
+        self.assertIn("marketing manager",q)
+        self.assertIn("growth manager",q)
+        self.assertLessEqual(len(q),12)
+
+    def test_geo_workplace_equivalents(self):
+        from search_filters import analyze_filters
+        rows=[
+         {"title":"Product Lead","location":"","country":"Brasil","workplaceType":"Work from home","published":""},
+         {"title":"Gerente de Projetos","location":"Goiânia","workplaceType":"Teletrabalho","published":""},
+         {"title":"Marketing Ops Manager","location":"USA only","workplaceType":"Remoto","published":""}
+        ]
+        confirmed,review,_=analyze_filters(rows,country="BR",mode="remote",days=0)
+        self.assertEqual(len(confirmed),2)
+        self.assertFalse(review)
+
     def test_mcp_not_claimed_integrated(self):
         self.assertIn("Render",CONNECTORS["Indeed MCP"])
         self.assertIn("Render",CONNECTORS["Firecrawl"])

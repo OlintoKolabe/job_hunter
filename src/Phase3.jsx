@@ -1,5 +1,5 @@
 import React,{useState} from 'react';
-export function OpportunitiesPanel(){
+export function SourcesPanel(){
  const [runAll,setRunAll]=useState(false),[coverage,setCoverage]=useState(null),[scanning,setScanning]=useState(false),[cursor,setCursor]=useState(0),[reports,setReports]=useState([]),[catalogJobs,setCatalogJobs]=useState([]),[busy,setBusy]=useState(false),[result,setResult]=useState(null),[error,setError]=useState('');
  async function uploadCatalog(e){const file=e.target.files?.[0];if(!file)return;setError('');try{const r=await fetch('/api/catalog/import',{method:'POST',headers:{'Content-Type':'application/json'},body:await file.arrayBuffer()});const d=await r.json();if(!r.ok)throw Error(d.detail||'Falha de importação');await loadCatalog();setError('Catálogo importado: '+d.imported+' identificadores reconhecidos.');}catch(err){setError(err.message)}e.target.value='';}
  async function loadCatalog(){try{const r=await fetch('/api/catalog');if(r.ok)setCoverage(await r.json())}catch(e){setError(String(e))}}
@@ -49,7 +49,7 @@ export function OpportunitiesPanel(){
    await scanDue();
   }catch(e){setError(e.message)}finally{setBusy(false)}
  }
- return <section className="history-pane"><div className="infra-title"><div><h3>Busca de oportunidades</h3><p>APIs públicas e catálogo ATS · coleta por lotes</p></div><button className="import-btn" onClick={search} disabled={busy||scanning}>{busy||scanning?'Consultando fontes…':'Buscar vagas'}</button></div>
+ return <section className="history-pane"><div className="infra-title"><div><h3>Fontes e verificações</h3><p>Catálogo de empresas, conectores e histórico técnico de coleta</p></div></div>
  <details className="catalog-diagnostics"><summary>Verificações de quadros</summary>
  <div className="infra-title" style={{marginTop:25}}><div><h3>Catálogo de empresas</h3><p>{coverage?coverage.total+' quadros catalogados · '+coverage.due+' para revisar':'Carregando inventário...'}</p></div><button className="import-btn" onClick={scanAll} disabled={scanning||!coverage}>Varrer todos os quadros</button><button className="import-btn" onClick={()=>scanCatalog(cursor===0)} disabled={scanning}>{scanning?'Consultando…':cursor===0?'Iniciar varredura':'Consultar próximo lote'}</button></div>
  <label className="import-btn" style={{marginBottom:12}}>Importar cadastro_empresas.json<input type="file" hidden accept=".json,application/json" onChange={uploadCatalog}/></label>
@@ -60,12 +60,5 @@ export function OpportunitiesPanel(){
  <div className="table-wrap"><table><thead><tr><th>ATS</th><th>Slug</th><th>Estado</th><th>Vagas coletadas</th></tr></thead><tbody>{reports.map((r,i)=><tr key={i}><td>{r.source}</td><td>{r.slug}</td><td>{r.state}</td><td>{r.received}{r.error?' — '+r.error:''}</td></tr>)}</tbody></table></div>
  <h3 style={{marginTop:24}}>Vagas encontradas pelo catálogo</h3><div className="table-wrap"><table><thead><tr><th>Empresa</th><th>Cargo</th><th>Origem</th></tr></thead><tbody>{catalogJobs.map((v,i)=><tr key={i}><td>{v.company}</td><td><a href={v.url} target="_blank" rel="noopener noreferrer">{v.title}</a></td><td>{v.source}</td></tr>)}</tbody></table></div></>}
  </details>
- <p>Apenas coleta e deduplicação nesta entrega. O sistema ainda <strong>não valida o anúncio completo nem confirma elegibilidade remota</strong>.</p>
- {error&&<p role="alert" className="notice">{error}</p>}
- {result&&<><div className="history-stats"><span>Coletadas: <b>{result.total}</b></span><span>Inéditas: <b>{result.new}</b></span><span>Já conhecidas: <b>{result.duplicates}</b></span></div><p className="notice">{result.notice}</p>
- <div className="table-wrap"><table><thead><tr><th>Empresa</th><th>Vaga</th><th>Local informado</th><th>Origem</th></tr></thead><tbody>{result.items.map((v,i)=><tr key={v.url+i}><td>{v.company||'Não informada'}</td><td><a target="_blank" rel="noopener noreferrer" href={v.url}>{v.title}</a></td><td>{v.location||'Não informado'}</td><td>{v.source}</td></tr>)}</tbody></table></div>
- <h3 style={{marginTop:24}}>Diagnóstico de coleta</h3><div className="history-stats">{result.details.map(v=><span key={v.source+v.term}>{v.source} / {v.term}: <b>{v.status==='ok'?v.received+' registros':'Erro'}</b></span>)}</div>
- {result.details.filter(x=>x.status==='error').map(x=><p key={x.source+x.term} className="notice" role="alert">{x.source} / {x.term}: {x.detail}</p>)}
- </>}
  </section>
 }

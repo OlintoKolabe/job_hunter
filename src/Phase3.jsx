@@ -1,6 +1,9 @@
 import React,{useState} from 'react';
 export function OpportunitiesPanel(){
- const [busy,setBusy]=useState(false),[result,setResult]=useState(null),[error,setError]=useState('');
+ const [coverage,setCoverage]=useState(null),[scanning,setScanning]=useState(false),[cursor,setCursor]=useState(0),[reports,setReports]=useState([]),[catalogJobs,setCatalogJobs]=useState([]),[busy,setBusy]=useState(false),[result,setResult]=useState(null),[error,setError]=useState('');
+ async function loadCatalog(){try{const r=await fetch('/api/catalog');if(r.ok)setCoverage(await r.json())}catch(e){setError(String(e))}}
+ React.useEffect(()=>{loadCatalog()},[]);
+ async function scanCatalog(reset=false){setScanning(true);setError('');try{let offset=reset?0:cursor;let details=reset?[]:reports;let jobs=reset?[]:catalogJobs;const t=await fetch('/api/catalog/scan?offset='+offset+'&limit=12',{method:'POST'});const d=await t.json();if(!t.ok)throw Error(d.detail||'Erro na coleta');setCursor(d.next_offset);setReports([...details,...d.details]);setCatalogJobs([...jobs,...d.items]);}catch(e){setError(e.message)}finally{setScanning(false)}}
  async function search(){
   setBusy(true);setError('');
   try{
@@ -10,7 +13,13 @@ export function OpportunitiesPanel(){
    setResult(d);
   }catch(e){setError(e.message)}finally{setBusy(false)}
  }
- return <section className="history-pane"><div className="infra-title"><div><h3>Busca de oportunidades</h3><p>Jobgether, Workable e quadros ATS · fontes públicas gratuitas</p></div><button className="import-btn" onClick={search} disabled={busy}>{busy?'Consultando…':'Buscar vagas'}</button></div>
+ return <section className="history-pane"><div className="infra-title"><div><h3>Busca de oportunidades</h3><p>APIs públicas e catálogo ATS · coleta por lotes</p></div><button className="import-btn" onClick={search} disabled={busy}>{busy?'Consultando…':'Buscar vagas'}</button></div>
+ <div className="infra-title" style={{marginTop:25}}><div><h3>Catálogo de empresas</h3><p>{coverage?coverage.total+' quadros catalogados':'Carregando inventário...'}</p></div><button className="import-btn" onClick={()=>scanCatalog(cursor===0)} disabled={scanning}>{scanning?'Consultando…':cursor===0?'Iniciar varredura':'Consultar próximo lote'}</button></div>
+ <p>A coleta percorre lotes de até 12 quadros, registrando sucesso, ausência de vagas e falhas. Os próximos lotes são iniciados manualmente para evitar timeout e consumo desnecessário.</p>
+ {coverage&&<div className="history-stats">{Object.entries(coverage.by_source).map(([source,count])=><span key={source}>{source}: <b>{count}</b></span>)}</div>}
+ {reports.length>0&&<><p className="notice">Verificados {cursor} de {coverage?.total||'?'} quadros · {catalogJobs.length} candidatas coletadas nos lotes (antes da triagem).</p>
+ <div className="table-wrap"><table><thead><tr><th>ATS</th><th>Slug</th><th>Estado</th><th>Vagas coletadas</th></tr></thead><tbody>{reports.map((r,i)=><tr key={i}><td>{r.source}</td><td>{r.slug}</td><td>{r.state}</td><td>{r.received}{r.error?' — '+r.error:''}</td></tr>)}</tbody></table></div>
+ <h3 style={{marginTop:24}}>Vagas encontradas pelo catálogo</h3><div className="table-wrap"><table><thead><tr><th>Empresa</th><th>Cargo</th><th>Origem</th></tr></thead><tbody>{catalogJobs.map((v,i)=><tr key={i}><td>{v.company}</td><td><a href={v.url} target="_blank" rel="noopener noreferrer">{v.title}</a></td><td>{v.source}</td></tr>)}</tbody></table></div></>}
  <p>Apenas coleta e deduplicação nesta entrega. O sistema ainda <strong>não valida o anúncio completo nem confirma elegibilidade remota</strong>.</p>
  {error&&<p role="alert" className="notice">{error}</p>}
  {result&&<><div className="history-stats"><span>Coletadas: <b>{result.total}</b></span><span>Inéditas: <b>{result.new}</b></span><span>Já conhecidas: <b>{result.duplicates}</b></span></div><p className="notice">{result.notice}</p>

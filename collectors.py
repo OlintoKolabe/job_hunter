@@ -127,11 +127,12 @@ def pull(source,slug,location='brazil'):
     target=[j for j in jobs if TITLE_RE.search(j["title"])]
     return {"source":source,"term":slug,"status":"ok","received":len(jobs),"target":len(target)},target
 
-def collect(terms=None,country="BR"):
+def collect(terms=None,country="BR",only_source="all"):
     country_locations={"BR":"Brazil","AR":"Argentina","CL":"Chile","CO":"Colombia","MX":"Mexico","PE":"Peru","UY":"Uruguay","PY":"Paraguay","BO":"Bolivia","EC":"Ecuador","CR":"Costa Rica","PA":"Panama","GT":"Guatemala","DO":"Dominican Republic","VE":"Venezuela","US":"United States","CA":"Canada","PT":"Portugal","ES":"Spain","GB":"United Kingdom"}
     location=country_locations.get(country,"")
     terms=[str(t).strip()[:100] for t in (terms or TERMS) if str(t).strip()][:12]
     tasks=[("Jobgether",t) for t in terms]+[("Workable",t) for t in terms]+[(source,slug) for source,slugs in BOARDS.items() for slug in slugs]
+    if only_source!="all":tasks=[(src,slug) for src,slug in tasks if src.lower()==only_source.lower()]
     found={};details=[]
     with ThreadPoolExecutor(max_workers=8) as pool:
         futures={pool.submit(pull,source,slug,location if source in ("Jobgether","Workable") else "brazil"):(source,slug) for source,slug in tasks}

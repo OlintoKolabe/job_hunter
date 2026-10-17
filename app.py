@@ -20,7 +20,7 @@ from pydantic import BaseModel
 import psycopg
 from psycopg.types.json import Jsonb
 from collectors import collect
-from search_filters import analyze_filters,apply_filters,DEFAULT_ROLES,COUNTRIES
+from search_filters import analyze_filters,apply_filters,search_terms,DEFAULT_ROLES,COUNTRIES
 from catalog_engine import source_tasks,scan
 from catalog_bootstrap import maybe_start
 
@@ -154,7 +154,7 @@ def extract_jobs(data):
 @app.post("/api/search-jobs")
 def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:str="remote",days:int=30,sort:str="newest"):
     require_auth(request)
-    items,sources=collect()
+    items,sources=collect(search_terms(roles),country)
     raw_count=len(items)
     try: items,review,filter_stats=analyze_filters(items,roles,country,mode,days,sort)
     except ValueError as e: raise HTTPException(400,str(e))

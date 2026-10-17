@@ -25,7 +25,7 @@ def html_links(url,pattern=None):
     p=Links();p.feed(body.decode("utf-8","replace"))
     results=[]
     for href,title in p.links:
-        if not TITLE_RE.search(title):continue
+        if not title.strip():continue
         if pattern and not re.search(pattern,href,re.I):continue
         link=urllib.parse.urljoin(final_url,href)
         val=item("",title,link,"","")
@@ -42,7 +42,7 @@ def extra(source,slug):
             url=j.get("ref") or j.get("jobAdUrl") or j.get("applyUrl")
             if not url and j.get("id"):url="https://jobs.smartrecruiters.com/"+slug+"/"+str(j["id"])
             v=item(slug,title,url,loc.get("city") or loc.get("country") or "" if isinstance(loc,dict) else loc,source,j.get("releasedDate"))
-            if v and TITLE_RE.search(v["title"]):jobs.append(v)
+            if v:jobs.append(v)
         # SmartRecruiters 200/0 does NOT prove valid slug
         state="pendente" if not d.get("totalFound",0) else "validado"
         return jobs,state,len(d.get("content",[]))
@@ -52,7 +52,7 @@ def extra(source,slug):
             entries=d.get("items",[]) if isinstance(d,dict) else []
             for j in entries:
                 v=item(slug,j.get("title"),j.get("url") or j.get("external_url"),j.get("location") or "",source,j.get("date_published"))
-                if v and TITLE_RE.search(v["title"]):jobs.append(v)
+                if v:jobs.append(v)
             if len(entries)<100:break
         return jobs,"validado" if jobs else "sem_vagas",len(jobs)
     if source=="recruitee":
@@ -60,7 +60,7 @@ def extra(source,slug):
         records=d.get("offers",[]) if isinstance(d,dict) else []
         for j in records:
             v=item(slug,j.get("title"),j.get("careers_url") or j.get("url"),j.get("location") or "",source,j.get("published_at"))
-            if v and TITLE_RE.search(v["title"]):jobs.append(v)
+            if v:jobs.append(v)
         return jobs,"validado" if records else "sem_vagas",len(records)
     if source=="personio":
         url="https://"+slug+".jobs.personio.de/search.json"
@@ -68,14 +68,14 @@ def extra(source,slug):
         records=as_list(d)
         for j in records:
             v=item(slug,j.get("name") or j.get("title"),j.get("url") or j.get("link"),j.get("office") or j.get("location"),source)
-            if v and TITLE_RE.search(v["title"]):jobs.append(v)
+            if v:jobs.append(v)
         return jobs,"validado" if records else "sem_vagas",len(records)
     if source=="workable_account":
         d=fetch_json("https://apply.workable.com/api/v1/widget/accounts/"+urllib.parse.quote(slug)+"?details=true")
         jobs_raw=as_list(d)
         for j in jobs_raw:
             v=item(slug,j.get("title"),j.get("url") or j.get("shortlink"),j.get("location"),source,j.get("published_on"))
-            if v and TITLE_RE.search(v["title"]):jobs.append(v)
+            if v:jobs.append(v)
         return jobs,"validado" if jobs_raw else "sem_vagas",len(jobs_raw)
     if source=="kaszek":
         jobs=html_links("https://jobs.kaszek.com/jobs",r"/jobs/|/companies/|/job/")
@@ -118,7 +118,7 @@ def extra(source,slug):
                     val["workplaceType"]=mode
                     jobs.append(val)
             if len(records)<100:break
-        return [j for j in jobs if TITLE_RE.search(j["title"])],"validado" if received else "pendente",received
+        return jobs,"validado" if received else "pendente",received
     raise ValueError("adaptador inexistente: "+source)
 
 # Nonintegrated MCPs must be presented as unavailable, never as scanned.

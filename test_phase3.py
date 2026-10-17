@@ -78,6 +78,16 @@ class Phase3ContractTests(unittest.TestCase):
         self.assertIn("/vagas/abc123/product-owner",jobs[0]["url"])
         self.assertIn("Remote",jobs[0]["location"])
 
+    def test_gupy_public_api_yields_remote_brazil_listing(self):
+        from source_extensions import extra
+        payload={"data":[{"name":"Gerente de Produto","careerPageName":"Empresa Brasileira","jobUrl":"https://empresa.gupy.io/job/123","workplaceType":"remote","state":"Goiás","createdAt":"2026-10-17"}]}
+        with patch("source_extensions.fetch_json",return_value=payload):
+            jobs,state,total=extra("gupy","gerente de produto")
+        self.assertEqual(total,1)
+        self.assertEqual(state,"validado")
+        self.assertEqual(jobs[0]["company"],"Empresa Brasileira")
+        self.assertIn("Brasil",jobs[0]["location"])
+
     def test_mcp_not_claimed_integrated(self):
         self.assertIn("Render",CONNECTORS["Indeed MCP"])
         self.assertIn("Render",CONNECTORS["Firecrawl"])

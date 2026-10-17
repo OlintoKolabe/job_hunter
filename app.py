@@ -191,14 +191,14 @@ async def catalog_import(request: Request):
     for name,ats in mapping.items():
         group=data.get(name)
         if not isinstance(group,dict):continue
-        for key in ("validados_200","a_validar","dominio_eu"):
+        for key in ("validados_200","validados_47_em_31_08","tenants_novos_22_09","a_validar","dominio_eu"):
             for slug in group.get(key,[]) if isinstance(group.get(key),list) else []:
                 if not isinstance(slug,str) or len(slug)>100:continue
                 kind="greenhouse_eu" if key=="dominio_eu" else ats
                 if re.fullmatch(r"[a-zA-Z0-9_.-]+",slug):imported.add((kind,slug))
     other=data.get("outros_ats",{})
     if isinstance(other,dict):
-        for key,kind in (("quickin","quickin"),("zoho_recruit","zoho"),("bamboohr","bamboohr")):
+        for key,kind in (("quickin","quickin"),("inhire","inhire"),("zoho_recruit","zoho"),("trakstar","trakstar"),("compleo","compleo"),("bamboohr","bamboohr")):
             value=other.get(key,[])
             if isinstance(value,list):
                 for slug in value:

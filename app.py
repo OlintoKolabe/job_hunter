@@ -20,7 +20,7 @@ from pydantic import BaseModel
 import psycopg
 from psycopg.types.json import Jsonb
 from collectors import collect
-from search_filters import apply_filters,DEFAULT_ROLES,COUNTRIES
+from search_filters import analyze_filters,apply_filters,DEFAULT_ROLES,COUNTRIES
 from catalog_engine import source_tasks,scan
 from catalog_bootstrap import maybe_start
 
@@ -155,7 +155,8 @@ def extract_jobs(data):
 def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:str="remote",days:int=30,sort:str="newest"):
     require_auth(request)
     items,sources=collect()
-    try: items=apply_filters(items,roles,country,mode,days,sort)
+    raw_count=len(items)
+    try: items,review,filter_stats=analyze_filters(items,roles,country,mode,days,sort)
     except ValueError as e: raise HTTPException(400,str(e))
     with psycopg.connect(DATABASE,connect_timeout=8) as conn:
         with conn.cursor() as cur:
@@ -172,7 +173,7 @@ def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:
     fresh=[j for j in items if not any(b in normalized(j["company"]) for b in ("kraken","payward")) and url_key(j["url"]) not in known_urls and
            (not j["company"] or pair_key(j["company"],j["title"]) not in known_pairs)]
     return {"source":"Multifuente","queried":len(sources),"total":len(items),
-        "new":len(fresh),"duplicates":len(items)-len(fresh),"items":fresh[:100],"details":sources,
+        "new":len(fresh),"duplicates":len(items)-len(fresh),"items":fresh[:100],"review_items":review[:150],"filter_stats":filter_stats,"raw_count":raw_count,"details":sources,
         "notice":"Vagas coletadas, ainda sem triagem de elegibilidade Brasil/remoto ou score."}
 
 
@@ -301,7 +302,8 @@ def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False
         if not key or key in unique or (pair and pair in pairset):continue
         unique[key]=job
         if pair:pairset.add(pair)
-    try: items=apply_filters(list(unique.values()),roles,country,mode,days,sort)
+    raw_count=len(unique)
+    try: items,review,filter_stats=analyze_filters(list(unique.values()),roles,country,mode,days,sort)
     except ValueError as e:raise HTTPException(400,str(e))
     urls=[url_key(v["url"]) for v in items]
     pairs=[pair_key(v["company"],v["title"]) for v in items if v["company"]]
@@ -322,8 +324,8 @@ def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False
     fresh=[j for j in items if url_key(j["url"]) not in known_urls and (not j["company"] or pair_key(j["company"],j["title"]) not in known_pairs)]
     return {"total_sources":len(tasks),"due_only":due_only,"offset":offset,"next_offset":offset+len(batch),
             "complete":offset+len(batch)>=len(tasks),"details":details,
-            "found":len(items),"new":len(fresh),"duplicates":len(items)-len(fresh),
-            "items":fresh[:80],"notice":"Vagas candidatas: remoto/Brasil e requisitos ainda aguardam análise completa."}
+            "found":len(items),"new":len(fresh),"duplicates":len(items)-len(fresh),"raw_count":raw_count,"filter_stats":filter_stats,
+            "review_items":review[:150],"items":fresh[:80],"notice":"Vagas candidatas: remoto/Brasil e requisitos ainda aguardam análise completa."}
 
 @app.get("/api/history")
 def history(request: Request, q: str="", state: str="", limit:int=50, offset:int=0):

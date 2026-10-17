@@ -55,6 +55,19 @@ class Phase3ContractTests(unittest.TestCase):
         matched=apply_filters(rows,"Product Owner","LATAM","remote",30,"oldest")
         self.assertEqual([j["published"] for j in matched],["2026-10-15","2026-10-16"])
 
+    def test_unknown_metadata_not_silently_lost(self):
+        from search_filters import analyze_filters
+        confirmed,review,counts=analyze_filters([{"title":"Gerente de Produto","url":"https://example.com/job","location":"Brasil","published":""}],"Product Manager","BR","remote",30)
+        self.assertEqual(len(confirmed),0)
+        self.assertEqual(len(review),1)
+        self.assertEqual(review[0]["needs_verification"],["modalidade","data"])
+
+    def test_known_wrong_mode_excluded(self):
+        from search_filters import analyze_filters
+        confirmed,review,counts=analyze_filters([{"title":"Product Manager","location":"São Paulo presencial","published":"2026-10-17"}],"Product Manager","BR","remote",30)
+        self.assertEqual(confirmed,[])
+        self.assertEqual(review,[])
+
     def test_mcp_not_claimed_integrated(self):
         self.assertIn("Render",CONNECTORS["Indeed MCP"])
         self.assertIn("Render",CONNECTORS["Firecrawl"])

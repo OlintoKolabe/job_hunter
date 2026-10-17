@@ -83,11 +83,11 @@ def extra_pull(source,slug):
             if new==0:break
         return jobs,"ok"
     if source=="solides":
-        url="https://"+slug+".solides.jobs/"
+        url="https://"+slug+".vagas.solides.com.br/"
     elif source=="zoho":
         url="https://"+slug+".zohorecruit.com/jobs/Careers"
     elif source=="trakstar":
-        url="https://"+slug+".recruiterbox.com/"
+        url="https://"+slug+".hire.trakstar.com/jobs"
     elif source=="compleo":
         url="https://"+slug+".compleo.com.br/"
     else:
@@ -110,7 +110,9 @@ def run_task(source,slug):
             jobs,state,count=expanded_pull(source,slug)
             return {"source":source,"slug":slug,"state":state,"received":count,"target":len(jobs)},jobs
         jobs,_=extra_pull(source,slug)
-        return {"source":source,"slug":slug,"state":"validado" if jobs else "sem_vagas","received":len(jobs),"target":len(jobs)},jobs
+        uncertain=source in ("quickin","zoho","solides","trakstar","compleo")
+        state=("validado" if jobs else ("pendente" if uncertain else "sem_vagas"))
+        return {"source":source,"slug":slug,"state":state,"received":len(jobs),"target":len(jobs)},jobs
     except urllib.error.HTTPError as e:
         return {"source":source,"slug":slug,"state":"pendente","received":0,"error":str(e.code)},[]
     except Exception as e:

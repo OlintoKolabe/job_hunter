@@ -152,9 +152,15 @@ def extract_jobs(data):
     return []
 
 @app.post("/api/search-jobs")
-def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:str="remote",days:int=30,sort:str="newest"):
+def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:str="remote",days:int=30,sort:str="newest",source:str="all"):
     require_auth(request)
-    items,sources=collect(search_terms(roles),country)
+    if source not in ("all","jobgether","workable"):
+        items,sources=[],[]
+    else:
+        items,sources=collect(search_terms(roles),country)
+        if source!="all":
+            items=[v for v in items if v["source"].lower()==source]
+            sources=[v for v in sources if v["source"].lower()==source]
     raw_count=len(items)
     try: items,review,filter_stats=analyze_filters(items,roles,country,mode,days,sort)
     except ValueError as e: raise HTTPException(400,str(e))
@@ -237,7 +243,7 @@ async def catalog_import(request: Request):
 @app.get("/api/search-filters")
 def available_filters(request: Request):
     require_auth(request)
-    return {"roles":DEFAULT_ROLES,"countries":[{"value":k,"label":v} for k,v in COUNTRIES]}
+    return {"roles":DEFAULT_ROLES,"countries":[{"value":k,"label":v} for k,v in COUNTRIES],"sources":[{"value":"all","label":"Todas as fontes"},{"value":"inhire","label":"inHire"},{"value":"quickin","label":"Quickin"},{"value":"gupy","label":"Gupy"},{"value":"greenhouse","label":"Greenhouse"},{"value":"ashby","label":"Ashby"},{"value":"lever","label":"Lever"},{"value":"bamboohr","label":"BambooHR"},{"value":"dynamite","label":"Dynamite Jobs"},{"value":"linkedin_guest","label":"LinkedIn"},{"value":"jobgether","label":"Jobgether"},{"value":"workable","label":"Workable"}]}
 
 @app.get("/api/catalog")
 def catalog(request: Request):
@@ -272,9 +278,11 @@ def catalog_checks(request: Request):
     return {"total":len(rows),"items":rows}
 
 @app.post("/api/catalog/scan")
-def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False,roles:str=DEFAULT_ROLES,country:str="BR",mode:str="remote",days:int=30,sort:str="newest"):
+def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False,roles:str=DEFAULT_ROLES,country:str="BR",mode:str="remote",days:int=30,sort:str="newest",source:str="all"):
     require_auth(request)
     tasks=active_source_tasks()
+    if source!="all":
+        tasks=[(src,slug) for src,slug in tasks if src==source or (source=="greenhouse" and src=="greenhouse_eu")]
     if due_only:
         with psycopg.connect(DATABASE,connect_timeout=8) as conn:
             with conn.cursor() as cur:

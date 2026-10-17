@@ -102,7 +102,10 @@ def discovery_queries(roles,limit=12):
 
 def classify(job,terms,country,mode,days):
     title=fold(job.get("title",""))
-    if not role_match(title,terms):return "excluded","cargo"
+    from jd_signals import signals
+    evidence=signals(job,", ".join(terms))
+    if evidence["spanish_required"]:return "excluded","espanhol_obrigatorio"
+    if not role_match(title,terms) and not evidence["family_evidence"]:return "excluded","cargo"
     loc=fold(job.get("location",""))
     structured_geo=fold(" ".join(str(job.get(k) or "") for k in ("country","countryCode","countryName","city","state","region","eligibleLocations","remoteRegions")))
     loc=(loc+" "+structured_geo).strip()
@@ -113,8 +116,9 @@ def classify(job,terms,country,mode,days):
     # A remote-first company alone does not prove a role is remote if onsite is explicit.
     remote_flag=remote_flag if isinstance(remote_flag,bool) else None
     if mode=="remote":
+        if "onsite_only" in evidence["work_evidence"] and "remote" not in evidence["work_evidence"]:return "excluded","modalidade"
         if remote_flag is False or (any(x in mode_text for x in ONSITE) and not any(x in mode_text for x in REMOTE)) or (any(x in workplace for x in HYBRID) and not any(x in mode_text for x in REMOTE)):return "excluded","modalidade"
-        mode_ok=remote_flag is True or any(x in mode_text for x in REMOTE)
+        mode_ok=remote_flag is True or any(x in mode_text for x in REMOTE) or "remote" in evidence["work_evidence"]
     elif mode=="hybrid":
         mode_ok=any(x in mode_text for x in HYBRID)
     elif mode=="onsite":
@@ -123,6 +127,7 @@ def classify(job,terms,country,mode,days):
     # Brazilian job boards often use city/state alone, without a country field.
     br_places=("sao paulo","rio de janeiro","belo horizonte","curitiba","porto alegre","brasilia","goiania","recife","fortaleza","salvador","campinas","florianopolis","uberlandia","belem","manaus","vitoria","ribeirao preto")
     brazil_evidence=any(place in loc for place in br_places) or bool(re.search(r"\b(br|brazil|brasil)\b",loc))
+    if "foreign_only" in evidence["geography_evidence"] and country in ("BR","LATAM"):return "excluded","pais"
     if country=="GLOBAL":country_ok=True
     elif country=="LATAM":
         country_ok=any(fold(x) in loc for x in LATAM) or any(x in loc for x in REGIONAL) or brazil_evidence
@@ -133,6 +138,7 @@ def classify(job,terms,country,mode,days):
         return "excluded","pais"
     published=parse_date(job.get("published"))
     date_ok=not days or (published is not None and datetime.now(timezone.utc)-timedelta(days=days)<=published<=datetime.now(timezone.utc)+timedelta(days=1))
+    if "brazil" in evidence["geography_evidence"] and country in ("BR","LATAM"):country_ok=True
     if days and published and not date_ok:return "excluded","data"
     unknown=[]
     if not mode_ok:unknown.append("modalidade")
@@ -152,8 +158,8 @@ def analyze_filters(jobs,roles=DEFAULT_ROLES,country="BR",mode="remote",days=30,
     for j in jobs:
         bucket,reason=classify(j,terms,country,mode,days)
         reasons[bucket+(":"+reason if reason else "")]=reasons.get(bucket+(":"+reason if reason else ""),0)+1
-        if bucket=="confirmed":confirmed.append(j)
-        elif bucket=="review":review.append({**j,"needs_verification":reason.split(",")})
+        if bucket=="confirmed":confirmed.append({**j,"jd_evidence":signals(j,roles),"description":""})
+        elif bucket=="review":review.append({**j,"jd_evidence":signals(j,roles),"description":"","needs_verification":reason.split(",")})
     order=lambda j:parse_date(j.get("published")) or datetime.min.replace(tzinfo=timezone.utc)
     confirmed.sort(key=order,reverse=sort=="newest")
     review.sort(key=order,reverse=sort=="newest")

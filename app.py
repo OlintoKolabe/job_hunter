@@ -166,18 +166,60 @@ def search_jobs(request: Request):
         "notice":"Vagas coletadas, ainda sem triagem de elegibilidade Brasil/remoto ou score."}
 
 
+
+def active_source_tasks():
+    tasks=set(source_tasks())
+    with psycopg.connect(DATABASE,connect_timeout=8) as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT source,slug FROM jh_catalog_source")
+            tasks.update(cur.fetchall())
+    return sorted(tasks)
+
+@app.post("/api/catalog/import")
+async def catalog_import(request: Request):
+    require_auth(request)
+    raw=await request.body()
+    if len(raw)>1_200_000:
+        raise HTTPException(413,"Catálogo grande demais")
+    try:
+        data=json.loads(raw)
+    except (ValueError,UnicodeDecodeError):
+        raise HTTPException(400,"JSON inválido")
+    mapping={"greenhouse":"greenhouse","lever":"lever","ashby":"ashby","inhire":"inhire"}
+    imported=set()
+    for name,ats in mapping.items():
+        group=data.get(name)
+        if not isinstance(group,dict):continue
+        for key in ("validados_200","a_validar","dominio_eu"):
+            for slug in group.get(key,[]) if isinstance(group.get(key),list) else []:
+                if not isinstance(slug,str) or len(slug)>100:continue
+                kind="greenhouse_eu" if key=="dominio_eu" else ats
+                if re.fullmatch(r"[a-zA-Z0-9_.-]+",slug):imported.add((kind,slug))
+    other=data.get("outros_ats",{})
+    if isinstance(other,dict):
+        for key,kind in (("quickin","quickin"),("zoho_recruit","zoho"),("bamboohr","bamboohr")):
+            value=other.get(key,[])
+            if isinstance(value,list):
+                for slug in value:
+                    if isinstance(slug,str) and re.fullmatch(r"[a-zA-Z0-9_.-]{2,100}",slug):imported.add((kind,slug))
+    with psycopg.connect(DATABASE,connect_timeout=10) as conn:
+        with conn.cursor() as cur:
+            for ats,slug in sorted(imported):
+                cur.execute("INSERT INTO jh_catalog_source(source,slug) VALUES(%s,%s) ON CONFLICT DO NOTHING",(ats,slug))
+    return {"imported":len(imported),"total_active":len(active_source_tasks())}
+
 @app.get("/api/catalog")
 def catalog(request: Request):
     require_auth(request)
     from collections import Counter
-    tasks=source_tasks()
+    tasks=active_source_tasks()
     return {"total":len(tasks),"by_source":dict(Counter(s for s,_ in tasks)),
             "sources":[{"source":s,"slug":v} for s,v in tasks]}
 
 @app.post("/api/catalog/scan")
 def catalog_scan(request: Request, offset:int=0,limit:int=12):
     require_auth(request)
-    tasks=source_tasks()
+    tasks=active_source_tasks()
     offset=max(0,min(offset,len(tasks)))
     limit=max(1,min(limit,15))
     batch=tasks[offset:offset+limit]

@@ -34,7 +34,11 @@ def run_bootstrap(db_url):
         with conn.cursor() as cur:
             cur.execute("SELECT source,slug FROM jh_catalog_checks")
             done=set(cur.fetchall())
-        remaining=[t for t in tasks if t not in done]
+        priority=os.environ.get("JH_BR_VERIFY","0")=="1"
+        if priority:
+            remaining=[t for t in tasks if t[0] in ("inhire","quickin","gupy")]
+        else:
+            remaining=[t for t in tasks if t not in done]
         LOGGER.info("catalog sweep targets=%d already_checked=%d remaining=%d",len(tasks),len(tasks)-len(remaining),len(remaining))
         for index in range(0,len(remaining),8):
             chunk=remaining[index:index+8]
@@ -57,7 +61,7 @@ def run_bootstrap(db_url):
             conn.close()
 
 def maybe_start(db_url):
-    if os.environ.get("JH_CATALOG_BOOTSTRAP")!="1" or not db_url:
+    if (os.environ.get("JH_CATALOG_BOOTSTRAP")!="1" and os.environ.get("JH_BR_VERIFY")!="1") or not db_url:
         return
     thread=threading.Thread(target=run_bootstrap,args=(db_url,),daemon=True,name="catalog-bootstrap")
     thread.start()

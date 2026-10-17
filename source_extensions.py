@@ -77,6 +77,15 @@ def extra(source,slug):
             v=item(slug,j.get("title"),j.get("url") or j.get("shortlink"),j.get("location"),source,j.get("published_on"))
             if v and TITLE_RE.search(v["title"]):jobs.append(v)
         return jobs,"validado" if jobs_raw else "sem_vagas",len(jobs_raw)
+    if source=="kaszek":
+        jobs=html_links("https://jobs.kaszek.com/jobs",r"/jobs/|/companies/|/job/")
+        for j in jobs:j["source"]="Kaszek"
+        return jobs,"validado" if jobs else "pendente",len(jobs)
+    if source=="jobbol":
+        city=slug.replace("_","-")
+        jobs=html_links("https://www.jobbol.com.br/home-office/"+city,r"/vaga/|/vagas/|/emprego/")
+        for j in jobs:j["source"]="Jobbol"
+        return jobs,"validado" if jobs else "pendente",len(jobs)
     if source=="dynamite":
         jobs=html_links("https://dynamitejobs.com/country/remote-jobs-in-brazil",r"/remote-job/")
         for j in jobs:j["source"]="Dynamite Jobs"

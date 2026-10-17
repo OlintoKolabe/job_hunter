@@ -8,3 +8,5 @@
 .pager{display:flex;align-items:center;justify-content:flex-end;gap:10px;padding-top:19px;font-size:13px}.pager span{margin-right:auto;color:#77869a}.pager button{padding:8px 13px;border:1px solid #dce4ef;background:white;border-radius:8px}.pager button:disabled{opacity:.4;cursor:default}
 .password-form{display:flex;flex-direction:column;gap:15px;max-width:410px}.password-form label{font-size:13px;font-weight:650;display:flex;flex-direction:column;gap:7px}.password-form button{align-self:flex-start}.notice{padding:11px;background:#eef6ff;border-radius:8px;color:#164f85!important}
 @media(max-width:650px){.filters{flex-direction:column}.history-pane{padding:17px}}
+
+.catalog-diagnostics{margin-top:20px;border:1px solid #dae4f1;border-radius:12px;background:#fafcff;padding:0 16px}.catalog-diagnostics>summary{list-style:revert;cursor:pointer;padding:16px 4px;font-weight:700;color:#254879}.catalog-diagnostics[open]{padding-bottom:18px}.catalog-diagnostics>summary:focus-visible{outline:2px solid #3170cf;outline-offset:3px}

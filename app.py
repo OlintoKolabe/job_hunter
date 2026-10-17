@@ -160,7 +160,7 @@ def search_jobs(request: Request):
             if pairs:
                 cur.execute("SELECT pair_key FROM jh_history WHERE pair_key=ANY(%s)",(pairs,))
                 known_pairs={row[0] for row in cur.fetchall()}
-    fresh=[j for j in items if url_key(j["url"]) not in known_urls and
+    fresh=[j for j in items if not any(b in normalized(j["company"]) for b in ("kraken","payward")) and url_key(j["url"]) not in known_urls and
            (not j["company"] or pair_key(j["company"],j["title"]) not in known_pairs)]
     return {"source":"Multifuente","queried":len(sources),"total":len(items),
         "new":len(fresh),"duplicates":len(items)-len(fresh),"items":fresh[:100],"details":sources,

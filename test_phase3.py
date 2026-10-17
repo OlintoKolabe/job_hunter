@@ -68,6 +68,16 @@ class Phase3ContractTests(unittest.TestCase):
         self.assertEqual(confirmed,[])
         self.assertEqual(review,[])
 
+    def test_inhire_public_jobs_page_parsing(self):
+        from collectors import pull
+        payload={"tenantName":"Empresa Exemplo","jobsPage":[{"displayName":"Product Owner","jobId":"abc123","location":"Brasil","workplaceType":"Remote"}]}
+        with patch("collectors.fetch_json",return_value=payload):
+            summary,jobs=pull("inHire","exemplo")
+        self.assertEqual(summary["received"],1)
+        self.assertEqual(jobs[0]["title"],"Product Owner")
+        self.assertIn("/vagas/abc123/product-owner",jobs[0]["url"])
+        self.assertIn("Remote",jobs[0]["location"])
+
     def test_mcp_not_claimed_integrated(self):
         self.assertIn("Render",CONNECTORS["Indeed MCP"])
         self.assertIn("Render",CONNECTORS["Firecrawl"])

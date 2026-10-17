@@ -256,9 +256,24 @@ def catalog_checks(request: Request):
     return {"total":len(rows),"items":rows}
 
 @app.post("/api/catalog/scan")
-def catalog_scan(request: Request, offset:int=0,limit:int=12):
+def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False):
     require_auth(request)
     tasks=active_source_tasks()
+    if due_only:
+        with psycopg.connect(DATABASE,connect_timeout=8) as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT source,slug,state,checked_at FROM jh_catalog_checks")
+                checked={(r[0],r[1]):(r[2],r[3]) for r in cur.fetchall()}
+        due=[]
+        for source,slug in tasks:
+            previous=checked.get((source,slug))
+            timing=source_freshness(source,previous[1] if previous else None)
+            if previous and previous[0]=="pendente":
+                from datetime import datetime,timezone,timedelta
+                timing["due"]=previous[1]+timedelta(days=1)<=datetime.now(timezone.utc)
+            if timing["due"]:due.append((source,slug))
+        tasks=due
+        offset=0
     offset=max(0,min(offset,len(tasks)))
     limit=max(1,min(limit,15))
     batch=tasks[offset:offset+limit]
@@ -289,7 +304,7 @@ def catalog_scan(request: Request, offset:int=0,limit:int=12):
                 cur.execute("SELECT pair_key FROM jh_history WHERE pair_key=ANY(%s)",(pairs,))
                 known_pairs={r[0] for r in cur.fetchall()}
     fresh=[j for j in items if url_key(j["url"]) not in known_urls and (not j["company"] or pair_key(j["company"],j["title"]) not in known_pairs)]
-    return {"total_sources":len(tasks),"offset":offset,"next_offset":offset+len(batch),
+    return {"total_sources":len(tasks),"due_only":due_only,"offset":offset,"next_offset":offset+len(batch),
             "complete":offset+len(batch)>=len(tasks),"details":details,
             "found":len(items),"new":len(fresh),"duplicates":len(items)-len(fresh),
             "items":fresh[:80],"notice":"Vagas candidatas: remoto/Brasil e requisitos ainda aguardam análise completa."}

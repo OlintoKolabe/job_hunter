@@ -172,7 +172,7 @@ def search_jobs(request: Request):
 
 SOURCE_CADENCE_DAYS={"inhire":3,"quickin":3,"dynamite":3,"greenhouse":7,"greenhouse_eu":30,
  "ashby":7,"lever":7,"gupy":7,"linkedin_guest":7,"teamtailor":14,"recruitee":30,
- "smartrecruiters":30,"workable_account":7,"personio":30,"bamboohr":30,
+ "smartrecruiters":30,"kaszek":7,"jobbol":7,"workable_account":7,"personio":30,"bamboohr":30,
  "zoho":30,"trakstar":30,"compleo":30,"solides":30}
 
 def source_freshness(source, checked_at):

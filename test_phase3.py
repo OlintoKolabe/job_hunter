@@ -220,7 +220,7 @@ class Phase3ContractTests(unittest.TestCase):
         ]
         for selection,expected in (("remote","remote"),("hybrid","hybrid"),("onsite","on-site")):
             good,review,stats=analyze_filters(rows,"Product Owner","BR",selection,0)
-            self.assertEqual([j["workplaceType"] for j in good],[expected])
+            self.assertEqual([j.get("workplaceType","location-hybrid") for j in good],([expected,"location-hybrid"] if selection=="hybrid" else [expected]))
             self.assertEqual(len(review),1)
             self.assertIn("modalidade",review[0]["needs_verification"])
 

@@ -14,10 +14,12 @@ export function OpportunitiesPanel(){
    if(!r.ok)throw Error(d.detail||'Falha nas fontes gerais');
    (d.items||[]).forEach(j=>all.set(j.url,j));count+=d.total||0;
    setResults([...all.values()]);setCounts({new:all.size,total:count});
+   let offset=0;
    for(let n=0;n<45;n++){
-    const v=await fetch('/api/catalog/scan?offset=0&limit=12&due_only=true&'+qs,{method:'POST'});
+    const v=await fetch('/api/catalog/scan?offset='+offset+'&limit=12&'+qs,{method:'POST'});
     const batch=await v.json();if(!v.ok)throw Error(batch.detail||'Falha na consulta aos quadros');
     (batch.items||[]).forEach(j=>all.set(j.url,j));
+    offset=batch.next_offset;if(!Number.isFinite(offset))throw Error('Paginação inválida');
     count+=batch.found||0;setResults([...all.values()]);setChecked(x=>x+(batch.details||[]).length);setCounts({new:all.size,total:count});
     if(batch.complete){completedAll=true;break}
     if(!(batch.details||[]).length)break;

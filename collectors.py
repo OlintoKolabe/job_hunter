@@ -40,10 +40,12 @@ def item(company,title,url,location,source,published=""):
     return {"company":str(company or "")[:200],"title":str(title)[:300],"url":url[:2000],
             "location":str(location or "")[:200],"published":str(published or "")[:80],"source":source}
 
-def pull(source,slug):
+def pull(source,slug,location='brazil'):
     jobs=[]
     if source=="Jobgether":
-        url="https://jobgether.com/api/v1/jobs?"+urllib.parse.urlencode({"keyword":slug,"locations":"brazil","sort":"date","limit":25})
+        params={"keyword":slug,"sort":"date","limit":25}
+        if location:params["locations"]=location
+        url="https://jobgether.com/api/v1/jobs?"+urllib.parse.urlencode(params)
         payload=fetch_json(url)
         for j in as_list(payload):
             if not isinstance(j,dict):continue
@@ -54,7 +56,9 @@ def pull(source,slug):
                 j.get("location") or j.get("country"),source,j.get("publishedAt") or j.get("createdAt"))
             if value:jobs.append(value)
     elif source=="Workable":
-        url="https://jobs.workable.com/api/v1/jobs?"+urllib.parse.urlencode({"query":slug,"location":"Brazil","limit":20})
+        params={"query":slug,"limit":20}
+        if location:params["location"]=location
+        url="https://jobs.workable.com/api/v1/jobs?"+urllib.parse.urlencode(params)
         payload=fetch_json(url)
         for j in as_list(payload):
             if not isinstance(j,dict):continue
@@ -104,11 +108,13 @@ def pull(source,slug):
     return {"source":source,"term":slug,"status":"ok","received":len(jobs),"target":len(target)},target
 
 def collect(terms=None,country="BR"):
+    country_locations={"BR":"Brazil","AR":"Argentina","CL":"Chile","CO":"Colombia","MX":"Mexico","PE":"Peru","UY":"Uruguay","PY":"Paraguay","BO":"Bolivia","EC":"Ecuador","CR":"Costa Rica","PA":"Panama","GT":"Guatemala","DO":"Dominican Republic","VE":"Venezuela","US":"United States","CA":"Canada","PT":"Portugal","ES":"Spain","GB":"United Kingdom"}
+    location=country_locations.get(country,"")
     terms=[str(t).strip()[:100] for t in (terms or TERMS) if str(t).strip()][:12]
     tasks=[("Jobgether",t) for t in terms]+[("Workable",t) for t in terms]+[(source,slug) for source,slugs in BOARDS.items() for slug in slugs]
     found={};details=[]
     with ThreadPoolExecutor(max_workers=8) as pool:
-        futures={pool.submit(pull,source,slug):(source,slug) for source,slug in tasks}
+        futures={pool.submit(pull,source,slug,location if source in ("Jobgether","Workable") else "brazil"):(source,slug) for source,slug in tasks}
         for future in as_completed(futures):
             source,slug=futures[future]
             try:

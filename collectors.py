@@ -82,6 +82,8 @@ def pull(source,slug):
             if value:jobs.append(value)
     elif source=="Lever":
         payload=fetch_json("https://api.lever.co/v0/postings/"+urllib.parse.quote(slug)+"?mode=json")
+        if isinstance(payload,dict) and payload.get("ok") is False:
+            raise ValueError("Slug Lever rejeitado apesar de HTTP 200")
         for j in as_list(payload):
             if not isinstance(j,dict):continue
             cats=j.get("categories") or {}

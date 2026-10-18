@@ -22,7 +22,8 @@ def interpret(description):
     with urllib.request.urlopen(req,timeout=15) as response:
         result=json.load(response)
     content=result["choices"][0]["message"]["content"]
-    if not isinstance(content,str) or not content.strip():\n        raise ValueError("empty model response")\n    try:
+    if not isinstance(content,str) or not content.strip():
+        raise ValueError("empty model response")\n    try:
         parsed=json.loads(content)
     except json.JSONDecodeError as exc:
         raise ValueError("invalid or truncated model JSON") from exc

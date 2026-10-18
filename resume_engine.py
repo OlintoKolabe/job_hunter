@@ -156,8 +156,8 @@ TOPICS={
  "agility":("scrum","kanban","scrum master","backlog","sprint","planning","agile","ágil","agilidade","cerimônias","saFe"),
  "project":("projetos","project","pmo","cronograma","prazo","prazos","delivery","implantação","implementação","recursos","portfolio","portfólio","risk","riscos","escopo"),
  "product":("product","produto","roadmap","discovery","priorização","priorizar","prototip","usuários","user research","design"),
- "growth":("growth","marketing","tráfego","ads","funil","leads","crm","campanha","retenção","churn","ltv","upsell","cross-sell","vendas","comercial","acquisition"),
- "data":("indicadores","analytics","dados","metrics","métricas","kpi","reports","relatórios","dashboards","análise","analysis"),
+ "growth":("growth","marketing","tráfego","ads","funil","leads","crm","campanha","campaign","paid media","performance","advertising","mídia","media budget","retenção","retention","churn","ltv","upsell","cross-sell","vendas","comercial","acquisition"),
+ "data":("indicadores","analytics","dados","metrics","métricas","kpi","reports","relatórios","dashboards","análise","analysis","business intelligence","data-driven","data analysis"),
  "people":("stakeholders","equipe","times","liderança","facilitar","facilitação","alinhamento","comunicação","customer"),
  "tools":("jira","azure devops","confluence","figma","posthog","trello","miro"),
 }

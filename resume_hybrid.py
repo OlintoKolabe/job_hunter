@@ -12,8 +12,8 @@ from resume_engine import ENGINE_VERSION,EXPERIENCE
 MODEL="gpt-4.1-nano"  # Fixed audited price, independent of vacancy scoring model
 
 RUBRIC="cv-summary-hybrid-v1"
-COST_INPUT_PER_M=0.20
-COST_OUTPUT_PER_M=1.20
+COST_INPUT_PER_M=0.10
+COST_OUTPUT_PER_M=0.40
 INPUT_CHAR_LIMIT=3400
 OUTPUT_TOKEN_CAP=220
 MAX_COST_USD=0.002
@@ -107,7 +107,7 @@ def apply_hybrid(cur,normalized_url,jd,plan):
             return plan,{"mode":"cached_hybrid","ai_calls":0,"cost_usd":0.0}
     # Conservative upper bound based on tightly bounded message and max output.
     # A priced response is recorded using actual usage; budget never bypassed.
-    upper=((INPUT_CHAR_LIMIT/2)*COST_INPUT_PER_M+
+    upper=((INPUT_CHAR_LIMIT+256)*COST_INPUT_PER_M+
            OUTPUT_TOKEN_CAP*COST_OUTPUT_PER_M)/1_000_000
     if upper>MAX_COST_USD:return plan,info
     usage_id=reserve(cur,"cv:"+normalized_url,amount=MAX_COST_USD)

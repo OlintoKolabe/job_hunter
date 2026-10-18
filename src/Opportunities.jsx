@@ -91,26 +91,26 @@ export function OpportunitiesPanel(){
    if(scoringFailed.includes(v.url))return 'failed';
    if(scoringNow.includes(v.url))return 'calculating';
    if(v.confirmed && busy && !scoringAttempted.includes(v.url) && v.ranking?.score==null)return 'waiting';
-   return 'unscored';
+   return 'inconclusive';
  };
  const scoreDisplay=v=>{
    const state=scoreStatus(v);
    if(state==='scored')return <strong>{v.ranking.score}/100</strong>;
    if(state==='waiting'||state==='calculating')return <span role="status" style={{display:'inline-flex',alignItems:'center',gap:6}}><span aria-hidden="true" className="jh-score-spinner"/>{state==='calculating'?'Calculando nota…':'Aguardando avaliação'}</span>;
-   return <strong>{state==='failed'?'Falha na avaliação':'Sem nota'}</strong>;
+   return <strong>{state==='failed'?'Falha na avaliação':'Análise inconclusiva'}</strong>;
  };
  const scoreExplanation=v=>{
    const state=scoreStatus(v);
-   if(state==='waiting'||state==='calculating')return 'Nota pendente — a busca ainda está em andamento';
+   if(state==='waiting'||state==='calculating')return 'Analisando os requisitos da vaga. A nota aparecerá quando a avaliação terminar.';
    if(state==='failed')return 'O lote falhou; tente uma nova busca';
    if(state==='scored')return v.ranking?.confidence==='requisitos_extraidos'?'% dos requisitos extraídos':v.ranking?.confidence==='amostra_limitada'?'Amostra limitada — conferir JD':'Nota calculada';
    if(v.ai_status==='failed')return 'A análise automática falhou. Tente uma nova busca.';
-   if(v.ai_status==='retry_later')return 'A análise falhou; nova tentativa automática disponível em até 30 minutos';
+   if(v.ai_status==='retry_later')return 'A análise automática falhou. Uma nova tentativa será permitida após 30 minutos.';
    if(v.ai_status==='disabled')return 'IA desativada — avaliação apenas por regras';
    if(v.ai_status==='budget_exhausted')return 'Limite mensal de IA atingido';
-   if(v.jd_status==='indisponivel')return 'Descrição da vaga não recuperada — sem nota';
-   if(v.jd_status==='pendente')return 'Descrição ainda não avaliada — sem nota';
-   return v.ranking?.confidence==='cobertura_insuficiente'?'Não foi possível interpretar requisitos suficientes':'Não há evidências suficientes para uma nota confiável';
+   if(v.jd_status==='indisponivel')return 'Não foi possível obter a descrição completa da vaga.';
+   if(v.jd_status==='pendente')return 'A descrição ainda aguarda avaliação.';
+   return (v.ai_status==='interpreted'||v.ai_status==='cache')?'A IA analisou a descrição, mas os requisitos e as evidências identificados ainda não sustentam uma nota confiável.':v.ranking?.confidence==='cobertura_insuficiente'?'Os requisitos identificados não permitem calcular uma nota confiável.':'Não há evidências suficientes para calcular uma nota confiável.';
  };
  const ordered=[...combined.values()].sort((a,b)=>{
    const date=v=>{const x=Date.parse(v.published||'');return Number.isFinite(x)?x:0};

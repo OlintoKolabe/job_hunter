@@ -68,6 +68,17 @@ class Block41Tests(unittest.TestCase):
                 result=interpret(jd)
         self.assertIsNone(result["requirements"][0]["skill_id"])
         self.assertEqual(result["requirements"][1]["skill_id"],"backlog")
+    def test_ai_normalizes_html_whitespace_before_literal_match(self):
+        import json
+        from io import BytesIO
+        jd="<h3>Requirements</h3><li>Manage product&nbsp; roadmap</li>"
+        payload={"choices":[{"message":{"content":json.dumps({"requirements":[
+            {"name":"Manage product roadmap","type":"obrigatorio","skill_id":"roadmap"}
+        ]})}}],"usage":{}}
+        with patch.dict("os.environ",{"JH_AI_ENABLED":"1","OPENAI_API_KEY":"test-only"}):
+            with patch("urllib.request.urlopen",return_value=BytesIO(json.dumps(payload).encode())):
+                result=interpret(jd)
+        self.assertEqual(len(result["requirements"]),1)
     def test_ai_empty_output_fails_explicitly(self):
         import json
         from io import BytesIO

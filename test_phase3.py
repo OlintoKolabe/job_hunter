@@ -45,8 +45,8 @@ class Phase3ContractTests(unittest.TestCase):
         jd="<h3>Requirements</h3><ul><li>Product roadmap planning</li><li>Experience in Jira</li><li>Python expertise</li></ul>"
         r=score_job({"title":"Product Manager","location":"Brazil Remote","description":jd},"Product Manager")
         self.assertEqual(r["mandatory_count"],3)
-        self.assertEqual(r["unverified_count"],1)
-        self.assertEqual(r["score"],67)
+        self.assertEqual(r["uninterpreted_count"],1)
+        self.assertEqual(r["score"],100)
         self.assertEqual(r["confidence"],"amostra_limitada")
 
     def test_greenhouse_collects_full_job_descriptions(self):

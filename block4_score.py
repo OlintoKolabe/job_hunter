@@ -200,12 +200,27 @@ def merge_semantic_requirements(base, extracted):
             (("marketing industry","advertising domain"),"Lagoa Parques: direção de marketing"),
         )
         domain_evidence=next((e for terms,e in transferable_domains if any(t in normalized for t in terms)),None)
+        # Core duties of documented professional roles are not industry specializations.
+        core_role_terms=(
+            ("product",("discovery","user research","customer research","roadmap","backlog","prioritization","user stories","product kpi","product metric","product analytics","product strategy","product lifecycle","product delivery","stakeholder")),
+            ("marketing",("marketing strategy","campaign","branding","media planning","marketing funnel","lead generation","go to market","customer acquisition","marketing analytics")),
+            ("projects",("project management","project planning","sprint planning","scrum","kanban","project delivery","project governance","risk management")),
+        )
+        core_evidence=next((PROFILE[family][0] for family,terms in core_role_terms if any(term in normalized for term in terms)),None)
         relationship=row.get("relationship")
         explicit_skill=bool(proof and any(fold(term) in normalized for term in SKILLS[skill][0]))
-        if technical_core or relationship=="nenhuma":
+        if technical_core:
             degree="nao_comprovada"
             evidence=None
             points=0.0
+        elif proof and relationship=="nenhuma" and not explicit_skill:
+            degree="nao_comprovada"
+            evidence=None
+            points=0.0
+        elif proof and core_evidence and not specialized_payments:
+            degree="direta"
+            evidence=proof+"; competência básica inerente à atuação comprovada"
+            points=1.0
         elif proof and (relationship=="transferivel" or not explicit_skill):
             degree="transferivel"
             evidence=proof+"; habilidade documentada aplicável parcialmente ao contexto da vaga"
@@ -218,6 +233,14 @@ def merge_semantic_requirements(base, extracted):
             degree="direta"
             evidence=proof
             points=1.0
+        elif core_evidence and not specialized_payments:
+            degree="direta"
+            evidence=core_evidence+"; competência fundamental demonstrada pela atuação profissional"
+            points=1.0
+        elif relationship=="nenhuma":
+            degree="nao_comprovada"
+            evidence=None
+            points=0.0
         elif payments_context:
             degree="transferivel"
             evidence="Neocoder/LiberPay: consultoria e estratégia em pagamentos com criptoativos e stablecoins; sem evidência de liderança de produto de Pix"
@@ -237,7 +260,7 @@ def merge_semantic_requirements(base, extracted):
                                     "Experiência aplicável parcialmente, sem equivalência plena de função ou tecnologia" if degree=="transferivel" else
                                     "Não há evidência suficiente no perfil documentado; isso não prova incapacidade")})
     if not rows:return base
-    weights=[3 if r["type"]=="obrigatorio" else 1 for r in rows]
+    weights=[5 if r["type"]=="obrigatorio" else 0.5 for r in rows]
     total=sum(weights)
     met=sum(w*r["match_points"] for r,w in zip(rows,weights))
     # The model may miss requirements; 1–3 extracted requirements are not
@@ -249,7 +272,7 @@ def merge_semantic_requirements(base, extracted):
             "computer science degree","degree in computer science",
             "software engineering degree","formacao em ciencia da computacao",
             "previous software developer experience","hands-on coding required",
-            "qa automation experience"))
+            "qa automation experience","advanced spanish","fluent spanish","spanish fluency","espanhol avancado","espanhol fluente"))
         and not any(term in fold(r["name"]) for term in ("or equivalent","ou equivalente","or similar experience"))
         for r in rows)
     fit=0 if mandatory_technical_gap else (round(100*met/total) if sufficiently_parsed and total and met>0 else None)

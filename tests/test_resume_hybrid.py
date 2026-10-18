@@ -59,6 +59,34 @@ class HybridResumeTests(unittest.TestCase):
         self.assertIsNone(h.validate_text({"summary":"Responsável por um crescimento de 900% em dois meses com lideranças globais e entregas ágeis.","source_ids":["1"]},self.plan))
     def test_summary_must_identify_sources(self):
         self.assertIsNone(h.validate_text({"summary":"Profissional com experiência em produto digital, colaboração com stakeholders e roadmaps.","source_ids":["99999"]},self.plan))
+    def test_paid_ai_to_actual_docx_with_provenance(self):
+        from docx import Document
+        jd="Marketing campaigns CRM leads acquisition branding budget performance"
+        plan=build_plan(jd,"Marketing Manager")
+        result={"summary":"Executivo de marketing com experiência em gestão de campanhas, CRM e estratégias comerciais de empresas de serviços e turismo. Atuação em planejamento de mídia, gestão de orçamento e análise de campanhas digitais.",
+                "source_ids":["9","11","12"],
+                "evidence_ids":["9:0","9:1","9:2","3:3","3:4","11:0","11:1","12:0","13:0"]}
+        cursor=MagicMock();cursor.fetchone.return_value=None
+        with patch.dict(os.environ,{"JH_CV_AI_ENABLED":"1","OPENAI_API_KEY":"test-only"}), patch.object(h,"reserve",return_value=3),patch.object(h,"settle"),patch.object(h,"request_micro_summary",return_value=(result,{"prompt_tokens":1400,"completion_tokens":300})):
+            final,usage=h.apply_hybrid(cursor,"fixture/marketing",jd,plan)
+        self.assertEqual(usage["mode"],"hybrid")
+        final["cv_mode"]=usage["mode"]
+        doc=render_docx(final)
+        self.assertTrue(audit(final,doc)["factual_bullets_verified"])
+        self.assertIn("AI=hybrid",Document(io.BytesIO(doc)).core_properties.keywords)
+
+    def test_valid_cache_replays_without_ai_request(self):
+        jd="Marketing campaigns CRM leads acquisition branding budget performance"
+        plan=build_plan(jd,"Marketing Manager")
+        candidate={"summary":"Executivo de marketing com experiência em gestão de campanhas, CRM e estratégias comerciais de empresas de serviços e turismo. Atuação em planejamento de mídia, gestão de orçamento e análise de campanhas digitais.",
+            "source_ids":["9","11","12"],"evidence_ids":["9:0","9:1","9:2","3:3","3:4","11:0","11:1","12:0","13:0"]}
+        cursor=MagicMock();cursor.fetchone.return_value=(candidate,)
+        with patch.dict(os.environ,{"JH_CV_AI_ENABLED":"1","OPENAI_API_KEY":"test-only"}),patch.object(h,"request_micro_summary",side_effect=AssertionError("paid request")):
+            final,usage=h.apply_hybrid(cursor,"fixture/marketing",jd,plan)
+        self.assertEqual(usage["mode"],"cached_hybrid")
+        self.assertEqual(usage["ai_calls"],0)
+        self.assertTrue(audit(final,render_docx(final))["factual_bullets_verified"])
+
     def test_micro_cost_bound(self):
         self.assertLessEqual(h.price({"prompt_tokens":1700,"completion_tokens":220}),0.002)
     def test_selected_evidence_only_known_facts(self):

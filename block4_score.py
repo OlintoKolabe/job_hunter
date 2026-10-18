@@ -95,6 +95,16 @@ def requirement_lines(jd):
     rows=re.split(r"[\n\r•]+|(?<=[.;])\s+",raw)
     return [fold(x).strip() for x in rows if len(fold(x).strip())>=8][:120]
 
+def hard_role_mismatch(job):
+    """Unambiguous hands-on engineering/QA job titles lie outside the documented PM/business career."""
+    title=fold(str(job.get("title") or ""))
+    return any(term in title for term in (
+        "software engineer","software developer","frontend developer","front end developer",
+        "backend developer","back end developer","fullstack developer","full stack developer",
+        "qa engineer","qa analyst","quality assurance engineer","test automation engineer",
+        "engenheiro de software","desenvolvedor de software","analista de testes automatizados",
+    ))
+
 def score_job(job,roles):
     jd_raw=job.get("description") or job.get("jobDescription") or job.get("content") or ""
     jd=clean_jd(jd_raw)

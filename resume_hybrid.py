@@ -46,7 +46,7 @@ def validate_text(proposal,plan):
     # Ban any claims about metrics, numbers, qualifications or industries
     # not contained in cited evidence. Otherwise preserve deterministic draft.
     source=" ".join(f for e in plan["experience"] if str(e["source_index"]) in {str(r) for r in refs} for f in e["facts"])
-    if re.search(r"\b\d+(?:[.,]\d+)?\s*(?:%|anos|years|milh|bilh)\b",summary,re.I) and not re.search(r"\d+",source):
+    if not set(re.findall(r"\d+(?:[.,]\d+)?",summary)).issubset(set(re.findall(r"\d+(?:[.,]\d+)?",source))):
         return None
     forbidden=("oracle","powerbuilder","aws","azure cloud","pmbok","saFe","scrum master","engenharia",
                "arquiteto de software","previdência","pgbl","vgbl","genai","pix","open finance")

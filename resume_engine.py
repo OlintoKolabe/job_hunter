@@ -174,7 +174,7 @@ def render_docx(plan):
     doc.add_heading("Experiência profissional",1)
     detailed={e["source_index"]:e for e in plan["experience"]}
     compact={e["source_index"]:e for e in plan["additional_experience"]}
-    chronology=sorted([*detailed,*compact],key=lambda i:chronology_index(EXPERIENCE[i]),reverse=True)
+    chronology=sorted(set(detailed)|set(compact),key=lambda i:chronology_index(EXPERIENCE[i]),reverse=True)
     for idx in chronology:
         e=detailed.get(idx) or compact[idx]
         if idx not in detailed:

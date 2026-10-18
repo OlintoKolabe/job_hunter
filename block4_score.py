@@ -293,3 +293,48 @@ def merge_semantic_requirements(base, extracted):
                   if fit is not None else
                   "Menos de quatro requisitos interpretados: não há base para classificar a compatibilidade, nem mesmo como zero."),
         "method":"block4.1-transferable-evidence-v1"}
+
+def recommend_application(job, ranking):
+    """Separate professional fit from the decision to spend time applying.
+    This is a decision score, not a probability of recruiter acceptance.
+    Unknown location/eligibility is never asserted as a hard rejection.
+    """
+    fit=ranking.get("score")
+    if fit is None:
+        return {"score":None,"decision":"avaliar","reason":"A análise profissional não foi conclusiva; não há evidência suficiente para recomendar ou eliminar esta candidatura.","factors":[]}
+    factors=[]
+    if ranking.get("confidence") in ("hard_role_mismatch","essential_gap"):
+        return {"score":0,"decision":"nao_recomendada","reason":ranking.get("reason") or "Exigência essencial incompatível.","factors":["impedimento essencial documentado"]}
+    location=fold(str(job.get("location") or ""))
+    mode=str(job.get("detected_mode") or "")
+    # Only explicit onsite/hybrid Brazilian locations outside the two cities
+    # can trigger the geographic exclusion. Country-only information is unknown.
+    other_city=any(x in location for x in (
+        "sao paulo","rio de janeiro","curitiba","belo horizonte",
+        "brasilia","porto alegre","recife","florianopolis","campinas"))
+    local_city=any(x in location for x in ("goiania","caldas novas"))
+    if mode in ("hybrid","onsite") and other_city and not local_city:
+        return {"score":0,"decision":"nao_recomendada","reason":"Vaga híbrida/presencial em cidade fora de Goiânia ou Caldas Novas.","factors":["restrição geográfica confirmada"]}
+    mandatory=[r for r in ranking.get("requirements",[]) if r.get("type")=="obrigatorio"]
+    if not mandatory:
+        return {"score":None,"decision":"avaliar","reason":"Sem requisitos obrigatórios suficientemente descritos para recomendar a candidatura.","factors":["escopo do cargo incerto"]}
+    matched=sum(r.get("match_points",0)>0 for r in mandatory)
+    # Transferable experience can make a moderate-fit job worth applying to,
+    # but never overrides a confirmed hard constraint.
+    transferable=sum(r.get("match_level")=="transferivel" for r in mandatory)
+    professional=round(0.75*fit+0.25*(100*matched/len(mandatory)))
+    if transferable:
+        factors.append("experiências aproveitáveis de outra função ou setor")
+    if mode=="remote":
+        factors.append("trabalho remoto identificado")
+    if ranking.get("unverified_count",0):
+        factors.append("existem requisitos sem evidência comprovada")
+    if mode in ("hybrid","onsite") and not local_city and not other_city:
+        return {"score":professional,"decision":"confirmar","reason":"Aderência estimada; confirme se a localização é compatível antes de investir na candidatura.","factors":factors+["localização a confirmar"]}
+    decision="recomendada" if professional>=60 else "avaliar" if professional>=40 else "nao_prioritaria"
+    reason=("Vale dedicar tempo à candidatura; os requisitos principais têm evidências relevantes."
+            if decision=="recomendada" else
+            "A candidatura pode fazer sentido, mas requer avaliar as lacunas e o contexto."
+            if decision=="avaliar" else
+            "Baixa prioridade frente a oportunidades com melhor correspondência comprovada.")
+    return {"score":professional,"decision":decision,"reason":reason,"factors":factors}

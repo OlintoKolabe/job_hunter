@@ -32,7 +32,7 @@ class Block41Tests(unittest.TestCase):
         self.assertIsNone(merge_semantic_requirements({"score":None},rows)["score"])
     def test_jsonld_script_pattern(self):
         html='<script type="application/ld+json">{"@type":"JobPosting"}</script>'
-        pattern=r'<script[^>]*type=.[aA]pplication/ld[+]json.[^>]*>(.*?)</script>'
+        pattern=r"""<script[^>]*\btype\s*=\s*(?:"application/ld\+json"|'application/ld\+json'|application/ld\+json)(?=[\s>])[^>]*>(.*?)</script>"""
         self.assertEqual(len(re.findall(pattern,html,re.I|re.S)),1)
     def test_html_whitespace_normalization(self):
         self.assertEqual(re.sub(r"\s+"," ","A  B\nC"),"A B C")

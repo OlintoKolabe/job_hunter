@@ -135,8 +135,37 @@ EDUCATION = ["MBA em Marketing — Universidade de São Paulo (2015–2016)",
 STOP={"the","and","with","for","that","from","have","will","are","this","your","our",
       "para","com","que","dos","das","uma","por","como","nos","nas","mais","sobre",
       "experiencia","experience","required","requirements","responsibilities","years"}
+def relevant_jd_text(value):
+    """Normalize nested HTML and focus on actual responsibilities/requirements.
+
+    The raw JD remains hashed and cached unchanged. Marketing/benefit boilerplate
+    must not outweigh the requirements in ranking and model prompts.
+    """
+    text=str(value or "")
+    for _ in range(3):
+        decoded=html.unescape(text)
+        if decoded==text:break
+        text=decoded
+    text=re.sub(r"<\\s*(?:br|/p|/li|/div|/h[1-6]|/section)\\b[^>]*>","\\n",text,flags=re.I)
+    text=re.sub(r"<[^>]+>"," ",text)
+    text=re.sub(r"[ \\t]+"," ",text)
+    text=re.sub(r"\\n\\s+","\\n",text)
+    anchors=[r"\\brole expectations\\s*:",r"\\bresponsibilities\\s*:",
+             r"\\bwe are looking for\\b",r"\\bcomo\\s+.{0,95}\\s+voc[eê]\\s+vai\\s*:"]
+    for pattern in anchors:
+        found=re.search(pattern,text,re.I)
+        if found:
+            text=text[found.start():]
+            break
+    endings=[r"\\bwhy apply through\\b",r"\\bhow jobgether works\\b",r"\\bwhy work for us\\b",
+             r"\\bbenef[ií]cios\\s*:",r"\\bour benefits\\s*:",
+             r"\\bequal opportunity employer\\b",r"\\ba radix est[aá] sempre\\b"]
+    tail=[m.start() for pattern in endings for m in re.finditer(pattern,text,re.I)]
+    if tail and min(tail)>300:text=text[:min(tail)]
+    return text.strip()
+
 def words(value):
-    value=html.unescape(re.sub(r"<[^>]+>"," ",value or "")).lower()
+    value=relevant_jd_text(value).lower()
     return {w for w in re.findall(r"[a-záàâãéêíóôõúüç0-9]{3,}",value) if w not in STOP}
 def chronology_index(item):
     """Actual start dates, including overlapping employment."""
@@ -176,7 +205,7 @@ def contains(text, phrase):
     # Word-aware matching avoids accidental substring hits.
     return bool(re.search(r"(?<!\w)"+re.escape(phrase)+r"(?!\w)",text,re.IGNORECASE))
 def categories(text, definitions):
-    cleaned=html.unescape(re.sub(r"<[^>]+>"," ",text or "")).casefold()
+    cleaned=relevant_jd_text(text).casefold()
     return {k for k,phrases in definitions.items() if any(contains(cleaned,p.casefold()) for p in phrases)}
 def relevance(fact, required, jd_words):
     matched=categories(fact,FACT_TOPICS)&required
@@ -185,14 +214,14 @@ def relevance(fact, required, jd_words):
 def build_plan(jd, title):
     if not jd or not jd.strip():raise ValueError("JD vazio")
     # Job title is high-signal; descriptions often mention unrelated tools and domains.
-    needs=categories(jd+" "+title,TOPICS)
+    needs=categories(relevant_jd_text(jd)+" "+title,TOPICS)
     title_needs=categories(title,TOPICS)
     # Portuguese role titles may not contain the literal word "marketing".
     # Treat performance-media roles as growth, not as generic product roles.
     if re.search(r"(?i)\b(m[ií]dia|performance|tr[aá]fego|aquisi[cç][aã]o)\b", title):
         title_needs.add("growth")
         needs.add("growth")
-    tokens=words(jd)
+    tokens=words(relevant_jd_text(jd))
     scored=[]
     for idx,item in sorted(enumerate(EXPERIENCE),key=lambda x:chronology_index(x[1]),reverse=True):
         def evidence_priority(f):

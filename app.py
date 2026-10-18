@@ -363,6 +363,7 @@ def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False
 class JDRequest(BaseModel):
     jobs: list[dict]
     roles: str=DEFAULT_ROLES
+    manual: bool=False
 
 @app.post("/api/jd/enrich")
 def jd_enrich(request: Request, payload: JDRequest):
@@ -371,6 +372,8 @@ def jd_enrich(request: Request, payload: JDRequest):
     if len(payload.roles)>700:raise HTTPException(400,"Filtro inválido")
     rows=[]
     for j in payload.jobs:
+        if not payload.manual and j.get('needs_verification'):
+            raise HTTPException(400,'Vaga não confirmada exige avaliação manual')
         if not isinstance(j,dict):raise HTTPException(400,"Vaga inválida")
         if not str(j.get("url","")).startswith("https://"):raise HTTPException(400,"URL inválida")
         if len(str(j.get("url","")))>2000:raise HTTPException(400,"URL inválida")

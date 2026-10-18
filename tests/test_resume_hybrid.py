@@ -17,6 +17,19 @@ class HybridResumeTests(unittest.TestCase):
         self.assertNotIn(4,{e["source_index"] for e in chosen})
         self.assertTrue(audit({**plan,"experience":chosen},render_docx({**plan,"experience":chosen}))["factual_bullets_verified"])
 
+    def test_jd_clause_classification(self):
+        jd="Required roadmap and stakeholder alignment.\nNice to have: Oracle certification.\nLead CRM campaigns."
+        result=h.analyze_requirements(jd,"Product Manager")
+        self.assertEqual(len(result["desirable"]),1)
+        self.assertIn("Oracle",result["desirable"][0])
+
+    def test_jd_coverage_report(self):
+        jd="Coordinate marketing campaigns and CRM; Oracle programming is mandatory."
+        plan=build_plan(jd,"Marketing Manager")
+        result=h.traceable_relevance(plan,jd,plan["experience"])
+        self.assertTrue(result["factual_bullets_verified"])
+        self.assertEqual(result["jd_sha256"],plan["jd_sha256"])
+
     def test_word_aware_jd_relevance(self):
         from resume_engine import contains, categories, TOPICS
         self.assertTrue(contains("Gestão de marketing e campanhas", "marketing"))

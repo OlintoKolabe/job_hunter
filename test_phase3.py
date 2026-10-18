@@ -120,7 +120,7 @@ class Phase3ContractTests(unittest.TestCase):
         pending_old={"title":"Project Manager","company":"Old Co","url":"https://x.example/pending"}
         confirmed,review,count=exclude_history_matches(
             [old,same_pair,new],[pending_old,new],
-            {"https://x.example/old","https://x.example/pending"},{"acme|product manager"})
+            {"x.example/old","x.example/pending"},{"acme|product manager"})
         self.assertEqual([j["url"] for j in confirmed],["https://x.example/fresh"])
         self.assertEqual([j["url"] for j in review],["https://x.example/fresh"])
         self.assertEqual(count,3)

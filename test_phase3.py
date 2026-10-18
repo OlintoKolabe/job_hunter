@@ -118,7 +118,7 @@ class Phase3ContractTests(unittest.TestCase):
 
     def test_block4_uninterpreted_does_not_mean_unqualified(self):
         from block4_score import score_job
-        row={"title":"Product Manager","description":"Requirements\\nProduct roadmap\\nExpertise in obscure proprietary platform\\nExperience with unspecified internal process"}
+        row={"title":"Product Manager","description":"Requirements\nProduct roadmap\nExpertise in obscure proprietary platform\nExperience with unspecified internal process"}
         r=score_job(row,"Product Manager")
         self.assertEqual(r["uninterpreted_count"],2)
         self.assertEqual(r["coverage_pct"],33)
@@ -127,7 +127,7 @@ class Phase3ContractTests(unittest.TestCase):
 
     def test_block4_verifiable_leadership_and_budget(self):
         from block4_score import score_job
-        row={"title":"Project Manager","description":"Requirements\\nTeam leadership\\nBudget management\\nProject portfolio management"}
+        row={"title":"Project Manager","description":"Requirements\nTeam leadership\nBudget management\nProject portfolio management"}
         r=score_job(row,"Project Manager")
         self.assertEqual(r["coverage_pct"],100)
         self.assertEqual(r["score"],100)

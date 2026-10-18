@@ -24,6 +24,20 @@ def get_cached(cur,url,jd_hash,roles):
         if stamp is not None and stamp.tzinfo is None:stamp=stamp.replace(tzinfo=timezone.utc)
         return result if stamp and stamp>=datetime.now(timezone.utc)-timedelta(minutes=30) else None
     return result if result.get('score') is not None or (require_hybrid and item[1]=='hybrid') else None
+def get_previous_semantic(cur,url,jd_hash,roles):
+    """Re-score already paid-for extraction after a rubric change; never call AI."""
+    cur.execute("""SELECT result FROM jh_score_cache WHERE normalized_url=%s AND jd_hash=%s
+        AND profile_version=%s AND rubric_version=%s AND roles_hash=%s
+        AND model='hybrid'""",
+        (url,jd_hash,PROFILE_VERSION,"block4.1-v3-complete-scoring",key_for(roles)))
+    row=cur.fetchone()
+    if not row or not isinstance(row[0],dict):return None
+    requirements=row[0].get("requirements") or []
+    if not isinstance(requirements,list) or not requirements:return None
+    return [{"name":r.get("name"),"type":r.get("type"),
+             "skill_id":r.get("evidence_id") if isinstance(r.get("evidence_id"),str) else None}
+            for r in requirements if isinstance(r,dict)]
+
 def save(cur,url,jd_hash,roles,result,model):
     cur.execute("""INSERT INTO jh_score_cache
         (normalized_url,jd_hash,profile_version,rubric_version,roles_hash,result,model)

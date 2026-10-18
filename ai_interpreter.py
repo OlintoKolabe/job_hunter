@@ -22,5 +22,6 @@ def interpret(description):
     parsed=json.loads(content)
     rows=parsed.get("requirements",[])
     if not isinstance(rows,list):raise ValueError("invalid requirements payload")
-    return [{"name":str(r.get("name",""))[:160],"type":r.get("type")}
+    requirements=[{"name":str(r.get("name",""))[:160],"type":r.get("type")}
         for r in rows[:12] if isinstance(r,dict) and r.get("type") in ("obrigatorio","desejavel")]
+    return {"requirements":requirements,"usage":result.get("usage",{})}

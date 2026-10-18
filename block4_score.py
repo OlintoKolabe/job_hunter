@@ -116,21 +116,25 @@ def score_job(job,roles):
     # No requirements extracted means no professional-fit claim can be substantiated.
     available=len(requirements)>0
     # Mandatory requirements dominate; desirables only adjust scored candidates.
-    wtotal=3*len(mandatory)+len(desirable)
+    interpreted=[r for r in requirements if r["status"]!="nao_interpretado"]
+    wtotal=sum(3 if r["type"]=="obrigatorio" else 1 for r in interpreted)
     wmet=sum((3 if r["type"]=="obrigatorio" else 1) for r in requirements if r["status"]=="comprovado")
     fit=round(100*wmet/wtotal) if wtotal else None
     uncertainty=sum(r["status"]=="nao_comprovado" for r in requirements)
+    uninterpreted=sum(r["status"]=="nao_interpretado" for r in requirements)
+    coverage=round(100*len(interpreted)/len(requirements)) if requirements else 0
+    if coverage<60:fit=None
     priority={
         "remote":detect_work_mode(job,signals(job,roles))=="remote",
         "salary_informed":any(bool(job.get(k)) for k in ("salary","salaryRange","compensation")),
         "sector":next((name for name,_,phrases in AXES if any(p in title+" "+jd for p in phrases)),None),
     }
-    confidence=("sem_base" if not available else ("amostra_limitada" if len(requirements)<4 else "requisitos_extraidos"))
+    confidence=("sem_base" if not available else ("cobertura_insuficiente" if coverage<60 else ("amostra_limitada" if len(requirements)<4 else "requisitos_extraidos")))
     return {"score":fit,"score_max":100,"confidence":confidence,"evaluated_requirements":len(requirements),
             "fit":fit,"requirements":requirements,"mandatory_count":len(mandatory),
-            "desirable_count":len(desirable),"unverified_count":uncertainty,
+            "desirable_count":len(desirable),"unverified_count":uncertainty,"uninterpreted_count":uninterpreted,"coverage_pct":coverage,
             "priority":priority,
             "profile_evidence":[{"family":r["name"],"source":[r["evidence"]]} for r in requirements if r["evidence"]],
             "reason":("Percentual sobre requisitos extraídos do JD; não representa cobertura integral se o anúncio for incompleto"
                       if available else "JD sem requisitos identificáveis: sem nota de aderência"),
-            "method":"block4-evidencias-v1"}
+            "method":"block4-evidencias-cobertura-v2"}

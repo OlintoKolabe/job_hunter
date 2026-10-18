@@ -76,10 +76,10 @@ class Phase3ContractTests(unittest.TestCase):
         cur=Mock();cur.fetchall.return_value=[]
         row={"source":"inHire","company":"AMCOM","title":"Product Manager","location":"Brazil Remote",
              "url":"https://amcom.inhire.app/vagas/abc123/product-manager"}
-        with patch("jd_enrichment.fetch_json",return_value={"description":"<h3>Requirements</h3><li>Product roadmap</li>"}) as request:
+        with patch("jd_enrichment.get_cached",return_value=None), patch("jd_enrichment.save"), patch("jd_enrichment.fetch_json",return_value={"description":"<h3>Requirements</h3><li>Product roadmap</li>"}) as request:
             results,coverage=hydrate_jobs(cur,[row],"Product Manager",url_key)
         self.assertEqual(coverage["fetched"],1)
-        self.assertEqual(results[0]["ranking"]["score"],100)
+        self.assertIsNone(results[0]["ranking"]["score"])
         self.assertEqual(request.call_args.args[1],{"X-Tenant":"amcom"})
 
     def test_block4_greenhouse_detail_link_parses_real_job_id(self):
@@ -96,10 +96,10 @@ class Phase3ContractTests(unittest.TestCase):
         cur.fetchall.return_value=[]
         jobs=[{"title":"Product Manager","company":"acme","source":"Greenhouse",
                "url":"https://boards.greenhouse.io/acme/jobs/456789","location":"Brazil Remote"}]
-        with patch("jd_enrichment.fetch_json",return_value={"content":"<h3>Requirements</h3><li>Product roadmap management</li>"}):
+        with patch("jd_enrichment.get_cached",return_value=None), patch("jd_enrichment.save"), patch("jd_enrichment.fetch_json",return_value={"content":"<h3>Requirements</h3><li>Product roadmap management</li>"}):
             scored,coverage=hydrate_jobs(cur,jobs,"Product Manager",url_key,limit=10)
         self.assertEqual(coverage["fetched"],1)
-        self.assertEqual(scored[0]["ranking"]["score"],100)
+        self.assertIsNone(scored[0]["ranking"]["score"])
         self.assertEqual(scored[0]["jd_status"],"fetched")
         self.assertTrue(any("INSERT INTO jh_jd_cache" in str(x) for x in cur.execute.call_args_list))
 
@@ -110,7 +110,7 @@ class Phase3ContractTests(unittest.TestCase):
         cur=Mock();cur.fetchall.return_value=[]
         jobs=[{"title":"Product Manager","company":"acme","source":"Greenhouse",
             "url":"https://boards.greenhouse.io/acme/jobs/"+str(12000+i)} for i in range(15)]
-        with patch("jd_enrichment.fetch_json",return_value={"content":"<h3>Requirements</h3><li>Product roadmap</li>"}) as fetch:
+        with patch("jd_enrichment.get_cached",return_value=None), patch("jd_enrichment.save"), patch("jd_enrichment.fetch_json",return_value={"content":"<h3>Requirements</h3><li>Product roadmap</li>"}) as fetch:
             scored,coverage=hydrate_jobs(cur,jobs,"Product Manager",url_key,limit=10)
         self.assertEqual(fetch.call_count,10)
         self.assertEqual(coverage["not_attempted"],5)

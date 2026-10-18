@@ -112,12 +112,26 @@ class Phase3ContractTests(unittest.TestCase):
         self.assertTrue(all(d["source"]=="inHire" for d in details))
         self.assertTrue(all(call.args[0]=="inHire" for call in p.call_args_list))
 
-    def test_history_does_not_remove_matching_search_results(self):
+    def test_history_excludes_confirmed_and_review(self):
+        from app import exclude_history_matches
+        old={"title":"Product Manager","company":"Acme","url":"https://x.example/old"}
+        same_pair={"title":"Product Manager","company":"Acme","url":"https://x.example/new"}
+        new={"title":"Product Owner","company":"Another","url":"https://x.example/fresh"}
+        pending_old={"title":"Project Manager","company":"Old Co","url":"https://x.example/pending"}
+        confirmed,review,count=exclude_history_matches(
+            [old,same_pair,new],[pending_old,new],
+            {"https://x.example/old","https://x.example/pending"},{"acme|product manager"})
+        self.assertEqual([j["url"] for j in confirmed],["https://x.example/fresh"])
+        self.assertEqual([j["url"] for j in review],["https://x.example/fresh"])
+        self.assertEqual(count,3)
+
+    def test_history_checked_for_both_result_types(self):
         from pathlib import Path
         code=Path("app.py").read_text()
-        self.assertIn('"already_known"',code)
-        self.assertIn('"items":visible[:100]',code)
-        self.assertIn('"items":visible[:80]',code)
+        self.assertIn('items+review',code)
+        self.assertIn('"review_items":pending[:150]',code)
+        self.assertIn('"review_items":pending[:150]',code)
+        self.assertNotIn('"already_known":url_key',code)
 
     def test_brazilian_city_and_remote_synonyms(self):
         from search_filters import analyze_filters

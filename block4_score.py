@@ -169,7 +169,13 @@ def merge_semantic_requirements(base, extracted):
         # The documented LiberPay consulting experience is adjacent, not direct
         # payment-product ownership or knowledge of the Pix/card rails.
         payments_context=any(x in normalized for x in ("payment","payments","pagamento","pagamentos","pix","acquiring","adquirencia","settlement"))
-        if proof:
+        specialized_payments=any(x in normalized for x in ("pix","card acquiring","settlement","iso 8583","brazilian payment rails"))
+        # A generic PM capability does not prove specialized Pix/card-rails expertise.
+        if proof and specialized_payments:
+            degree="transferivel"
+            evidence=proof+"; competência de produto transferível, mas atuação nas regras de pagamento específicas não comprovada"
+            points=0.4
+        elif proof:
             degree="direta"
             evidence=proof
             points=1.0

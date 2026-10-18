@@ -157,7 +157,7 @@ def build_plan(jd, title):
     top_topics=sorted(needs,key=lambda topic:-sum(relevance(f,{topic},tokens) for _,e,_,_ in scored for f in e["facts"]))[:3]
     if not top_topics:top_topics=["product","project"]
     focus=", ".join(label[t] for t in top_topics)
-    summary="Profissional com atuação em tecnologia e negócios, reunindo experiência em "+focus+". Trajetória em projetos de produtos digitais e liderança multidisciplinar."
+    summary="Profissional com atuação em tecnologia e negócios, reunindo experiência em "+focus+". Atuação em diferentes setores, com responsabilidades em entregas e colaboração multidisciplinar."
     # Only a profile-level statement here, never repeated verbatim from the roles.
     return {"title":title[:120],"summary":summary,"focus_topics":top_topics,
             "experience":experiences,"additional_experience":older,

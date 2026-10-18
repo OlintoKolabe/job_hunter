@@ -107,7 +107,7 @@ export function OpportunitiesPanel(){
    if(state==='scored' && v.ranking?.confidence==='hard_role_mismatch')return 'Incompatibilidade essencial com função técnica — nenhuma chamada de IA foi necessária';
    if(state==='scored')return v.ranking?.confidence==='requisitos_extraidos'?'% dos requisitos extraídos':v.ranking?.confidence==='amostra_limitada'?'Amostra limitada — conferir JD':'Nota calculada';
    if(v.ai_status==='failed')return 'A análise automática falhou. Tente uma nova busca.';
-   if(v.ai_status==='retry_later')return 'A análise automática falhou. Uma nova tentativa será permitida após 30 minutos.';
+   if(v.ai_status==='cached_failure')return 'A análise automática falhou; o resultado foi guardado para evitar nova cobrança na mesma vaga.';
    if(v.ai_status==='disabled')return 'IA desativada — avaliação apenas por regras';
    if(v.ai_status==='budget_exhausted')return 'Limite mensal de IA atingido';
    if(v.jd_status==='indisponivel')return 'Não foi possível obter a descrição completa da vaga.';

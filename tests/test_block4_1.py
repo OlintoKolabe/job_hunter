@@ -3,7 +3,7 @@ import unittest
 from unittest.mock import patch
 from jd_retrieval import safe_public_url
 from ai_interpreter import interpret
-from block4_score import score_job
+from block4_score import score_job,merge_semantic_requirements
 from scripts.check_scope import validate
 
 class Block41Tests(unittest.TestCase):
@@ -16,6 +16,19 @@ class Block41Tests(unittest.TestCase):
     def test_no_jd_does_not_create_perfect_fit(self):
         out=score_job({"title":"Product Manager","description":""},"Product Manager")
         self.assertIsNone(out["score"])
+    def test_semantic_scoring_uses_only_documented_skills(self):
+        rows=[
+            {"name":"roadmap","type":"obrigatorio","skill_id":"roadmap"},
+            {"name":"backlog","type":"obrigatorio","skill_id":"backlog"},
+            {"name":"project planning","type":"obrigatorio","skill_id":None},
+            {"name":"crm","type":"desejavel","skill_id":"crm"}
+        ]
+        score=merge_semantic_requirements({"score":None},rows)
+        self.assertEqual(score["score"],70)
+        self.assertEqual(score["unverified_count"],1)
+    def test_unknown_semantic_skills_are_not_awarded_points(self):
+        rows=[{"name":str(i),"type":"obrigatorio","skill_id":"imaginary_skill"} for i in range(4)]
+        self.assertIsNone(merge_semantic_requirements({"score":None},rows)["score"])
     def test_gate_does_not_allow_new_file(self):
         contract={"allowed_files":["app.py"],"forbidden_paths":[],"base_ref":"sha","feature_ref":"branch"}
         self.assertEqual(validate(["src/Unauthorized.jsx"],contract),["src/Unauthorized.jsx"])

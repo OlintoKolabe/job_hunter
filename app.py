@@ -7,6 +7,7 @@ import urllib.error
 import urllib.parse
 import csv
 import io
+import io
 import hashlib
 import unicodedata
 from urllib.parse import urlsplit
@@ -463,7 +464,7 @@ def generate_resume(payload: ResumeGenerate, request: Request):
     This endpoint never calls OpenAI and does not write a CV into the database.
     """
     require_auth(request)
-    key=normalized_url(payload.url)
+    key=url_key(payload.url)
     if not key or len(key)>500:
         raise HTTPException(400,"URL da vaga inválida")
     with psycopg.connect(DATABASE,connect_timeout=8) as conn:

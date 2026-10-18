@@ -218,7 +218,7 @@ def analyze_filters(jobs,roles=DEFAULT_ROLES,country="BR",mode="remote",days=30,
     if country not in COUNTRY_NAMES:raise ValueError("País desconhecido")
     if mode not in ("remote","hybrid","onsite","all"):raise ValueError("Regime inválido")
     if days not in (0,1,3,7,15,30,60,90):raise ValueError("Período inválido")
-    if sort not in ("newest","oldest"):raise ValueError("Ordem inválida")
+    if sort not in ("score","newest","oldest"):raise ValueError("Ordem inválida")
     confirmed=[];review=[];reasons={}
     for j in jobs:
         bucket,reason=classify(j,terms,country,mode,days)
@@ -226,8 +226,13 @@ def analyze_filters(jobs,roles=DEFAULT_ROLES,country="BR",mode="remote",days=30,
         if bucket=="confirmed":confirmed.append({**j,"detected_mode":detect_work_mode(j,signals(j,roles)),"jd_evidence":signals(j,roles),"ranking":score_job(j,roles),"description":""})
         elif bucket=="review":review.append({**j,"detected_mode":detect_work_mode(j,signals(j,roles)),"jd_evidence":signals(j,roles),"description":"","needs_verification":reason.split(",")})
     order=lambda j:parse_date(j.get("published")) or datetime.min.replace(tzinfo=timezone.utc)
-    confirmed.sort(key=order,reverse=sort=="newest")
-    review.sort(key=order,reverse=sort=="newest")
+    if sort=="score":
+        key=lambda j:(j["ranking"]["score"],j["ranking"]["confidence"]=="completa",order(j))
+        confirmed.sort(key=key,reverse=True)
+        review.sort(key=key,reverse=True)
+    else:
+        confirmed.sort(key=order,reverse=sort=="newest")
+        review.sort(key=order,reverse=sort=="newest")
     return confirmed,review,reasons
 
 def matches(job,terms,country,mode,days):

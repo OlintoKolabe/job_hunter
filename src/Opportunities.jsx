@@ -30,6 +30,7 @@ export function OpportunitiesPanel(){
    const pendingJD=[...new Map([...all.values(),...uncertain.values()].filter(j=>j.jd_status==='pendente' || (j.ranking?.score==null && ['greenhouse','inhire'].some(src=>j.source?.toLowerCase().includes(src)))).map(j=>[j.url,j])).values()];
    setEvaluationTotal(pendingJD.length);
    let resolved=0;
+   let scoringFailures=0;
    for(let start=0;start<pendingJD.length;start+=10){
      const chunk=pendingJD.slice(start,start+10);
      setScoringNow(chunk.map(j=>j.url));
@@ -42,12 +43,12 @@ export function OpportunitiesPanel(){
          if(uncertain.has(j.url))uncertain.set(j.url,j);
        }
        setResults([...all.values()]);setReviews([...uncertain.values()]);
-     }catch(e){setScoringFailed(prev=>[...prev,...chunk.map(j=>j.url)]);setMessage('Algumas avaliações de JD não foram concluídas; resultados preservados.');}
+     }catch(e){scoringFailures+=chunk.length;setScoringFailed(prev=>[...prev,...chunk.map(j=>j.url)]);setMessage('Algumas avaliações de JD não foram concluídas; resultados preservados.');}
      setScoringNow([]);
      resolved+=chunk.length;setEvaluated(resolved);
    }
    setCompleted(completedAll);
-   setMessage(completedAll&&!skipped?'Busca concluída.':'Busca concluída parcialmente: '+skipped+' lotes falharam. Confira Fontes.');
+   setMessage(completedAll&&!skipped&&!scoringFailures?'Busca concluída.':'Busca parcial: '+skipped+' lotes de fontes e '+scoringFailures+' avaliações de JD falharam. Confira Fontes.');
   }catch(e){setError(e.message);setMessage('Busca parcial — os resultados encontrados continuam disponíveis.')}
   finally{setBusy(false)}
  }

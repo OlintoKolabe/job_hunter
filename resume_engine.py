@@ -172,15 +172,18 @@ def render_docx(plan):
     doc.add_paragraph(" | ".join([CONTACT["location"],CONTACT["phone"],CONTACT["email"],CONTACT["linkedin"]]))
     doc.add_heading("Resumo profissional",1);doc.add_paragraph(plan["summary"])
     doc.add_heading("Experiência profissional",1)
-    for e in plan["experience"]:
+    detailed={e["source_index"]:e for e in plan["experience"]}
+    compact={e["source_index"]:e for e in plan["additional_experience"]}
+    chronology=sorted([*detailed,*compact],key=lambda i:chronology_index(EXPERIENCE[i]),reverse=True)
+    for idx in chronology:
+        e=detailed.get(idx) or compact[idx]
+        if idx not in detailed:
+            doc.add_paragraph(e["role"]+" — "+e["company"]+" | "+e["dates"])
+            continue
         heading=doc.add_heading(e["role"]+" — "+e["company"],2)
         heading.paragraph_format.keep_with_next=True
         dates=doc.add_paragraph(e["dates"]);dates.paragraph_format.keep_with_next=True
         for fact in e["facts"]:doc.add_paragraph(fact,style="List Bullet")
-    if plan["additional_experience"]:
-        doc.add_heading("Outras experiências",1)
-        for e in plan["additional_experience"]:
-            doc.add_paragraph(e["role"]+" — "+e["company"]+" ("+e["dates"]+")")
     doc.add_heading("Formação e certificações",1)
     for degree in EDUCATION:doc.add_paragraph(degree,style="List Bullet")
     doc.add_paragraph("Idiomas: Português (nativo); Inglês (profissional); Italiano (intermediário).")

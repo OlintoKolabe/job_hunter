@@ -7,7 +7,7 @@ import html
 import unicodedata
 from block4_score import SKILLS
 MODEL=os.getenv("JH_AI_MODEL","gpt-4.1-nano")
-MAX_OUTPUT=800
+MAX_OUTPUT=1100
 def interpret(description):
     if os.getenv("JH_AI_ENABLED")!="1" or not os.getenv("OPENAI_API_KEY"):
         return None

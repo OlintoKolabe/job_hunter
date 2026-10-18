@@ -151,7 +151,6 @@ def extract_jobs(data):
             if jobs:return jobs
     return []
 
-@app.post("/api/search-jobs")
 def exclude_history_matches(items,review,known_urls,known_pairs):
     """Hide history entries from BOTH confirmed and review results.
     The sets are always queried fresh during every search/catalog batch.
@@ -164,6 +163,7 @@ def exclude_history_matches(items,review,known_urls,known_pairs):
     pending=[job for job in review if not is_known(job)]
     return confirmed,pending,(len(items)+len(review)-len(confirmed)-len(pending))
 
+@app.post("/api/search-jobs")
 def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:str="remote",days:int=30,sort:str="newest",source:str="all"):
     require_auth(request)
     allowed_sources={"all","inhire","quickin","gupy","greenhouse","ashby","lever","bamboohr","dynamite","linkedin_guest","jobgether","workable"}

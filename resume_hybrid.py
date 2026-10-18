@@ -11,7 +11,7 @@ from score_repository import reserve,settle,key_for
 from resume_engine import ENGINE_VERSION,EXPERIENCE,TOPICS,FACT_TOPICS,categories,relevance,words
 MODEL="gpt-4.1-nano"  # Fixed audited price, independent of vacancy scoring model
 
-RUBRIC="cv-evidence-hybrid-v6"
+RUBRIC="cv-evidence-hybrid-v7"
 COST_INPUT_PER_M=0.10
 COST_OUTPUT_PER_M=0.40
 INPUT_CHAR_LIMIT=12500

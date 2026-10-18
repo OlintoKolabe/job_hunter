@@ -40,6 +40,32 @@ class Phase3ContractTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError,"desativado"):
                 js_fallback("quickin","test")
 
+    def test_discovery_budget_covers_every_selected_family(self):
+        from search_filters import discovery_queries,DEFAULT_ROLES
+        queries=discovery_queries(DEFAULT_ROLES,12)
+        self.assertEqual(len(queries),12)
+        self.assertTrue(any("business" in q or "negocios" in q for q in queries))
+        self.assertTrue(any("product" in q for q in queries))
+        self.assertTrue(any("project" in q for q in queries))
+        self.assertTrue(any("marketing" in q for q in queries))
+        self.assertTrue(any("growth" in q for q in queries))
+
+    def test_unrelated_technical_role_not_rescued_by_incidental_jd(self):
+        from search_filters import analyze_filters
+        jd="Coordinate project delivery and project milestones for engineering."
+        rows=[{"title":"Manager, Software Engineering","location":"Brazil - Remote","description":jd}]
+        good,review,why=analyze_filters(rows,"Project Manager","BR","remote",0)
+        self.assertEqual(good,[])
+        self.assertEqual(review,[])
+        self.assertEqual(why.get("excluded:cargo"),1)
+
+    def test_novel_role_can_be_discovered_via_jd_evidence(self):
+        from search_filters import analyze_filters
+        jd="Lead project planning and project delivery for cross-functional teams."
+        rows=[{"title":"Business Transformation Lead","location":"Brazil - Remote","description":jd}]
+        good,review,_=analyze_filters(rows,"Project Manager","BR","remote",0)
+        self.assertEqual(len(good),1)
+
     def test_search_filters_require_actual_location_and_mode(self):
         from search_filters import apply_filters
         rows=[{"title":"Product Manager","location":"Brazil - Remote","published":"2026-10-17","url":"https://x/a"},

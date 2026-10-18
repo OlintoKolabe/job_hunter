@@ -47,6 +47,25 @@ class Block41Tests(unittest.TestCase):
         rows=[{"name":"Roadmap","type":"obrigatorio","skill_id":"roadmap"},{"name":"Backlog","type":"obrigatorio","skill_id":"backlog"}]
         self.assertIsNone(merge_semantic_requirements({"score":None},rows)["score"])
 
+    def test_regrade_existing_semantic_cache_without_openai(self):
+        from datetime import datetime, timezone
+        from unittest.mock import Mock
+        from jd_enrichment import hydrate_jobs
+        url="https://example.com/jobs/transfer"
+        jd="Required payments roadmap experience. "*20
+        cur=Mock()
+        cur.fetchall.return_value=[(url,jd,datetime.now(timezone.utc))]
+        old=[{"name":"Pix payments","type":"obrigatorio","skill_id":None},
+             {"name":"Roadmap","type":"obrigatorio","skill_id":"roadmap"},
+             {"name":"Payment operations","type":"obrigatorio","skill_id":None},
+             {"name":"Operational analytics","type":"desejavel","skill_id":None}]
+        with patch("jd_enrichment.get_cached",return_value=None),patch("jd_enrichment.get_previous_semantic",return_value=old),patch("jd_enrichment.interpret") as ai,patch("jd_enrichment.save") as saved:
+            jobs,_=hydrate_jobs(cur,[{"url":url,"title":"Payments PM"}],"Product Manager",lambda v:v)
+        self.assertTrue(jobs[0]["ranking"]["regraded_from_cache"])
+        self.assertIsNotNone(jobs[0]["ranking"]["score"])
+        ai.assert_not_called()
+        saved.assert_called_once()
+
     def test_secret_unset_means_no_ai(self):
         with patch.dict("os.environ",{"JH_AI_ENABLED":"0","OPENAI_API_KEY":"dummy"}):
             self.assertIsNone(interpret("required project management"))

@@ -161,7 +161,7 @@ def relevant_jd_text(value):
              r"\bbenef[ií]cios\s*:",r"\bour benefits\s*:",
              r"\bequal opportunity employer\b",r"\ba radix est[aá] sempre\b"]
     tail=[m.start() for pattern in endings for m in re.finditer(pattern,text,re.I)]
-    if tail and min(tail)>300:text=text[:min(tail)]
+    if tail and min(tail)>60:text=text[:min(tail)]
     return text.strip()
 
 def words(value):

@@ -118,7 +118,7 @@ def hydrate_jobs(cursor,jobs,roles,url_key,limit=PER_BATCH_LIMIT):
                         extracted=interpret(description)
                         if extracted:
                             usage=extracted.get('usage',{})
-                            actual=min(0.002,(usage.get('prompt_tokens',0)*0.20+usage.get('completion_tokens',0)*1.20)/1000000)
+                            actual=(usage.get('prompt_tokens',0)*0.20+usage.get('completion_tokens',0)*1.20)/1000000
                     except Exception:
                         pass
                     finally:
@@ -129,7 +129,7 @@ def hydrate_jobs(cursor,jobs,roles,url_key,limit=PER_BATCH_LIMIT):
                         evaluation=merge_semantic_requirements(evaluation,extracted['requirements'])
                         evaluation['ai_interpreted']=True
                         model='hybrid'
-            if description:save(cursor,key,jd_hash,roles,evaluation,model)
+            if description and evaluation.get('score') is not None:save(cursor,key,jd_hash,roles,evaluation,model)
         output.append({**j,"ranking":evaluation,"jd_evidence":signals(complete,roles),
                        "jd_status":origin if description else ("pendente" if (key,j) in pending[limit:] else "indisponivel")})
     return output,count

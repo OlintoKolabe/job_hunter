@@ -37,7 +37,12 @@ def extra_pull(source,slug):
     jobs=[]
     if source=="greenhouse_eu":
         try:
-            raw,_=read("https://boards-api.greenhouse.io/v1/boards/"+urllib.parse.quote(slug)+"/jobs?content=true")
+            endpoint="https://boards-api.greenhouse.io/v1/boards/"+urllib.parse.quote(slug)+"/jobs"
+            try:
+                raw,_=read(endpoint+"?content=true",size=6000000)
+            except ValueError as error:
+                if "large response" not in str(error):raise
+                raw,_=read(endpoint+"?content=false")
             data=json.loads(raw)
         except urllib.error.HTTPError as e:
             if e.code !=404:raise

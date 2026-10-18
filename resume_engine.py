@@ -241,3 +241,40 @@ def audit(plan,data):
     return {"engine":ENGINE_VERSION,"document_sha256":hashlib.sha256(data).hexdigest(),
             "jd_sha256":plan["jd_sha256"],"factual_bullets_verified":True,
             "cost_usd":0.0,"ai_calls":0,"paragraphs":len(parsed.paragraphs)}
+
+def evaluate_rendered_resume(plan, data, jd):
+    """Explainable technical audit of the reopened document; not a recruiter fit score."""
+    doc=Document(io.BytesIO(data))
+    lines=[p.text.strip() for p in doc.paragraphs if p.text.strip()]
+    displayed="\\n".join(lines)
+    facts=[f for e in plan["experience"] for f in e["facts"]]
+    requirements=categories(jd+" "+plan["title"],TOPICS)
+    title_requirements=categories(plan["title"],TOPICS)
+    fact_topics=set().union(*(categories(f,FACT_TOPICS) for f in facts)) if facts else set()
+    covered=requirements&fact_topics
+    fact_source=plan.get("bullet_provenance") or {}
+    factual=sum(1 for f in facts if
+                f in {x for item in EXPERIENCE for x in item["facts"]}
+                or fact_source.get(f) in {x for item in EXPERIENCE for x in item["facts"]})
+    unique=len(facts)==len(set(facts))
+    bullet_present=all(displayed.count(f)==1 for f in facts)
+    chronology=[chronology_index(EXPERIENCE[int(e["source_index"])])
+                for e in plan["experience"]+plan["additional_experience"]]
+    chronologically_sorted=chronology==sorted(chronology,reverse=True)
+    factual_ok=factual==len(facts) and bullet_present and unique
+    scores={
+        "factual_traceability":2.0 if factual_ok else 0.0,
+        "role_relevance":2.0*len(covered&title_requirements)/max(1,len(title_requirements)),
+        "jd_topic_coverage":2.0*len(covered)/max(1,len(requirements)),
+        "document_integrity":2.0 if "Resumo profissional" in displayed and
+            "Experiência profissional" in displayed and chronologically_sorted else 0.0,
+        "evidence_density":2.0*min(1.0,len(facts)/9.0),
+    }
+    # Mechanical quality is distinct from real candidate eligibility and writing quality.
+    return {"technical_score":round(sum(scores.values()),2),
+            "dimensions":{k:round(v,2) for k,v in scores.items()},
+            "covered_topics":sorted(covered),"uncovered_topics":sorted(requirements-covered),
+            "fact_count":len(facts),"factual_ok":factual_ok,
+            "document_sha256":hashlib.sha256(data).hexdigest(),
+            "jd_sha256":plan["jd_sha256"],
+            "limitations":"This is a mechanical technical audit, not an independent human or AI editorial review."}

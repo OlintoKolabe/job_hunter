@@ -8,10 +8,10 @@ rubric, never overwriting the vacancy scores.
 import hashlib,html,json,os,re,unicodedata,urllib.request
 from psycopg.types.json import Jsonb
 from score_repository import reserve,settle,key_for
-from resume_engine import ENGINE_VERSION,EXPERIENCE
+from resume_engine import ENGINE_VERSION,EXPERIENCE,TOPICS,FACT_TOPICS,categories,relevance,words
 MODEL="gpt-4.1-nano"  # Fixed audited price, independent of vacancy scoring model
 
-RUBRIC="cv-evidence-hybrid-v5"
+RUBRIC="cv-evidence-hybrid-v6"
 COST_INPUT_PER_M=0.10
 COST_OUTPUT_PER_M=0.40
 INPUT_CHAR_LIMIT=12500
@@ -33,6 +33,18 @@ def evidence_for_prompt(plan):
     return [{"id":f"{idx}:{n}","empresa":e["company"],"cargo":e["role"],
              "fato":fact} for idx,e in enumerate(EXPERIENCE)
             for n,fact in enumerate(e["facts"])]
+
+def quality_gate(plan,candidate,jd):
+    """Require hybrid evidence to cover at least the baseline's JD topics."""
+    needs=categories(jd+" "+plan["title"],TOPICS)
+    title_topics=categories(plan["title"],TOPICS)
+    def metrics(rows):
+        facts=[f for e in rows for f in e["facts"]]
+        covered=set().union(*(categories(f,FACT_TOPICS) for f in facts)) if facts else set()
+        title_hits=sum(1 for f in facts if categories(f,FACT_TOPICS)&title_topics)
+        relevant=sum(1 for f in facts if relevance(f,needs,words(jd))>0)
+        return (len(covered&needs),title_hits,relevant)
+    return metrics(candidate)>=metrics(plan["experience"])
 
 def selected_evidence(proposal,plan):
     """Merge only verified source facts into the complete chronology.
@@ -144,7 +156,7 @@ def apply_hybrid(cur,normalized_url,jd,plan):
             return plan,{"mode":"cached_fallback","ai_calls":0,"cost_usd":0.0}
         accepted=validate_text(cached[0],plan)
         selected=selected_evidence(cached[0],plan)
-        if selected:
+        if selected and quality_gate(plan,selected,jd):
             plan={**plan,"summary":accepted or plan["summary"],"experience":selected or plan["experience"]}
             return plan,{"mode":"cached_hybrid","ai_calls":0,"cost_usd":0.0}
     # Conservative upper bound based on tightly bounded message and max output.
@@ -160,7 +172,7 @@ def apply_hybrid(cur,normalized_url,jd,plan):
         actual=price(usage)
         accepted=validate_text(candidate,plan)
         selected=selected_evidence(candidate,plan)
-        if actual<=MAX_COST_USD and selected:
+        if actual<=MAX_COST_USD and selected and quality_gate(plan,selected,jd):
             plan={**plan,"summary":accepted or plan["summary"],"experience":selected or plan["experience"]}
             success=True
         # Cache success AND invalid output to prevent recurring charges for identical input.

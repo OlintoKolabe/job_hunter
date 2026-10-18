@@ -43,7 +43,7 @@ class Phase3ContractTests(unittest.TestCase):
     def test_block4_scoring_is_bounded_and_reproducible(self):
         from block4_score import score_job
         row={"title":"Senior Product Manager","location":"Brazil Remote",
-             "workplaceType":"remote","description":"Own product strategy, product roadmap, product discovery, and product backlog. Manage stakeholders and improve customer adoption in healthcare."}
+             "workplaceType":"remote","description":"Own product strategy, product roadmap, product discovery, and product backlog. Manage stakeholders and improve customer adoption in healthcare while coordinating sprint planning, research insights and business goals with teams."}
         first=score_job(row,"Product Manager")
         self.assertEqual(first,score_job(row,"Product Manager"))
         self.assertGreater(first["score"],0)

@@ -20,8 +20,10 @@ export function OpportunitiesPanel(){
    const scoredOrAttempted=new Set();
    let resolved=0;
    async function enrichAvailable(){
-     const waiting=[...new Map([...all.values(),...uncertain.values()].filter(j=>!scoredOrAttempted.has(j.url) &&
-       (j.jd_status==='pendente' || (j.ranking?.score==null && ['greenhouse','inhire'].some(src=>j.source?.toLowerCase().includes(src)))).map(j=>[j.url,j])).values()];
+     const candidates=[...all.values(),...uncertain.values()].filter(j=>!scoredOrAttempted.has(j.url) &&
+       (j.jd_status==='pendente' || (j.ranking?.score==null &&
+       ['greenhouse','inhire'].some(src=>j.source?.toLowerCase().includes(src)))));
+     const waiting=[...new Map(candidates.map(j=>[j.url,j])).values()];
      if(!waiting.length)return;
      setEvaluationTotal(v=>v+waiting.length);
      for(let start=0;start<waiting.length;start+=10){

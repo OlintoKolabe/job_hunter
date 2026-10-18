@@ -101,9 +101,11 @@ def hydrate_jobs(cursor,jobs,roles,url_key,limit=PER_BATCH_LIMIT):
         complete={**j,"description":description}
         jd_hash=hashlib.sha256(description.encode()).hexdigest() if description else ''
         evaluation=None
+        ai_status='cache_or_disabled'
         # Requires approved migration before deployment.
         if description:
             evaluation=get_cached(cursor,key,jd_hash,roles)
+            if evaluation is not None:ai_status='cache'
         if evaluation is None:
             evaluation=score_job(complete,roles)
             model='deterministic'
@@ -113,14 +115,16 @@ def hydrate_jobs(cursor,jobs,roles,url_key,limit=PER_BATCH_LIMIT):
                     with budget_conn.cursor() as budget_cur:
                         usage_id=reserve(budget_cur,key)
                 if usage_id is not None:
+                    ai_status='attempted'
                     extracted=None; actual=0.002
                     try:
                         extracted=interpret(description)
                         if extracted:
                             usage=extracted.get('usage',{})
                             actual=(usage.get('prompt_tokens',0)*0.20+usage.get('completion_tokens',0)*1.20)/1000000
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        ai_status='failed'
+                        print('JH_AI_INTERPRET_FAILURE',type(exc).__name__,flush=True)
                     finally:
                         with psycopg.connect(os.environ['DATABASE_URL'],connect_timeout=7) as budget_conn:
                             with budget_conn.cursor() as budget_cur:
@@ -129,7 +133,12 @@ def hydrate_jobs(cursor,jobs,roles,url_key,limit=PER_BATCH_LIMIT):
                         evaluation=merge_semantic_requirements(evaluation,extracted['requirements'])
                         evaluation['ai_interpreted']=True
                         model='hybrid'
-            if description and evaluation.get('score') is not None:save(cursor,key,jd_hash,roles,evaluation,model)
+                        ai_status='interpreted'
+                else:
+                    ai_status='budget_exhausted'
+            elif description:
+                ai_status='disabled'
+            if description and (evaluation.get('score') is not None or model=='hybrid'):save(cursor,key,jd_hash,roles,evaluation,model)
         output.append({**j,"ranking":evaluation,"jd_evidence":signals(complete,roles),
-                       "jd_status":origin if description else ("pendente" if (key,j) in pending[limit:] else "indisponivel")})
+                       "ai_status":ai_status,"jd_status":origin if description else ("pendente" if (key,j) in pending[limit:] else "indisponivel")})
     return output,count

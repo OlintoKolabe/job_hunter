@@ -84,10 +84,10 @@ export function OpportunitiesPanel(){
  async function generateCv(job){
    setCvNow(prev=>[...prev,job.url]);setError('');
    try{
-     const response=await fetch('/api/resume/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:job.url})});
+     const response=await fetch('/api/resume/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:job.url,title:job.title,company:job.company})});
      if(!response.ok){const error=await response.json().catch(()=>null);throw Error(error?.detail||'Falha ao gerar currículo')}
      const file=await response.blob();const fileUrl=URL.createObjectURL(file);
-     const a=document.createElement('a');a.href=fileUrl;a.download='curriculo-job-hunter.docx';a.click();setTimeout(()=>URL.revokeObjectURL(fileUrl),1000);
+     const a=document.createElement('a');a.href=fileUrl;a.download=['Olinto Manso Pereira',job.title,job.company].map(x=>String(x||'').replace(/[\\/:*?\"<>|]/g,'').trim()).join(' - ')+'.docx';a.click();setTimeout(()=>URL.revokeObjectURL(fileUrl),1000);
    }catch(error){setError(error.message)}finally{setCvNow(prev=>prev.filter(x=>x!==job.url))}
  }
  const currentMatches=searchedQuery!==''&&searchedQuery===query();

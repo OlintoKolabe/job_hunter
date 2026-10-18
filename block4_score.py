@@ -211,10 +211,10 @@ def merge_semantic_requirements(base, extracted):
             points=0.0
         rows.append({"name":name,"type":kind,"status":"comprovado" if degree=="direta" else "parcial" if degree=="transferivel" else "nao_comprovado",
                      "match_level":degree,"match_points":points,"evidence":evidence,
-                     "evidence_id":skill if proof else "liberpay_payments_context" if payments_context else None,
-                     "explanation":("Experiência diretamente documentada" if proof else
-                                    "Experiência de domínio transferível, mas em função e infraestrutura diferentes" if payments_context else
-                                    "Não há evidência suficiente no perfil documentado; não significa incapacidade")})
+                     "evidence_id":skill if evidence and proof else "liberpay_payments_context" if evidence and payments_context else None,
+                     "explanation":("Experiência diretamente documentada" if degree=="direta" else
+                                    "Experiência aplicável parcialmente, sem equivalência plena de função ou tecnologia" if degree=="transferivel" else
+                                    "Não há evidência suficiente no perfil documentado; isso não prova incapacidade")})
     if not rows:return base
     weights=[3 if r["type"]=="obrigatorio" else 1 for r in rows]
     total=sum(weights)

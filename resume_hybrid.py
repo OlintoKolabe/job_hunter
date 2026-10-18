@@ -216,7 +216,7 @@ def request_micro_summary(plan,jd,opener=urllib.request.urlopen):
     evidence_text="\n".join(f'{e["id"]} | {e["empresa"]} | {e["fato"]}' for e in evidence)
     jd_text=clean(jd)
     # Budget career evidence first, then preserve both start and end of a long JD.
-    jd_budget=max(1000,min(5500,INPUT_CHAR_LIMIT-len(evidence_text)-1700))
+    jd_budget=max(900,min(4500,INPUT_CHAR_LIMIT-len(evidence_text)-3200))
     if len(jd_text)>jd_budget:
         front=jd_budget*2//3
         jd_text=jd_text[:front]+" [trecho intermediário omitido] "+jd_text[-(jd_budget-front-35):]

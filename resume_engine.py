@@ -79,11 +79,22 @@ STOP={"the","and","with","for","that","from","have","will","are","this","your","
 def words(value):
     value=html.unescape(re.sub(r"<[^>]+>"," ",value or "")).lower()
     return {w for w in re.findall(r"[a-záàâãéêíóôõúüç0-9]{3,}",value) if w not in STOP}
+def chronology_index(item):
+    """Actual start dates, including overlapping employment."""
+    starts={
+      "Centauro.life":(2026,4),"Neocoder / LiberPay":(2025,5),"Neocoder":(2025,2),
+      "Hexagon Mining":(2023,8),"Stefanini Brasil / Hexagon Mining":(2023,5),
+      "Dotz Inc. / Meu Varejo":(2022,8),"Top Saúde Clínicas Médicas":(2020,2),
+      "Kolabe":(2018,5),"Lagoa Parques e Hotéis":(2015,1),
+      "Companhia de Negócios":(2014,6),"Grupo Privé":(2012,6),
+      "Aviva":(2011,11),"Digital Design Comunicação":(2000,1)}
+    return starts[item["company"]]
+
 def build_plan(jd, title):
     if not jd.strip(): raise ValueError("JD vazio")
     important=words(jd)
     scored=[]
-    for idx,item in enumerate(EXPERIENCE):
+    for idx,item in sorted(enumerate(EXPERIENCE),key=lambda v:chronology_index(v[1]),reverse=True):
         facts=sorted(item["facts"], key=lambda f:(-len(words(f)&important),item["facts"].index(f)))
         overlap=sum(min(3,len(words(f)&important)) for f in facts[:4])
         scored.append((idx,item,facts,overlap))

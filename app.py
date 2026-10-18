@@ -193,6 +193,7 @@ def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:
             # Scoring runs from the UI enrichment request after results are visible.
             coverage={"cached":0,"fetched":0,"missing":0,"not_attempted":len(visible)}
     visible=[{**j,"ranking":None,"jd_status":"pendente"} for j in visible]
+    pending=[{**j,"ranking":None,"jd_status":"avaliacao_manual"} for j in pending]
     # Pending eligibility is not automatically enriched or scored.
     fresh_count=len(visible)
     return {"source":"Multifuente","queried":len(sources),"total":len(items),
@@ -355,6 +356,7 @@ def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False
             # Scoring runs from the UI enrichment request after results are visible.
             coverage={"cached":0,"fetched":0,"missing":0,"not_attempted":len(visible)}
     visible=[{**j,"ranking":None,"jd_status":"pendente"} for j in visible]
+    pending=[{**j,"ranking":None,"jd_status":"avaliacao_manual"} for j in pending]
     # Pending eligibility is not automatically enriched or scored.
     fresh_count=len(visible)
     return {"total_sources":len(tasks),"due_only":due_only,"offset":offset,"next_offset":offset+len(batch),

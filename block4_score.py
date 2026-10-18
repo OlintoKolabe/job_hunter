@@ -74,6 +74,13 @@ SKILLS.update({
  "launch":(("go-to-market","go to market","product launch","product lifecycle","nps","product-market fit"),"product","Neocoder / Kolabe: ciclo de produto, PMF e lançamentos"),
  "segmentation":(("customer segmentation","loyalty programs","fidelizacao","customer journey"),"marketing","Dotz: CRM, segmentação, fidelização e jornada"),
 })
+# Domain evidence grounded in the professional history; do not infer technical implementation.
+SKILLS.update({
+ "healthcare_product":(("healthcare product","healthtech product","clinical workflows","clinical operations platform"),"product","Top Saúde: liderança do produto interno SysTop e processos de operação clínica"),
+ "mining_product":(("mining product","mining software product","autonomous mining operations","mining traffic control"),"product","Hexagon Mining: Product Manager do Mission Manager em controle de tráfego autônomo"),
+ "crypto_payments":(("crypto payments","cryptocurrency payments","stablecoin payment","web3 payments"),"product","Neocoder/LiberPay: consultoria de produtos e estratégia B2B em pagamentos cripto e stablecoins; não comprova Pix ou adquirência"),
+ "loyalty_product":(("loyalty crm","retail loyalty","loyalty products","loyalty platform"),"product","Dotz: Product Owner do Meu Varejo, CRM, fidelização e inteligência comercial"),
+})
 # Explicitly non-proven qualifications: absence is UNKNOWN, not a claim of inability.
 UNPROVEN={
  "spanish":("fluent spanish","spanish fluency","fluency in spanish","espanhol fluente"),

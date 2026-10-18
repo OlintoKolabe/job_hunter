@@ -39,7 +39,7 @@ class Block41Tests(unittest.TestCase):
         self.assertEqual(x["requirements"][0]["match_level"],"transferivel")
 
     def test_zero_when_four_requirements_have_no_evidence(self):
-        rows=[{"name":n,"type":"obrigatorio","skill_id":None} for n in ("Python coding","QA automation","Algorithms","Computer science diploma")]
+        rows=[{"name":n,"type":"obrigatorio","skill_id":None} for n in ("Python coding","QA automation","Algorithms","Degree in computer science")]
         x=merge_semantic_requirements({"score":None},rows)
         self.assertEqual(x["score"],0)
 

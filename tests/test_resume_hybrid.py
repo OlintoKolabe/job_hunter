@@ -7,6 +7,11 @@ JD="Product Manager responsável por roadmap, backlog, pesquisa de usuários e s
 class HybridResumeTests(unittest.TestCase):
     def setUp(self):
         self.plan=build_plan(JD,"Product Manager")
+    def test_word_aware_jd_relevance(self):
+        from resume_engine import contains, categories, TOPICS
+        self.assertTrue(contains("Gestão de marketing e campanhas", "marketing"))
+        self.assertFalse(contains("remarketing", "marketing"))
+        self.assertIn("growth", categories("Campanhas Google Ads e marketing", TOPICS))
     def test_no_api_when_disabled(self):
         cursor=MagicMock()
         with patch.dict(os.environ,{"JH_CV_AI_ENABLED":"0","OPENAI_API_KEY":"dummy"}):
@@ -67,6 +72,29 @@ class HybridResumeTests(unittest.TestCase):
         self.assertEqual(plan["summary"],self.plan["summary"])
         self.assertTrue(any(e["facts"] for e in plan["experience"] if e["source_index"]==2))
         self.assertTrue(audit(plan,render_docx(plan))["factual_bullets_verified"])
+    def test_promotes_older_marketing_role_with_grounded_evidence(self):
+        from resume_engine import EXPERIENCE
+        picked=h.selected_evidence({"evidence_ids":["9:0","9:1","13:0"]},self.plan)
+        self.assertIsNotNone(picked)
+        baseline={f for e in self.plan["experience"] for f in e["facts"]}
+        result={f for e in picked for f in e["facts"]}
+        self.assertTrue(baseline.issubset(result))
+        self.assertIn(EXPERIENCE[9]["facts"][0],result)
+        self.assertIn(EXPERIENCE[13]["facts"][0],result)
+        report=audit({**self.plan,"experience":picked},
+                     render_docx({**self.plan,"experience":picked}))
+        self.assertTrue(report["factual_bullets_verified"])
+    def test_single_header_when_compact_role_promoted(self):
+        from docx import Document
+        picked=h.selected_evidence({"evidence_ids":["9:0","13:0"]},self.plan)
+        data=render_docx({**self.plan,"experience":picked})
+        txt="\\n".join(p.text for p in Document(io.BytesIO(data)).paragraphs)
+        self.assertEqual(txt.count("Diretor de marketing — Lagoa Parques e Hotéis"),1)
+    def test_does_not_erase_baseline_on_sparse_ai_selection(self):
+        picked=h.selected_evidence({"evidence_ids":["1:0"]},self.plan)
+        self.assertIsNotNone(picked)
+        original={f for e in self.plan["experience"] for f in e["facts"]}
+        self.assertTrue(original.issubset({f for e in picked for f in e["facts"]}))
     def test_render_unchanged_provenance(self):
         data=render_docx(self.plan)
         self.assertTrue(audit(self.plan,data)["factual_bullets_verified"])

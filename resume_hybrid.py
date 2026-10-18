@@ -11,7 +11,7 @@ from score_repository import reserve,settle,key_for
 from resume_engine import ENGINE_VERSION,EXPERIENCE
 MODEL="gpt-4.1-nano"  # Fixed audited price, independent of vacancy scoring model
 
-RUBRIC="cv-evidence-hybrid-v3"
+RUBRIC="cv-evidence-hybrid-v4"
 COST_INPUT_PER_M=0.10
 COST_OUTPUT_PER_M=0.40
 INPUT_CHAR_LIMIT=12500
@@ -35,22 +35,38 @@ def evidence_for_prompt(plan):
             for n,fact in enumerate(e["facts"])]
 
 def selected_evidence(proposal,plan):
+    """Merge only verified source facts into the complete chronology.
+
+    AI may prioritize evidence, but cannot erase the deterministic floor or
+    select an occupation absent from the displayed professional history.
+    """
     if not isinstance(proposal,dict):return None
     ids=proposal.get("evidence_ids")
-    if not isinstance(ids,list) or not 3<=len(ids)<=16 or len(ids)!=len(set(ids)):return None
-    available={f"{idx}:{n}":(idx,fact) for idx,e in enumerate(EXPERIENCE) for n,fact in enumerate(e["facts"])}
-    if any(i not in available for i in ids):return None
-    # Across at least three roles; no invented text can reach the document.
+    if not isinstance(ids,list) or not ids or len(ids)>22:return None
+    available={f"{idx}:{n}":(idx,fact) for idx,e in enumerate(EXPERIENCE)
+               for n,fact in enumerate(e["facts"])}
+    if any(not isinstance(i,str) or i not in available for i in ids):return None
     groups={}
     for i in ids:
         idx,fact=available[i]
-        groups.setdefault(idx,[]).append(fact)
-    if len(groups)<2 or len(groups)>8 or any(len(v)>4 for v in groups.values()):return None
-    expanded=[]
-    for e in plan["experience"]:
-        idx=e["source_index"]
-        expanded.append({**e,"facts":groups.get(idx,[])})
-    return expanded
+        if fact not in groups.setdefault(idx,[]):groups[idx].append(fact)
+    baseline={e["source_index"]:list(e["facts"]) for e in plan["experience"]}
+    # Keep all previously verified facts as a minimum; add the most relevant
+    # model choices up to three bullets per career position, max 7 positions.
+    final={i:facts[:3] for i,facts in baseline.items() if facts}
+    for idx,facts in groups.items():
+        if idx not in final and len(final)>=7:continue
+        current=final.setdefault(idx,[])
+        for fact in facts:
+            if fact not in current and len(current)<3:current.append(fact)
+    total=sum(len(facts) for facts in final.values())
+    if total<6 or len(final)<3:return None
+    chronological=[]
+    for idx,item in enumerate(EXPERIENCE):
+        if idx in final:
+            chronological.append({"role":item["role"],"company":item["company"],
+                                  "dates":item["dates"],"facts":final[idx],"source_index":idx})
+    return chronological
 
 def validate_text(proposal,plan):
     if not isinstance(proposal,dict):return None
@@ -58,7 +74,7 @@ def validate_text(proposal,plan):
     refs=proposal.get("source_ids")
     if not isinstance(summary,str) or not (40<=len(summary)<=650):return None
     if not isinstance(refs,list) or not refs or len(refs)>8:return None
-    allowed={str(e["source_index"]) for e in plan["experience"]}
+    allowed={str(i) for i in range(len(EXPERIENCE))}
     if any(str(k) not in allowed for k in refs):return None
     # Ban any claims about metrics, numbers, qualifications or industries
     # not contained in cited evidence. Otherwise preserve deterministic draft.
@@ -124,7 +140,7 @@ def apply_hybrid(cur,normalized_url,jd,plan):
             return plan,{"mode":"cached_fallback","ai_calls":0,"cost_usd":0.0}
         accepted=validate_text(cached[0],plan)
         selected=selected_evidence(cached[0],plan)
-        if accepted or selected:
+        if selected:
             plan={**plan,"summary":accepted or plan["summary"],"experience":selected or plan["experience"]}
             return plan,{"mode":"cached_hybrid","ai_calls":0,"cost_usd":0.0}
     # Conservative upper bound based on tightly bounded message and max output.
@@ -140,7 +156,7 @@ def apply_hybrid(cur,normalized_url,jd,plan):
         actual=price(usage)
         accepted=validate_text(candidate,plan)
         selected=selected_evidence(candidate,plan)
-        if actual<=MAX_COST_USD and (accepted or selected):
+        if actual<=MAX_COST_USD and selected:
             plan={**plan,"summary":accepted or plan["summary"],"experience":selected or plan["experience"]}
             success=True
         # Cache success AND invalid output to prevent recurring charges for identical input.

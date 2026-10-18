@@ -41,20 +41,22 @@ class HybridResumeTests(unittest.TestCase):
         chosen=[sample[0]["id"],sample[1]["id"],sample[6]["id"],sample[8]["id"],sample[12]["id"]]
         candidate={"evidence_ids":chosen}
         selected=h.selected_evidence(candidate,self.plan)
+        self.assertIsNone(selected)
+        selected=h.selected_evidence({"evidence_ids":["1:0","1:1","2:0","2:1","4:0","6:0"]},self.plan)
         self.assertIsNotNone(selected)
         for e in selected:
             from resume_engine import EXPERIENCE
             self.assertTrue(all(f in EXPERIENCE[e["source_index"]]["facts"] for f in e["facts"]))
         self.assertIsNone(h.selected_evidence({"evidence_ids":chosen[:-1]+["999:10"]},self.plan))
     def test_no_repeated_factual_bullets_after_reselection(self):
-        ids=["1:0","1:1","2:0","4:0","6:0"]
+        ids=["1:0","1:1","2:0","2:1","4:0","6:0"]
         selected=h.selected_evidence({"evidence_ids":ids},self.plan)
         self.assertIsNotNone(selected)
         new_plan={**self.plan,"experience":selected}
         self.assertTrue(audit(new_plan,render_docx(new_plan))["factual_bullets_verified"])
     def test_cache_skips_ai(self):
         cursor=MagicMock()
-        candidate={"summary":"Profissional com atuação em gestão de produtos e roadmaps digitais, alinhando decisões com stakeholders e equipes técnicas.","source_ids":[str(e["source_index"]) for e in self.plan["experience"] if e["facts"]][:1],"evidence_ids":["1:0","1:1","2:0","4:0","6:0"]}
+        candidate={"summary":"Profissional com atuação em gestão de produtos e roadmaps digitais, alinhando decisões com stakeholders e equipes técnicas.","source_ids":[str(e["source_index"]) for e in self.plan["experience"] if e["facts"]][:1],"evidence_ids":["1:0","1:1","2:0","2:1","4:0","6:0"]}
         cursor.fetchone.return_value=(candidate,)
         with patch.dict(os.environ,{"JH_CV_AI_ENABLED":"1","OPENAI_API_KEY":"dummy"}):
             with patch.object(h,"request_micro_summary",side_effect=AssertionError("should not call")):
@@ -84,7 +86,7 @@ class HybridResumeTests(unittest.TestCase):
         self.assertTrue(audit(plan,render_docx(plan))["factual_bullets_verified"])
     def test_promotes_older_marketing_role_with_grounded_evidence(self):
         from resume_engine import EXPERIENCE
-        picked=h.selected_evidence({"evidence_ids":["9:0","9:1","13:0"]},self.plan)
+        picked=h.selected_evidence({"evidence_ids":["9:0","9:1","3:3","11:0","12:0","13:0"]},self.plan)
         self.assertIsNotNone(picked)
         baseline={f for e in self.plan["experience"] for f in e["facts"]}
         result={f for e in picked for f in e["facts"]}
@@ -96,7 +98,7 @@ class HybridResumeTests(unittest.TestCase):
         self.assertTrue(report["factual_bullets_verified"])
     def test_single_header_when_compact_role_promoted(self):
         from docx import Document
-        picked=h.selected_evidence({"evidence_ids":["9:0","13:0"]},self.plan)
+        picked=h.selected_evidence({"evidence_ids":["9:0","3:3","11:0","12:0","13:0","1:0"]},self.plan)
         data=render_docx({**self.plan,"experience":picked})
         txt="\\n".join(p.text for p in Document(io.BytesIO(data)).paragraphs)
         self.assertEqual(txt.count("Diretor de marketing — Lagoa Parques e Hotéis"),1)
@@ -144,7 +146,7 @@ class HybridResumeTests(unittest.TestCase):
         p=build_plan(jd,"Product Manager")
         self.assertFalse(h.quality_gate(p,candidate,jd))
     def test_comparison_gate_approves_superset_of_proven_evidence(self):
-        candidate=h.selected_evidence({"evidence_ids":["8:0","9:0","13:0"]},self.plan)
+        candidate=h.selected_evidence({"evidence_ids":["8:0","9:0","13:0","3:3","11:0","12:0"]},self.plan)
         self.assertIsNotNone(candidate)
         self.assertFalse(h.quality_gate(self.plan,candidate,JD))
     def test_render_unchanged_provenance(self):

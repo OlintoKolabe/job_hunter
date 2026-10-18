@@ -170,7 +170,7 @@ class Block41Tests(unittest.TestCase):
         rows=[
             {"name":"roadmap","type":"obrigatorio","skill_id":"roadmap"},
             {"name":"backlog","type":"obrigatorio","skill_id":"backlog"},
-            {"name":"project planning","type":"obrigatorio","skill_id":None},
+            {"name":"SAP ABAP ERP programming","type":"obrigatorio","skill_id":None},
             {"name":"crm","type":"desejavel","skill_id":"crm"}
         ]
         score=merge_semantic_requirements({"score":None},rows)

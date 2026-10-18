@@ -42,7 +42,7 @@ def extract_public_jd(url):
             raw=response.read(MAX_HTML+1)
             if len(raw)>MAX_HTML:return None
         page=raw.decode("utf-8","replace")
-        for match in re.findall(r"<script[^>]*type=.[aA]pplication/ld[+]json.[^>]*>(.*?)</script>",page,re.I|re.S):
+        for match in re.findall(r'<script[^>]*\\btype\\s*=\\s*(?:["\\\']application/ld\\+json["\\\']|application/ld\\+json)(?=[\\s>])[^>]*>(.*?)</script>',page,re.I|re.S):
             try:
                 obj=json.loads(match)
                 candidates=obj if isinstance(obj,list) else [obj]

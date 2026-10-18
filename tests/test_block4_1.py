@@ -31,6 +31,22 @@ class Block41Tests(unittest.TestCase):
         self.assertEqual(coverage["cached"],1)
         interpret_ai.assert_not_called()
         compute.assert_not_called()
+    def test_transferable_payment_context(self):
+        rows=[{"name":n,"type":"obrigatorio","skill_id":sid} for n,sid in [("Pix payments",None),("Roadmap", "roadmap"),("Card settlement",None),("Fraud tooling",None)]]
+        x=merge_semantic_requirements({"score":None},rows)
+        self.assertGreater(x["score"],0)
+        self.assertLess(x["score"],70)
+        self.assertEqual(x["requirements"][0]["match_level"],"transferivel")
+
+    def test_zero_when_four_requirements_have_no_evidence(self):
+        rows=[{"name":n,"type":"obrigatorio","skill_id":None} for n in ("Python coding","QA automation","Algorithms","Computer science diploma")]
+        x=merge_semantic_requirements({"score":None},rows)
+        self.assertEqual(x["score"],0)
+
+    def test_two_matches_do_not_fake_perfect_score(self):
+        rows=[{"name":"Roadmap","type":"obrigatorio","skill_id":"roadmap"},{"name":"Backlog","type":"obrigatorio","skill_id":"backlog"}]
+        self.assertIsNone(merge_semantic_requirements({"score":None},rows)["score"])
+
     def test_secret_unset_means_no_ai(self):
         with patch.dict("os.environ",{"JH_AI_ENABLED":"0","OPENAI_API_KEY":"dummy"}):
             self.assertIsNone(interpret("required project management"))

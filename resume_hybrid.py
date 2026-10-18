@@ -6,9 +6,10 @@ Every paid result is saved in the existing score-cache table under an isolated
 rubric, never overwriting the vacancy scores.
 """
 import hashlib,html,json,os,re,unicodedata,urllib.request
+from psycopg.types.json import Jsonb
 from score_repository import reserve,settle,key_for
 from resume_engine import ENGINE_VERSION,EXPERIENCE
-from ai_interpreter import MODEL
+MODEL="gpt-4.1-nano"  # Fixed audited price, independent of vacancy scoring model
 
 RUBRIC="cv-summary-hybrid-v1"
 COST_INPUT_PER_M=0.20
@@ -124,7 +125,7 @@ def apply_hybrid(cur,normalized_url,jd,plan):
                 ON CONFLICT (normalized_url,jd_hash,profile_version,rubric_version,roles_hash)
                 DO UPDATE SET result=EXCLUDED.result,model=EXCLUDED.model,created_at=NOW()""",
                 (normalized_url,plan["jd_sha256"],ENGINE_VERSION,RUBRIC,key_for(digest),
-                 __import__("psycopg").types.json.Jsonb(candidate),"cv_hybrid"))
+                 Jsonb(candidate),"cv_hybrid"))
             success=True
         info={"mode":"hybrid" if success else "fallback","ai_calls":1,"cost_usd":actual}
     except Exception:

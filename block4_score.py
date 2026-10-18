@@ -71,9 +71,9 @@ UNPROVEN={
 MANDATORY=("required","must have","mandatory","essential","obrigatorio","obrigatoria","necessario","necessaria","requisito")
 DESIRABLE=("nice to have","preferred","desirable","plus","desejavel","diferencial")
 def requirement_lines(jd):
-    # Limit to requirement-like paragraphs/list entries rather than unrelated narrative.
-    raw=re.sub(r"<[^>]+>","\\n",jd or "")
-    rows=re.split(r"[\\n\\r•]+|(?<=[.;])\\s+",raw)
+    # Keep HTML bullet boundaries and distinguish mandatory vs desirable entries.
+    raw=re.sub(r"<[^>]+>", "\n",jd or "")
+    rows=re.split(r"[\n\r•]+|(?<=[.;])\s+",raw)
     return [fold(x).strip() for x in rows if len(fold(x).strip())>=8][:120]
 
 def score_job(job,roles):

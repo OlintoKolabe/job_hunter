@@ -10,7 +10,7 @@ from datetime import datetime,timezone,timedelta
 from urllib.parse import urlsplit,quote
 from collectors import fetch_json
 from jd_signals import signals
-from block4_score import score_job
+from block4_score import score_job,merge_semantic_requirements
 from jd_retrieval import extract_public_jd
 from score_repository import get_cached,save,reserve,settle
 from ai_interpreter import interpret
@@ -126,7 +126,8 @@ def hydrate_jobs(cursor,jobs,roles,url_key,limit=PER_BATCH_LIMIT):
                             with budget_conn.cursor() as budget_cur:
                                 settle(budget_cur,usage_id,actual,extracted is not None)
                     if extracted:
-                        evaluation={**evaluation,'semantic_requirements':extracted['requirements'],'ai_interpreted':True}
+                        evaluation=merge_semantic_requirements(evaluation,extracted['requirements'])
+                        evaluation['ai_interpreted']=True
                         model='hybrid'
             if description:save(cursor,key,jd_hash,roles,evaluation,model)
         output.append({**j,"ranking":evaluation,"jd_evidence":signals(complete,roles),

@@ -77,7 +77,13 @@ def pull(source,slug,location='brazil'):
             value=item(slug,j.get("title"),j.get("jobUrl") or j.get("applyUrl"),loc,source,j.get("publishedAt"))
             if value:jobs.append(value)
     elif source=="Greenhouse":
-        payload=fetch_json("https://boards-api.greenhouse.io/v1/boards/"+urllib.parse.quote(slug)+"/jobs?content=true")
+        endpoint="https://boards-api.greenhouse.io/v1/boards/"+urllib.parse.quote(slug)+"/jobs"
+        try:
+            payload=fetch_json(endpoint+"?content=true")
+        except ValueError as error:
+            if "response above" not in str(error):raise
+            # Never fail a whole board because its full descriptions exceed the bound.
+            payload=fetch_json(endpoint+"?content=false")
         for j in as_list(payload):
             if not isinstance(j,dict):continue
             location=j.get("location") or {}

@@ -1,10 +1,10 @@
 {
-  "id": "JOB-HUNTER-BLOCK-5-ATS-CV",
+  "id": "JOB-HUNTER-BLOCK-5-CALIBRATION",
   "status": "active",
   "base_ref": "aafe8327f1ff9b9b6cdbc73af6135bf7074f5403",
   "production_ref": "feat/phase1-web-foundation",
-  "feature_ref": "feat/block5-ats-resume-engine",
-  "objective": "On-demand ATS-neutral CV generation from persisted JD and verified professional evidence; immutable audit metadata, no automatic generation, strict AI budget.",
+  "feature_ref": "feat/block5-deterministic-calibration",
+  "objective": "Improve deterministic CV selection, deduplication, factual JD-tailored narrative, chronology, and filename; no AI calls; safe rollback.",
   "allowed_files": [
     "scope/active.json",
     "scripts/check_scope.py",
@@ -50,7 +50,12 @@
     "CV generated only on user action from persisted JD",
     "No unverifiable achievements or credentials",
     "Actual model token billing measured before claiming AI cost",
-    "Re-download identical CV without new AI spending"
+    "Re-download identical CV without new AI spending",
+    "Distinct JD classes produce distinct CV focus",
+    "No duplicate factual bullets",
+    "No AI requests in CV path",
+    "Relevant roles prioritized without changing chronology",
+    "Safe filename candidate-role-company"
   ],
   "deployment": "No deploy or merge without explicit approval"
 }

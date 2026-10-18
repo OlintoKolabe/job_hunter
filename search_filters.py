@@ -60,7 +60,7 @@ ROLE_KEYS={
  "growth":("growth","crescimento","acquisition"),
  "business":("business analyst","analista de negocios","analista de negocio","business operations"),
 }
-NON_TARGET_TITLE=re.compile(r"\b(developer|engineer|scientist|researcher|designer|intern|estagiario|estagiaria|recruiter|account executive|sdr|devops|backend|frontend)\b")
+NON_TARGET_TITLE=re.compile(r"\b(developers?|engineers?|engineering|scientists?|researchers?|designers?|interns?|estagiarios?|estagiarias?|recruiters?|account executive|sdr|devops|backend|frontend)\b")
 def requested_families(terms):
     families=set()
     for term in terms:
@@ -188,7 +188,7 @@ def classify(job,terms,country,mode,days):
     from jd_signals import signals
     evidence=signals(job,", ".join(terms))
     if evidence["spanish_required"]:return "excluded","espanhol_obrigatorio"
-    if not role_match(title,terms) and not evidence["family_evidence"]:return "excluded","cargo"
+    if NON_TARGET_TITLE.search(title):return "excluded","cargo"\n    if not role_match(title,terms) and not evidence["family_evidence"]:return "excluded","cargo"
     loc=fold(job.get("location",""))
     structured_geo=fold(" ".join(str(job.get(k) or "") for k in ("country","countryCode","countryName","city","state","region","eligibleLocations","remoteRegions")))
     loc=(loc+" "+structured_geo).strip()

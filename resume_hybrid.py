@@ -11,7 +11,7 @@ from score_repository import reserve,settle,key_for
 from resume_engine import ENGINE_VERSION,EXPERIENCE,TOPICS,FACT_TOPICS,categories,relevance,words
 MODEL="gpt-4.1-nano"  # Fixed audited price, independent of vacancy scoring model
 
-RUBRIC="cv-evidence-hybrid-v7"
+RUBRIC="cv-evidence-hybrid-v8"
 COST_INPUT_PER_M=0.10
 COST_OUTPUT_PER_M=0.40
 INPUT_CHAR_LIMIT=12500
@@ -44,10 +44,10 @@ def quality_gate(plan,candidate,jd):
         title_hits=sum(1 for f in facts if categories(f,FACT_TOPICS)&title_topics)
         relevant=sum(1 for f in facts if relevance(f,needs,words(jd))>0)
         return (len(covered&needs),title_hits,relevant)
-    baseline=metrics(plan["experience"])
     proposed=metrics(candidate)
-    # None of the independent relevance dimensions may regress.
-    return all(new>=old for new,old in zip(proposed,baseline))
+    # A different choice must cover relevant topics, but may use fewer,
+    # stronger facts than the deterministic draft.
+    return proposed[0]>=min(2,len(needs)) and proposed[2]>=3
 
 def selected_evidence(proposal,plan):
     """Merge only verified source facts into the complete chronology.
@@ -65,15 +65,12 @@ def selected_evidence(proposal,plan):
     for i in ids:
         idx,fact=available[i]
         if fact not in groups.setdefault(idx,[]):groups[idx].append(fact)
-    baseline={e["source_index"]:list(e["facts"]) for e in plan["experience"]}
-    # Keep all previously verified facts as a minimum; add the most relevant
-    # model choices up to three bullets per career position, max 9 positions.
-    final={i:facts[:3] for i,facts in baseline.items() if facts}
+    # The model chooses the evidence; deterministic source validation does not
+    # force irrelevant baseline facts into the final CV.
+    final={}
     for idx,facts in groups.items():
-        if idx not in final and len(final)>=9:continue
-        current=final.setdefault(idx,[])
-        for fact in facts:
-            if fact not in current and len(current)<3:current.append(fact)
+        if len(final)>=9:break
+        final[idx]=facts[:3]
     total=sum(len(facts) for facts in final.values())
     if total<6 or len(final)<3:return None
     chronological=[]

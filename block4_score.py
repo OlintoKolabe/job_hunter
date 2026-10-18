@@ -181,7 +181,7 @@ def merge_semantic_requirements(base, extracted):
         domain_evidence=next((e for terms,e in transferable_domains if any(t in normalized for t in terms)),None)
         relationship=row.get("relationship")
         explicit_skill=bool(proof and any(fold(term) in normalized for term in SKILLS[skill][0]))
-        if technical_core:
+        if technical_core or relationship=="nenhuma":
             degree="nao_comprovada"
             evidence=None
             points=0.0

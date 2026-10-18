@@ -97,7 +97,9 @@ def validate_text(proposal,plan):
     if any(int(k) not in displayed for k in refs):return None
     # Ban any claims about metrics, numbers, qualifications or industries
     # not contained in cited evidence. Otherwise preserve deterministic draft.
-    source=" ".join(f for e in EXPERIENCE if str(EXPERIENCE.index(e)) in {str(r) for r in refs} for f in e["facts"])
+    # Summary claims must be grounded in facts that the final DOCX actually prints,
+    # not undisplayed facts elsewhere in a cited employer's full history.
+    source=" ".join(f for e in chosen if str(e["source_index"]) in {str(r) for r in refs} for f in e["facts"])
     if not set(re.findall(r"\d+(?:[.,]\d+)?",summary)).issubset(set(re.findall(r"\d+(?:[.,]\d+)?",source))):
         return None
     forbidden=("oracle","powerbuilder","aws","azure cloud","pmbok","saFe","scrum master","engenharia",

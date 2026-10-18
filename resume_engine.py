@@ -131,7 +131,7 @@ def build_plan(jd, title):
     title_needs=categories(title,TOPICS)
     # Portuguese role titles may not contain the literal word "marketing".
     # Treat performance-media roles as growth, not as generic product roles.
-    if re.search(r"(?i)\\b(m[ií]dia|performance|tr[aá]fego|aquisi[cç][aã]o)\\b", title):
+    if re.search(r"(?i)\b(m[ií]dia|performance|tr[aá]fego|aquisi[cç][aã]o)\b", title):
         title_needs.add("growth")
         needs.add("growth")
     tokens=words(jd)

@@ -360,6 +360,33 @@ def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False
             "found":len(items),"new":fresh_count,"duplicates":history_excluded,"raw_count":raw_count,"filter_stats":filter_stats,
             "jd_coverage":coverage,"review_items":pending[:150],"items":visible[:80],"notice":"Vagas candidatas: remoto/Brasil e requisitos ainda aguardam análise completa."}
 
+class JDRequest(BaseModel):
+    jobs: list[dict]
+    roles: str=DEFAULT_ROLES
+
+@app.post("/api/jd/enrich")
+def jd_enrich(request: Request, payload: JDRequest):
+    require_auth(request)
+    if len(payload.jobs)>10:raise HTTPException(400,"Máximo de 10 vagas por lote")
+    if len(payload.roles)>700:raise HTTPException(400,"Filtro inválido")
+    rows=[]
+    for j in payload.jobs:
+        if not isinstance(j,dict):raise HTTPException(400,"Vaga inválida")
+        if not str(j.get("url","")).startswith("https://"):raise HTTPException(400,"URL inválida")
+        if len(str(j.get("url","")))>2000:raise HTTPException(400,"URL inválida")
+        rows.append({k:j.get(k,"") for k in ("url","title","company","source","description","location","published","detected_mode","needs_verification")})
+    with psycopg.connect(DATABASE,connect_timeout=7) as conn:
+        with conn.cursor() as cur:
+            keys=[url_key(j["url"]) for j in rows]
+            pairs=[pair_key(j["company"],j["title"]) for j in rows if j["company"]]
+            cur.execute("SELECT normalized_url,pair_key FROM jh_history WHERE normalized_url=ANY(%s) OR pair_key=ANY(%s)",(keys,pairs))
+            history=cur.fetchall()
+            known_urls={r[0] for r in history};known_pairs={r[1] for r in history}
+            fresh=[j for j in rows if url_key(j["url"]) not in known_urls and
+                    (not j["company"] or pair_key(j["company"],j["title"]) not in known_pairs)]
+            result,coverage=hydrate_jobs(cur,fresh,payload.roles,url_key,limit=10)
+    return {"items":result,"jd_coverage":coverage}
+
 @app.get("/api/history")
 def history(request: Request, q: str="", state: str="", limit:int=50, offset:int=0):
     require_auth(request)

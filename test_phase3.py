@@ -62,6 +62,40 @@ class Phase3ContractTests(unittest.TestCase):
         self.assertIn("content=true",seen[0])
         self.assertTrue(jobs[0]["description"])
 
+    def test_block4_greenhouse_detail_link_parses_real_job_id(self):
+        from jd_enrichment import greenhouse_detail_url
+        job={"company":"acme","source":"Greenhouse","url":"https://boards.greenhouse.io/acme/jobs/456789"}
+        self.assertEqual(greenhouse_detail_url(job),"https://boards-api.greenhouse.io/v1/boards/acme/jobs/456789")
+        self.assertIsNone(greenhouse_detail_url({**job,"source":"LinkedIn guest"}))
+
+    def test_block4_cache_and_hydration_keep_unavailable_jobs_unscored(self):
+        from jd_enrichment import hydrate_jobs
+        from app import url_key
+        from unittest.mock import Mock
+        cur=Mock()
+        cur.fetchall.return_value=[]
+        jobs=[{"title":"Product Manager","company":"acme","source":"Greenhouse",
+               "url":"https://boards.greenhouse.io/acme/jobs/456789","location":"Brazil Remote"}]
+        with patch("jd_enrichment.fetch_json",return_value={"content":"<h3>Requirements</h3><li>Product roadmap management</li>"}):
+            scored,coverage=hydrate_jobs(cur,jobs,"Product Manager",url_key,limit=10)
+        self.assertEqual(coverage["fetched"],1)
+        self.assertEqual(scored[0]["ranking"]["score"],100)
+        self.assertEqual(scored[0]["jd_status"],"fetched")
+        self.assertTrue(any("INSERT INTO jh_jd_cache" in str(x) for x in cur.execute.call_args_list))
+
+    def test_block4_bounded_remote_hydration(self):
+        from jd_enrichment import hydrate_jobs
+        from app import url_key
+        from unittest.mock import Mock
+        cur=Mock();cur.fetchall.return_value=[]
+        jobs=[{"title":"Product Manager","company":"acme","source":"Greenhouse",
+            "url":"https://boards.greenhouse.io/acme/jobs/"+str(12000+i)} for i in range(15)]
+        with patch("jd_enrichment.fetch_json",return_value={"content":"<h3>Requirements</h3><li>Product roadmap</li>"}) as fetch:
+            scored,coverage=hydrate_jobs(cur,jobs,"Product Manager",url_key,limit=10)
+        self.assertEqual(fetch.call_count,10)
+        self.assertEqual(coverage["not_attempted"],5)
+        self.assertEqual(sum(j["jd_status"]=="pendente" for j in scored),5)
+
     def test_block4_fit_is_about_requirements_not_preferences(self):
         from block4_score import score_job
         jd="Required: product roadmap and backlog management. Required: fluent Spanish."

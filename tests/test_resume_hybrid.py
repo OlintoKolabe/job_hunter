@@ -21,9 +21,25 @@ class HybridResumeTests(unittest.TestCase):
         self.assertIsNone(h.validate_text({"summary":"Profissional com experiência em produto digital, colaboração com stakeholders e roadmaps.","source_ids":["99999"]},self.plan))
     def test_micro_cost_bound(self):
         self.assertLessEqual(h.price({"prompt_tokens":1700,"completion_tokens":220}),0.002)
+    def test_selected_evidence_only_known_facts(self):
+        sample=h.evidence_for_prompt(self.plan)
+        chosen=[sample[0]["id"],sample[1]["id"],sample[6]["id"],sample[8]["id"],sample[12]["id"]]
+        candidate={"evidence_ids":chosen}
+        selected=h.selected_evidence(candidate,self.plan)
+        self.assertIsNotNone(selected)
+        for e in selected:
+            from resume_engine import EXPERIENCE
+            self.assertTrue(all(f in EXPERIENCE[e["source_index"]]["facts"] for f in e["facts"]))
+        self.assertIsNone(h.selected_evidence({"evidence_ids":chosen[:-1]+["999:10"]},self.plan))
+    def test_no_repeated_factual_bullets_after_reselection(self):
+        ids=["1:0","1:1","2:0","4:0","6:0"]
+        selected=h.selected_evidence({"evidence_ids":ids},self.plan)
+        self.assertIsNotNone(selected)
+        new_plan={**self.plan,"experience":selected}
+        self.assertTrue(audit(new_plan,render_docx(new_plan))["factual_bullets_verified"])
     def test_cache_skips_ai(self):
         cursor=MagicMock()
-        candidate={"summary":"Profissional com atuação em gestão de produtos e roadmaps digitais, alinhando decisões com stakeholders e equipes técnicas.","source_ids":[str(e["source_index"]) for e in self.plan["experience"] if e["facts"]][:1]}
+        candidate={"summary":"Profissional com atuação em gestão de produtos e roadmaps digitais, alinhando decisões com stakeholders e equipes técnicas.","source_ids":[str(e["source_index"]) for e in self.plan["experience"] if e["facts"]][:1],"evidence_ids":["1:0","1:1","2:0","4:0","6:0"]}
         cursor.fetchone.return_value=(candidate,)
         with patch.dict(os.environ,{"JH_CV_AI_ENABLED":"1","OPENAI_API_KEY":"dummy"}):
             with patch.object(h,"request_micro_summary",side_effect=AssertionError("should not call")):

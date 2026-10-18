@@ -87,13 +87,13 @@ def score_job(job,roles):
     heading_optional=("nice to have","preferred qualifications","desejaveis","diferenciais")
     heading_end=("benefits","perks","what we offer","about us","sobre nos","responsibilities","responsabilidades","what you will do","about the role")
     for line in requirement_lines(str(jd_raw)):
-        if len(line)<95 and any(line.startswith(h) for h in heading_optional):
+        if len(line)<95 and any(line.strip(" :.-")==h for h in heading_optional):
             section="desejavel"
             continue
-        if len(line)<95 and any(line.startswith(h) for h in heading_required):
+        if len(line)<95 and any(line.strip(" :.-")==h for h in heading_required):
             section="obrigatorio"
             continue
-        if len(line)<95 and any(line.startswith(h) for h in heading_end):
+        if len(line)<95 and any(line.strip(" :.-")==h for h in heading_end):
             section=None
             continue
         is_mandatory=any(x in line for x in MANDATORY) or section=="obrigatorio"
@@ -125,7 +125,8 @@ def score_job(job,roles):
         "salary_informed":any(bool(job.get(k)) for k in ("salary","salaryRange","compensation")),
         "sector":next((name for name,_,phrases in AXES if any(p in title+" "+jd for p in phrases)),None),
     }
-    return {"score":fit,"score_max":100,"confidence":"requisitos_extraidos" if available else "sem_base",
+    confidence=("sem_base" if not available else ("amostra_limitada" if len(requirements)<4 else "requisitos_extraidos"))
+    return {"score":fit,"score_max":100,"confidence":confidence,"evaluated_requirements":len(requirements),
             "fit":fit,"requirements":requirements,"mandatory_count":len(mandatory),
             "desirable_count":len(desirable),"unverified_count":uncertainty,
             "priority":priority,

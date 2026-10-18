@@ -1,10 +1,10 @@
 {
-  "id": "JOB-HUNTER-BLOCK-4.1",
+  "id": "JOB-HUNTER-BLOCK-5-ATS-CV",
   "status": "active",
   "base_ref": "aafe8327f1ff9b9b6cdbc73af6135bf7074f5403",
   "production_ref": "feat/phase1-web-foundation",
-  "feature_ref": "feat/block4-1-ai-scoring",
-  "objective": "Score only confirmed eligible jobs automatically; retrieve missing JD safely; cache semantic extraction and deterministic scores; allow on-demand unconfirmed job evaluation; enforce cost limits and terminal UI states.",
+  "feature_ref": "feat/block5-ats-resume-engine",
+  "objective": "On-demand ATS-neutral CV generation from persisted JD and verified professional evidence; immutable audit metadata, no automatic generation, strict AI budget.",
   "allowed_files": [
     "scope/active.json",
     "scripts/check_scope.py",
@@ -18,7 +18,10 @@
     "ai_interpreter.py",
     "jd_retrieval.py",
     "score_repository.py",
-    "migrations/block4_1.sql"
+    "migrations/block4_1.sql",
+    "resume_engine.py",
+    "tests/test_resume_engine.py",
+    "Dockerfile"
   ],
   "forbidden_paths": [
     ".github/workflows/",
@@ -34,8 +37,7 @@
     "modify Render environment",
     "execute migration on production database without separate authorization",
     "unbounded calls to AI",
-    "automatically score pending eligibility rows",
-    "CV generation"
+    "automatically score pending eligibility rows"
   ],
   "acceptance": [
     "No AI call when cached analysis is current",
@@ -44,7 +46,11 @@
     "Manual pending job evaluation is user-triggered",
     "Terminal UI state for every attempted evaluation",
     "Backend-side spend reservation/limit and request logging",
-    "No changed paths beyond allowlist"
+    "No changed paths beyond allowlist",
+    "CV generated only on user action from persisted JD",
+    "No unverifiable achievements or credentials",
+    "Actual model token billing measured before claiming AI cost",
+    "Re-download identical CV without new AI spending"
   ],
   "deployment": "No deploy or merge without explicit approval"
 }

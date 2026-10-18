@@ -31,6 +31,99 @@ class Block41Tests(unittest.TestCase):
         self.assertEqual(coverage["cached"],1)
         interpret_ai.assert_not_called()
         compute.assert_not_called()
+    def test_transferable_payment_context(self):
+        rows=[{"name":n,"type":"obrigatorio","skill_id":sid} for n,sid in [("Pix payments",None),("Roadmap", "roadmap"),("Card settlement",None),("Fraud tooling",None)]]
+        x=merge_semantic_requirements({"score":None},rows)
+        self.assertGreater(x["score"],0)
+        self.assertLess(x["score"],70)
+        self.assertEqual(x["requirements"][0]["match_level"],"transferivel")
+
+    def test_zero_when_four_requirements_have_no_evidence(self):
+        rows=[{"name":n,"type":"obrigatorio","skill_id":None} for n in ("Python coding","QA automation","Algorithms","Computer science diploma")]
+        x=merge_semantic_requirements({"score":None},rows)
+        self.assertEqual(x["score"],0)
+
+    def test_two_matches_do_not_fake_perfect_score(self):
+        rows=[{"name":"Roadmap","type":"obrigatorio","skill_id":"roadmap"},{"name":"Backlog","type":"obrigatorio","skill_id":"backlog"}]
+        self.assertIsNone(merge_semantic_requirements({"score":None},rows)["score"])
+
+    def test_regrade_existing_semantic_cache_without_openai(self):
+        from datetime import datetime, timezone
+        from unittest.mock import Mock
+        from jd_enrichment import hydrate_jobs
+        url="https://example.com/jobs/transfer"
+        jd="Required payments roadmap experience. "*20
+        cur=Mock()
+        cur.fetchall.return_value=[(url,jd,datetime.now(timezone.utc))]
+        old=[{"name":"Pix payments","type":"obrigatorio","skill_id":None},
+             {"name":"Roadmap","type":"obrigatorio","skill_id":"roadmap"},
+             {"name":"Payment operations","type":"obrigatorio","skill_id":None},
+             {"name":"Operational analytics","type":"desejavel","skill_id":None}]
+        with patch("jd_enrichment.get_cached",return_value=None),patch("jd_enrichment.get_previous_semantic",return_value=old),patch("jd_enrichment.interpret") as ai,patch("jd_enrichment.save") as saved:
+            jobs,_=hydrate_jobs(cur,[{"url":url,"title":"Payments PM"}],"Product Manager",lambda v:v)
+        self.assertTrue(jobs[0]["ranking"]["regraded_from_cache"])
+        self.assertIsNotNone(jobs[0]["ranking"]["score"])
+        ai.assert_not_called()
+        saved.assert_called_once()
+
+    def test_pm_collaboration_is_not_hands_on_coding(self):
+        rows=[{"name":n,"type":"obrigatorio","skill_id":k} for n,k in
+              [("Stakeholder management with software engineers","stakeholders"),
+               ("Backlog","backlog"),("Roadmap","roadmap"),("Scrum","scrum")]]
+        x=merge_semantic_requirements({"score":None},rows)
+        self.assertGreater(x["score"],70)
+        self.assertEqual(x["requirements"][0]["match_level"],"direta")
+
+    def test_unrelated_skill_cannot_award_perfect_score(self):
+        rows=[{"name":"Machine learning infrastructure","type":"obrigatorio","skill_id":"roadmap"},
+              {"name":"Backlog","type":"obrigatorio","skill_id":"backlog"},
+              {"name":"Roadmap","type":"obrigatorio","skill_id":"roadmap"},
+              {"name":"CRM","type":"desejavel","skill_id":"crm"}]
+        x=merge_semantic_requirements({"score":None},rows)
+        self.assertLess(x["score"],100)
+
+    def test_hard_technical_role_excludes_without_paid_ai(self):
+        from block4_score import hard_role_mismatch
+        self.assertTrue(hard_role_mismatch({"title":"Senior Software Engineer"}))
+        self.assertTrue(hard_role_mismatch({"title":"QA Engineer"}))
+        self.assertFalse(hard_role_mismatch({"title":"Technical Product Manager - Developer Experience"}))
+        self.assertFalse(hard_role_mismatch({"title":"Product Manager working with software engineers"}))
+    def test_hard_role_zero_is_returned_without_model_call(self):
+        from datetime import datetime,timezone
+        from unittest.mock import Mock
+        from jd_enrichment import hydrate_jobs
+        url="https://example.com/jobs/engineer"
+        jd="Senior Software Engineer: write production code with Python and maintain CI. "*10
+        cur=Mock()
+        cur.fetchall.return_value=[(url,jd,datetime.now(timezone.utc))]
+        with patch("jd_enrichment.get_cached",return_value=None),patch("jd_enrichment.interpret") as interpret_ai,patch("jd_enrichment.reserve") as reserve_ai,patch("jd_enrichment.save") as save:
+            jobs,_=hydrate_jobs(cur,[{"url":url,"title":"Senior Software Engineer"}],"Product Manager",lambda v:v)
+        self.assertEqual(jobs[0]["ranking"]["score"],0)
+        self.assertEqual(jobs[0]["ai_status"],"not_needed")
+        interpret_ai.assert_not_called()
+        reserve_ai.assert_not_called()
+        save.assert_called_once()
+
+    def test_required_cs_degree_rejects_without_evidence(self):
+        rows=[{"name":"Degree in computer science","type":"obrigatorio","skill_id":None},
+              {"name":"Roadmap","type":"obrigatorio","skill_id":"roadmap"},
+              {"name":"Backlog","type":"obrigatorio","skill_id":"backlog"},
+              {"name":"Scrum","type":"desejavel","skill_id":"scrum"}]
+        self.assertEqual(merge_semantic_requirements({"score":None},rows)["score"],0)
+
+    def test_or_equivalent_experience_not_automatic_rejection(self):
+        rows=[{"name":"Degree in computer science or equivalent experience","type":"obrigatorio","skill_id":None},
+              {"name":"Roadmap","type":"obrigatorio","skill_id":"roadmap"},
+              {"name":"Backlog","type":"obrigatorio","skill_id":"backlog"},
+              {"name":"Scrum","type":"desejavel","skill_id":"scrum"}]
+        self.assertGreater(merge_semantic_requirements({"score":None},rows)["score"],0)
+
+    def test_business_product_role_with_engineering_words_stays_eligible(self):
+        from block4_score import hard_role_mismatch
+        self.assertFalse(hard_role_mismatch({"title":"Senior Product Manager - Software Engineering Platform"}))
+        self.assertFalse(hard_role_mismatch({"title":"Product Owner / QA Automation Platform"}))
+        self.assertTrue(hard_role_mismatch({"title":"Senior Software Engineer"}))
+
     def test_secret_unset_means_no_ai(self):
         with patch.dict("os.environ",{"JH_AI_ENABLED":"0","OPENAI_API_KEY":"dummy"}):
             self.assertIsNone(interpret("required project management"))
@@ -102,18 +195,18 @@ class Block41Tests(unittest.TestCase):
             with patch("urllib.request.urlopen",return_value=BytesIO(json.dumps(payload).encode())):
                 result=interpret(jd)
         self.assertEqual(len(result["requirements"]),1)
-    def test_failed_interpretation_is_cooled_down(self):
+    def test_failed_interpretation_is_persistently_cached(self):
         from datetime import datetime,timezone,timedelta
         from unittest.mock import Mock
         from score_repository import get_cached
         cur=Mock()
-        cur.fetchone.return_value=({"score":None,"_ai_retry_later":True},"ai_error",datetime.now(timezone.utc))
+        cur.fetchone.return_value=({"score":None,"_ai_failed":True},"ai_error",datetime.now(timezone.utc))
         with patch.dict("os.environ",{"JH_AI_ENABLED":"1","OPENAI_API_KEY":"test-only"}):
             result=get_cached(cur,"https://example.com/job","hash","Product Manager")
-        self.assertTrue(result["_ai_retry_later"])
-        cur.fetchone.return_value=({"score":None,"_ai_retry_later":True},"ai_error",datetime.now(timezone.utc)-timedelta(hours=2))
+        self.assertTrue(result["_ai_failed"])
+        cur.fetchone.return_value=({"score":None,"_ai_failed":True},"ai_error",datetime.now(timezone.utc)-timedelta(hours=2))
         with patch.dict("os.environ",{"JH_AI_ENABLED":"1","OPENAI_API_KEY":"test-only"}):
-            self.assertIsNone(get_cached(cur,"https://example.com/job","hash","Product Manager"))
+            self.assertTrue(get_cached(cur,"https://example.com/job","hash","Product Manager")["_ai_failed"])
     def test_ai_empty_output_fails_explicitly(self):
         import json
         from io import BytesIO

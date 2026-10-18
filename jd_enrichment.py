@@ -10,9 +10,9 @@ from datetime import datetime,timezone,timedelta
 from urllib.parse import urlsplit,quote
 from collectors import fetch_json
 from jd_signals import signals
-from block4_score import score_job,merge_semantic_requirements
+from block4_score import score_job,merge_semantic_requirements,hard_role_mismatch
 from jd_retrieval import extract_public_jd
-from score_repository import get_cached,save,reserve,settle
+from score_repository import get_cached,get_previous_semantic,save,reserve,settle
 from ai_interpreter import interpret
 import os
 import psycopg
@@ -105,12 +105,27 @@ def hydrate_jobs(cursor,jobs,roles,url_key,limit=PER_BATCH_LIMIT):
         # Requires approved migration before deployment.
         if description:
             evaluation=get_cached(cursor,key,jd_hash,roles)
-            if evaluation is not None:ai_status='retry_later' if evaluation.get('_ai_retry_later') else 'cache'
+            if evaluation is not None:ai_status='cached_failure' if evaluation.get('_ai_failed') else 'cache'
         if evaluation is None:
             evaluation=score_job(complete,roles)
             model='deterministic'
-            # AI must never run without explicit activation, cached miss and a reserved budget.
-            if description and os.getenv('JH_AI_ENABLED')=='1' and os.getenv('OPENAI_API_KEY'):
+            is_technical_role=hard_role_mismatch(complete)
+            if is_technical_role:
+                evaluation.update({"score":0,"fit":0,"confidence":"hard_role_mismatch",
+                   "reason":"Cargo de desenvolvimento ou QA técnico, sem experiência profissional comprovada nessa função; não é um julgamento da capacidade de aprendizado."})
+                model='hard_exclusion'
+                ai_status='not_needed'
+            # Re-grade previously paid AI extraction before considering another API request.
+            previous=get_previous_semantic(cursor,key,jd_hash,roles) if description and not is_technical_role else None
+            if previous and len(previous)<4:previous=None
+            if previous:
+                evaluation=merge_semantic_requirements(evaluation,previous)
+                evaluation['ai_interpreted']=True
+                evaluation['regraded_from_cache']=True
+                model='hybrid'
+                ai_status='cache'
+            # Only new or truly changed descriptions may require paid interpretation.
+            if description and not previous and not is_technical_role and os.getenv('JH_AI_ENABLED')=='1' and os.getenv('OPENAI_API_KEY'):
                 with psycopg.connect(os.environ['DATABASE_URL'],connect_timeout=7) as budget_conn:
                     with budget_conn.cursor() as budget_cur:
                         usage_id=reserve(budget_cur,key)
@@ -129,8 +144,9 @@ def hydrate_jobs(cursor,jobs,roles,url_key,limit=PER_BATCH_LIMIT):
                         with psycopg.connect(os.environ['DATABASE_URL'],connect_timeout=7) as budget_conn:
                             with budget_conn.cursor() as budget_cur:
                                 settle(budget_cur,usage_id,actual,bool(extracted and extracted.get("requirements")))
-                    if ai_status=='failed':
-                        evaluation['_ai_retry_later']=True
+                    if ai_status=='failed' or not extracted or not extracted.get('requirements'):
+                        ai_status='failed'
+                        evaluation['_ai_failed']=True
                         model='ai_error'
                     if extracted and extracted.get('requirements'):
                         evaluation=merge_semantic_requirements(evaluation,extracted['requirements'])
@@ -139,9 +155,9 @@ def hydrate_jobs(cursor,jobs,roles,url_key,limit=PER_BATCH_LIMIT):
                         ai_status='interpreted'
                 else:
                     ai_status='budget_exhausted'
-            elif description:
+            elif description and not previous and not is_technical_role:
                 ai_status='disabled'
-            if description and (evaluation.get('score') is not None or model in ('hybrid','ai_error')):save(cursor,key,jd_hash,roles,evaluation,model)
+            if description and (evaluation.get('score') is not None or model in ('hybrid','ai_error','hard_exclusion')):save(cursor,key,jd_hash,roles,evaluation,model)
         output.append({**j,"ranking":evaluation,"jd_evidence":signals(complete,roles),
                        "ai_status":ai_status,"jd_status":origin if description else ("pendente" if (key,j) in pending[limit:] else "indisponivel")})
     return output,count

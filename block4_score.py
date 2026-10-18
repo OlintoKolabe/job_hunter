@@ -74,6 +74,13 @@ SKILLS.update({
  "launch":(("go-to-market","go to market","product launch","product lifecycle","nps","product-market fit"),"product","Neocoder / Kolabe: ciclo de produto, PMF e lançamentos"),
  "segmentation":(("customer segmentation","loyalty programs","fidelizacao","customer journey"),"marketing","Dotz: CRM, segmentação, fidelização e jornada"),
 })
+# Domain evidence grounded in the professional history; do not infer technical implementation.
+SKILLS.update({
+ "healthcare_product":(("healthcare product","healthtech product","clinical workflows","clinical operations platform"),"product","Top Saúde: liderança do produto interno SysTop e processos de operação clínica"),
+ "mining_product":(("mining product","mining software product","autonomous mining operations","mining traffic control"),"product","Hexagon Mining: Product Manager do Mission Manager em controle de tráfego autônomo"),
+ "crypto_payments":(("crypto payments","cryptocurrency payments","stablecoin payment","web3 payments"),"product","Neocoder/LiberPay: consultoria de produtos e estratégia B2B em pagamentos cripto e stablecoins; não comprova Pix ou adquirência"),
+ "loyalty_product":(("loyalty crm","retail loyalty","loyalty products","loyalty platform"),"product","Dotz: Product Owner do Meu Varejo, CRM, fidelização e inteligência comercial"),
+})
 # Explicitly non-proven qualifications: absence is UNKNOWN, not a claim of inability.
 UNPROVEN={
  "spanish":("fluent spanish","spanish fluency","fluency in spanish","espanhol fluente"),
@@ -87,6 +94,20 @@ def requirement_lines(jd):
     raw=re.sub(r"<[^>]+>", "\n",jd or "")
     rows=re.split(r"[\n\r•]+|(?<=[.;])\s+",raw)
     return [fold(x).strip() for x in rows if len(fold(x).strip())>=8][:120]
+
+def hard_role_mismatch(job):
+    """Unambiguous hands-on engineering/QA job titles lie outside the documented PM/business career."""
+    title=fold(str(job.get("title") or ""))
+    # Do not reject product/business roles merely because the title mentions engineers.
+    if any(term in title for term in ("product manager","product owner","gerente de produto","business analyst","analista de negocios")):
+        return False
+    technical_titles=(
+        "software engineer","software developer","frontend developer","front end developer",
+        "backend developer","back end developer","fullstack developer","full stack developer",
+        "qa engineer","qa analyst","quality assurance engineer","test automation engineer",
+        "engenheiro de software","desenvolvedor de software","analista de testes automatizados",
+    )
+    return any(re.search(r"(?<![a-z])"+re.escape(term)+r"(?![a-z])",title) for term in technical_titles)
 
 def score_job(job,roles):
     jd_raw=job.get("description") or job.get("jobDescription") or job.get("content") or ""
@@ -152,7 +173,9 @@ def score_job(job,roles):
             "method":"block4-evidencias-cobertura-v2"}
 
 def merge_semantic_requirements(base, extracted):
-    """Deterministic, evidence-anchored fit from AI-classified JD requirements."""
+    """Evidence-first grading; unrelated requirements earn zero, adjacent experience earns partial credit.
+    A missing skill_id is UNKNOWN evidence, never proof that the candidate cannot perform a job.
+    """
     if not extracted:return base
     rows=[]
     for row in extracted:
@@ -161,23 +184,89 @@ def merge_semantic_requirements(base, extracted):
         kind=row.get("type")
         skill=row.get("skill_id")
         if not name or kind not in ("obrigatorio","desejavel"):continue
-        proof=SKILLS[skill][2] if skill in SKILLS else None
-        rows.append({"name":name[:160],"type":kind,
-            "status":"comprovado" if proof else "nao_comprovado","evidence":proof,
-            "evidence_id":skill if proof else None})
+        name=name[:160]
+        proof=SKILLS[skill][2] if isinstance(skill,str) and skill in SKILLS else None
+        normalized=fold(name)
+        # The documented LiberPay consulting experience is adjacent, not direct
+        # payment-product ownership or knowledge of the Pix/card rails.
+        payments_context=any(x in normalized for x in ("payment","payments","pagamento","pagamentos","pix","acquiring","adquirencia","settlement"))
+        specialized_payments=any(x in normalized for x in ("pix","card acquiring","settlement","iso 8583","brazilian payment rails"))
+        technical_core=any(x in normalized for x in ("write code","hands-on coding","programming required","software development required","previous software developer experience","hands-on software development","test automation","qa automation","computer science degree","coding required"))
+        # A generic PM capability does not prove specialized Pix/card-rails expertise.
+        transferable_domains=(
+            (("healthcare domain","clinical operations","healthtech domain"),"Top Saúde: gestão de serviços médicos e processos"),
+            (("mining domain","mining operations"),"Hexagon Mining: experiência em produto na mineração"),
+            (("loyalty programs","retail loyalty"),"Dotz: experiência em produto e CRM"),
+            (("marketing industry","advertising domain"),"Lagoa Parques: direção de marketing"),
+        )
+        domain_evidence=next((e for terms,e in transferable_domains if any(t in normalized for t in terms)),None)
+        relationship=row.get("relationship")
+        explicit_skill=bool(proof and any(fold(term) in normalized for term in SKILLS[skill][0]))
+        if technical_core or relationship=="nenhuma":
+            degree="nao_comprovada"
+            evidence=None
+            points=0.0
+        elif proof and (relationship=="transferivel" or not explicit_skill):
+            degree="transferivel"
+            evidence=proof+"; habilidade documentada aplicável parcialmente ao contexto da vaga"
+            points=0.45
+        elif proof and specialized_payments:
+            degree="transferivel"
+            evidence=proof+"; competência de produto transferível, mas atuação nas regras de pagamento específicas não comprovada"
+            points=0.4
+        elif proof:
+            degree="direta"
+            evidence=proof
+            points=1.0
+        elif payments_context:
+            degree="transferivel"
+            evidence="Neocoder/LiberPay: consultoria e estratégia em pagamentos com criptoativos e stablecoins; sem evidência de liderança de produto de Pix"
+            points=0.25
+        elif domain_evidence:
+            degree="transferivel"
+            evidence=domain_evidence+"; domínio transferível não comprova todas as competências técnicas da vaga"
+            points=0.35
+        else:
+            degree="nao_comprovada"
+            evidence=None
+            points=0.0
+        rows.append({"name":name,"type":kind,"status":"comprovado" if degree=="direta" else "parcial" if degree=="transferivel" else "nao_comprovado",
+                     "match_level":degree,"match_points":points,"evidence":evidence,
+                     "evidence_id":skill if evidence and proof else "liberpay_payments_context" if evidence and payments_context else None,
+                     "explanation":("Experiência diretamente documentada" if degree=="direta" else
+                                    "Experiência aplicável parcialmente, sem equivalência plena de função ou tecnologia" if degree=="transferivel" else
+                                    "Não há evidência suficiente no perfil documentado; isso não prova incapacidade")})
     if not rows:return base
-    total=sum(3 if r["type"]=="obrigatorio" else 1 for r in rows)
-    met=sum((3 if r["type"]=="obrigatorio" else 1) for r in rows if r["status"]=="comprovado")
-    verified=sum(r["status"]=="comprovado" for r in rows)
-    # Small/uncertain samples are not presented as definitive fit.
-    fit=round(100*met/total) if len(rows)>=4 and verified else None
+    weights=[3 if r["type"]=="obrigatorio" else 1 for r in rows]
+    total=sum(weights)
+    met=sum(w*r["match_points"] for r,w in zip(rows,weights))
+    # The model may miss requirements; 1–3 extracted requirements are not
+    # enough to claim either 0 or 100 overall fit.
+    sufficiently_parsed=len(rows)>=4
+    mandatory_technical_gap=any(
+        r["type"]=="obrigatorio" and r["match_level"]=="nao_comprovada"
+        and any(term in fold(r["name"]) for term in (
+            "computer science degree","degree in computer science",
+            "software engineering degree","formacao em ciencia da computacao",
+            "previous software developer experience","hands-on coding required",
+            "qa automation experience"))
+        and not any(term in fold(r["name"]) for term in ("or equivalent","ou equivalente","or similar experience"))
+        for r in rows)
+    fit=0 if mandatory_technical_gap else (round(100*met/total) if sufficiently_parsed and total else None)
+    matched=sum(r["match_points"]>0 for r in rows)
     return {**base,"score":fit,"fit":fit,"requirements":rows,
         "evaluated_requirements":len(rows),
         "mandatory_count":sum(r["type"]=="obrigatorio" for r in rows),
         "desirable_count":sum(r["type"]=="desejavel" for r in rows),
-        "unverified_count":len(rows)-verified,
-        "uninterpreted_count":0,
-        "coverage_pct":100,
-        "confidence":"semantic_evidence" if fit is not None else "semantic_insufficient",
-        "reason":"Compatibilidade calculada com regras fixas e evidências profissionais documentadas; equivalências interpretadas por IA.",
-        "method":"block4.1-semantic-evidence-v1"}
+        "unverified_count":sum(r["match_level"]=="nao_comprovada" for r in rows),
+        "uninterpreted_count":0,"coverage_pct":100,
+        "confidence":"essential_gap" if mandatory_technical_gap else "semantic_evidence" if fit is not None else "semantic_insufficient",
+        "match_summary":{"direct":sum(r["match_level"]=="direta" for r in rows),
+                         "transferable":sum(r["match_level"]=="transferivel" for r in rows),
+                         "unproven":sum(r["match_level"]=="nao_comprovada" for r in rows),
+                         "requirements_found":len(rows),"evidence_count":matched},
+        "reason":("Exigência técnica eliminatória expressa no anúncio, sem comprovação no histórico profissional; pode não ser viável disputar esta vaga." if mandatory_technical_gap else
+                  "Nota ponderada: experiência direta vale integral, transferência documentada vale parcialmente, ausência de evidência vale zero no requisito. Zero não equivale a incapacidade."
+                  if fit is not None else
+                  "Menos de quatro requisitos interpretados: não há base para classificar a compatibilidade, nem mesmo como zero."),
+        "method":"block4.1-transferable-evidence-v1"}

@@ -2,6 +2,9 @@
 import json
 import os
 import urllib.request
+import re
+import html
+import unicodedata
 from block4_score import SKILLS
 MODEL=os.getenv("JH_AI_MODEL","gpt-4.1-nano")
 MAX_OUTPUT=800
@@ -34,6 +37,10 @@ def interpret(description):
     requirements=[{"name":str(r.get("name") or "")[:160],"type":r.get("type"),"skill_id":r.get("skill_id") if isinstance(r.get("skill_id"),str) and r.get("skill_id") in SKILLS else None}
         for r in rows[:12] if isinstance(r,dict) and r.get("type") in ("obrigatorio","desejavel")]
     # Reject invented requirements: each must appear verbatim in the job description.
-    jd_text=description.casefold()
-    requirements=[item for item in requirements if item["name"].strip() and item["name"].strip().casefold() in jd_text]
+    def normalize(value):
+        value=html.unescape(re.sub(r'<[^>]*>', ' ', value))
+        value=unicodedata.normalize('NFKC',value).casefold()
+        return re.sub(r'\s+', ' ', value).strip()
+    jd_text=normalize(description)
+    requirements=[item for item in requirements if item['name'].strip() and normalize(item['name']) in jd_text]
     return {"requirements":requirements,"usage":result.get("usage",{})}

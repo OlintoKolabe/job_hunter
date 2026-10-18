@@ -1,10 +1,10 @@
 {
-  "id": "JOB-HUNTER-BLOCK-5-HYBRID",
+  "id": "JOB-HUNTER-BLOCK-5-HYBRID-EVIDENCE-V2",
   "status": "active",
   "base_ref": "aafe8327f1ff9b9b6cdbc73af6135bf7074f5403",
   "production_ref": "feat/phase1-web-foundation",
-  "feature_ref": "feat/block5-hybrid-mini-narrative",
-  "objective": "Optional economical AI rewrite for a short evidence-grounded CV summary, with server-side budget reservation, database cache, deterministic fallback, truthful claims and automatic tests.",
+  "feature_ref": "feat/block5-hybrid-evidence-v2",
+  "objective": "Allow one bounded AI call to select verified evidence IDs across entire documented career and write a short grounded summary; preserve deterministic original facts, chronology, cache, cost ceilings and rollback.",
   "allowed_files": [
     "scope/active.json",
     "scripts/check_scope.py",
@@ -34,8 +34,6 @@
     "catalog_engine.py"
   ],
   "forbidden_changes": [
-    "production deploy",
-    "merge to main",
     "modify Render environment",
     "execute migration on production database without separate authorization",
     "unbounded calls to AI",
@@ -62,7 +60,9 @@
     "Persisted cache for identical JD/profile/model",
     "No unsupported achievement claims",
     "Deterministic fallback when AI unavailable or invalid",
-    "No changes to global vacancy rating and no new migration"
+    "No changes to global vacancy rating and no new migration",
+    "AI may reorder/select verified facts but cannot author new professional bullets",
+    "Old cached hybrid resumes invalidated by independent rubric version"
   ],
   "deployment": "No deploy or merge without explicit approval"
 }

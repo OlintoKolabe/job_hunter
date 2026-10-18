@@ -152,7 +152,9 @@ def score_job(job,roles):
             "method":"block4-evidencias-cobertura-v2"}
 
 def merge_semantic_requirements(base, extracted):
-    """Deterministic, evidence-anchored fit from AI-classified JD requirements."""
+    """Evidence-first grading; unrelated requirements earn zero, adjacent experience earns partial credit.
+    A missing skill_id is UNKNOWN evidence, never proof that the candidate cannot perform a job.
+    """
     if not extracted:return base
     rows=[]
     for row in extracted:
@@ -161,23 +163,51 @@ def merge_semantic_requirements(base, extracted):
         kind=row.get("type")
         skill=row.get("skill_id")
         if not name or kind not in ("obrigatorio","desejavel"):continue
-        proof=SKILLS[skill][2] if skill in SKILLS else None
-        rows.append({"name":name[:160],"type":kind,
-            "status":"comprovado" if proof else "nao_comprovado","evidence":proof,
-            "evidence_id":skill if proof else None})
+        name=name[:160]
+        proof=SKILLS[skill][2] if isinstance(skill,str) and skill in SKILLS else None
+        normalized=fold(name)
+        # The documented LiberPay consulting experience is adjacent, not direct
+        # payment-product ownership or knowledge of the Pix/card rails.
+        payments_context=any(x in normalized for x in ("payment","payments","pagamento","pagamentos","pix","acquiring","adquirencia","settlement"))
+        if proof:
+            degree="direta"
+            evidence=proof
+            points=1.0
+        elif payments_context:
+            degree="transferivel"
+            evidence="Neocoder/LiberPay: consultoria e estratégia em pagamentos com criptoativos e stablecoins; sem evidência de liderança de produto de Pix"
+            points=0.25
+        else:
+            degree="nao_comprovada"
+            evidence=None
+            points=0.0
+        rows.append({"name":name,"type":kind,"status":"comprovado" if degree=="direta" else "parcial" if degree=="transferivel" else "nao_comprovado",
+                     "match_level":degree,"match_points":points,"evidence":evidence,
+                     "evidence_id":skill if proof else "liberpay_payments_context" if payments_context else None,
+                     "explanation":("Experiência diretamente documentada" if proof else
+                                    "Experiência de domínio transferível, mas em função e infraestrutura diferentes" if payments_context else
+                                    "Não há evidência suficiente no perfil documentado; não significa incapacidade")})
     if not rows:return base
-    total=sum(3 if r["type"]=="obrigatorio" else 1 for r in rows)
-    met=sum((3 if r["type"]=="obrigatorio" else 1) for r in rows if r["status"]=="comprovado")
-    verified=sum(r["status"]=="comprovado" for r in rows)
-    # Small/uncertain samples are not presented as definitive fit.
-    fit=round(100*met/total) if len(rows)>=4 and verified else None
+    weights=[3 if r["type"]=="obrigatorio" else 1 for r in rows]
+    total=sum(weights)
+    met=sum(w*r["match_points"] for r,w in zip(rows,weights))
+    # The model may miss requirements; 1–3 extracted requirements are not
+    # enough to claim either 0 or 100 overall fit.
+    sufficiently_parsed=len(rows)>=4
+    fit=round(100*met/total) if sufficiently_parsed and total else None
+    matched=sum(r["match_points"]>0 for r in rows)
     return {**base,"score":fit,"fit":fit,"requirements":rows,
         "evaluated_requirements":len(rows),
         "mandatory_count":sum(r["type"]=="obrigatorio" for r in rows),
         "desirable_count":sum(r["type"]=="desejavel" for r in rows),
-        "unverified_count":len(rows)-verified,
-        "uninterpreted_count":0,
-        "coverage_pct":100,
+        "unverified_count":sum(r["match_level"]=="nao_comprovada" for r in rows),
+        "uninterpreted_count":0,"coverage_pct":100,
         "confidence":"semantic_evidence" if fit is not None else "semantic_insufficient",
-        "reason":"Compatibilidade calculada com regras fixas e evidências profissionais documentadas; equivalências interpretadas por IA.",
-        "method":"block4.1-semantic-evidence-v1"}
+        "match_summary":{"direct":sum(r["match_level"]=="direta" for r in rows),
+                         "transferable":sum(r["match_level"]=="transferivel" for r in rows),
+                         "unproven":sum(r["match_level"]=="nao_comprovada" for r in rows),
+                         "requirements_found":len(rows),"evidence_count":matched},
+        "reason":("Nota ponderada: experiência direta vale integral, transferência documentada vale parcialmente, ausência de evidência vale zero no requisito. Zero não equivale a incapacidade."
+                  if fit is not None else
+                  "Menos de quatro requisitos interpretados: não há base para classificar a compatibilidade, nem mesmo como zero."),
+        "method":"block4.1-transferable-evidence-v1"}

@@ -19,3 +19,8 @@
 .jh-field select:focus-visible,.jh-field textarea:focus-visible{outline:2px solid #3476d1;outline-offset:2px}
 .jh-roles{grid-column:1/-1}
 .jh-roles textarea{resize:vertical;min-height:78px}
+
+/* Block 4: distinguish pending score from final unavailable score. */
+.jh-score-spinner{display:inline-block;width:13px;height:13px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:jh-score-rotate .8s linear infinite;flex-shrink:0}
+@keyframes jh-score-rotate{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.jh-score-spinner{animation:none;border-right-color:currentColor}}

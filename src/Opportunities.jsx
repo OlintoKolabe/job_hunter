@@ -86,6 +86,11 @@ export function OpportunitiesPanel(){
    try{
      const response=await fetch('/api/resume/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:job.url,title:job.title,company:job.company})});
      if(!response.ok){const error=await response.json().catch(()=>null);throw Error(error?.detail||'Falha ao gerar currículo')}
+     const cvMode=response.headers.get('X-CV-Mode')||'deterministic';
+     const aiCalls=Number(response.headers.get('X-AI-Calls')||0);
+     const aiCost=Number(response.headers.get('X-AI-Cost-USD')||0);
+     const modes={hybrid:'Resumo refinado por IA',cached_hybrid:'Resumo IA reutilizado do cache',deterministic:'Currículo determinístico',fallback:'IA não validada; entregue versão determinística',cached_fallback:'Versão determinística recuperada do cache'};
+     setMessage((modes[cvMode]||'Currículo gerado')+' • '+aiCalls+' chamada(s) • US$ '+aiCost.toFixed(6)+' nesta geração.');
      const file=await response.blob();const fileUrl=URL.createObjectURL(file);
      const a=document.createElement('a');a.href=fileUrl;a.download=['Olinto Manso Pereira',job.title,job.company].map(x=>String(x||'').replace(/[\\/:*?\"<>|]/g,'').trim()).join(' - ')+'.docx';a.click();setTimeout(()=>URL.revokeObjectURL(fileUrl),1000);
    }catch(error){setError(error.message)}finally{setCvNow(prev=>prev.filter(x=>x!==job.url))}

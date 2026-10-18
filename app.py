@@ -476,7 +476,8 @@ def generate_resume(payload: ResumeGenerate, request: Request):
             row=cur.fetchone()
     if not row or not row[0]:
         raise HTTPException(404,"Descrição da vaga não está armazenada; avalie a vaga primeiro.")
-    title=key.rstrip("/").split("/")[-1].replace("-"," ").title()
+    # Use the real role supplied by the vacancy card; URL slugs can be opaque IDs.
+    title=(payload.title or "").strip() or key.rstrip("/").split("/")[-1].replace("-"," ").title()
     plan=build_plan(row[0],title)
     # Serialize identical requests before looking up cache or reserving AI spend.
     # Scoped to this transaction; no new tables or schema changes needed.

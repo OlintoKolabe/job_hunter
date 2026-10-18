@@ -7,7 +7,7 @@ import hashlib
 import re
 from concurrent.futures import ThreadPoolExecutor,as_completed
 from datetime import datetime,timezone,timedelta
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit,quote
 from collectors import fetch_json
 from jd_signals import signals
 from block4_score import score_job
@@ -25,6 +25,20 @@ def greenhouse_detail_url(job):
     board=str(job.get("company") or "").strip()
     if not match or not re.fullmatch(r"[a-zA-Z0-9_-]{2,100}",board):return None
     return "https://boards-api.greenhouse.io/v1/boards/"+board+"/jobs/"+match.group(1)
+
+def inhire_detail(job):
+    url=urlsplit(str(job.get("url") or ""))
+    if url.scheme!="https" or not re.fullmatch(r"[a-z0-9-]+\.inhire\.app",url.hostname or ""):
+        return None
+    match=re.match(r"/vagas/([a-zA-Z0-9_-]+)(?:/|$)",url.path)
+    if not match:return None
+    tenant=url.hostname.split(".")[0]
+    return ("https://api.inhire.app/job-posts/public/pages/"+quote(match.group(1)),{"X-Tenant":tenant})
+
+def remote_detail(job):
+    gh=greenhouse_detail_url(job)
+    if gh:return gh,None
+    return inhire_detail(job)
 
 def hydrate_jobs(cursor,jobs,roles,url_key,limit=PER_BATCH_LIMIT):
     """Return scored public dictionaries and coverage counts. Cursor is request-scoped.
@@ -44,13 +58,17 @@ def hydrate_jobs(cursor,jobs,roles,url_key,limit=PER_BATCH_LIMIT):
             updates[key]=(cached_item[0],"cache")
         elif existing and len(existing)>=300:
             updates[key]=(existing,"listing")
-        elif greenhouse_detail_url(j):
+        elif remote_detail(j):
             pending.append((key,j))
     def fetch(pair):
         key,job=pair
         try:
-            result=fetch_json(greenhouse_detail_url(job))
-            content=result.get("content") if isinstance(result,dict) else ""
+            endpoint,headers=remote_detail(job)
+            result=fetch_json(endpoint,headers) if headers else fetch_json(endpoint)
+            value=(result.get("jobPage") or result.get("page") or result) if isinstance(result,dict) else {}
+            if not isinstance(value,dict):return key,None
+            content=value.get("content") or value.get("description") or value.get("jobDescription") or ""
+            if not content and isinstance(value.get("job"),dict):content=value["job"].get("description") or ""
             if not isinstance(content,str) or not content.strip():return key,None
             return key,content[:MAX_JD_CHARS]
         except Exception:return key,None

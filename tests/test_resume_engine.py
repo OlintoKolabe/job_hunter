@@ -58,7 +58,7 @@ class ResumeEngineTests(unittest.TestCase):
         text="\\n".join(x.text for x in parsed.paragraphs)
         self.assertNotIn("Outras experiências",text)
         order=sorted(EXPERIENCE,key=chronology_index,reverse=True)
-        positions=[text.find(e["company"]) for e in order]
+        positions=[text.find(e["role"]+" — "+e["company"]) for e in order]
         self.assertTrue(all(position>=0 for position in positions))
         self.assertEqual(positions,sorted(positions))
     def test_empty_jd_rejected(self):

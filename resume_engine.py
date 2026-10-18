@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from docx import Document
 from docx.shared import Pt
 
-ENGINE_VERSION = "block5-deterministic-v3"
+ENGINE_VERSION = "block5-deterministic-v4"
 CV_DOCUMENT_VERSION = "job-hunter-cv-provenance-v1"
 CONTACT = {"name":"Olinto Manso Pereira","email":"olinto_manso@hotmail.com",
            "phone":"+55 64 98116-4936","location":"Caldas Novas, GO, Brasil",

@@ -239,7 +239,16 @@ def merge_semantic_requirements(base, extracted):
     # The model may miss requirements; 1–3 extracted requirements are not
     # enough to claim either 0 or 100 overall fit.
     sufficiently_parsed=len(rows)>=4
-    fit=round(100*met/total) if sufficiently_parsed and total else None
+    mandatory_technical_gap=any(
+        r["type"]=="obrigatorio" and r["match_level"]=="nao_comprovada"
+        and any(term in fold(r["name"]) for term in (
+            "computer science degree","degree in computer science",
+            "software engineering degree","formacao em ciencia da computacao",
+            "previous software developer experience","hands-on coding required",
+            "qa automation experience"))
+        and not any(term in fold(r["name"]) for term in ("or equivalent","ou equivalente","or similar experience"))
+        for r in rows)
+    fit=0 if mandatory_technical_gap else (round(100*met/total) if sufficiently_parsed and total else None)
     matched=sum(r["match_points"]>0 for r in rows)
     return {**base,"score":fit,"fit":fit,"requirements":rows,
         "evaluated_requirements":len(rows),
@@ -247,12 +256,13 @@ def merge_semantic_requirements(base, extracted):
         "desirable_count":sum(r["type"]=="desejavel" for r in rows),
         "unverified_count":sum(r["match_level"]=="nao_comprovada" for r in rows),
         "uninterpreted_count":0,"coverage_pct":100,
-        "confidence":"semantic_evidence" if fit is not None else "semantic_insufficient",
+        "confidence":"essential_gap" if mandatory_technical_gap else "semantic_evidence" if fit is not None else "semantic_insufficient",
         "match_summary":{"direct":sum(r["match_level"]=="direta" for r in rows),
                          "transferable":sum(r["match_level"]=="transferivel" for r in rows),
                          "unproven":sum(r["match_level"]=="nao_comprovada" for r in rows),
                          "requirements_found":len(rows),"evidence_count":matched},
-        "reason":("Nota ponderada: experiência direta vale integral, transferência documentada vale parcialmente, ausência de evidência vale zero no requisito. Zero não equivale a incapacidade."
+        "reason":("Exigência técnica eliminatória expressa no anúncio, sem comprovação no histórico profissional; pode não ser viável disputar esta vaga." if mandatory_technical_gap else
+                  "Nota ponderada: experiência direta vale integral, transferência documentada vale parcialmente, ausência de evidência vale zero no requisito. Zero não equivale a incapacidade."
                   if fit is not None else
                   "Menos de quatro requisitos interpretados: não há base para classificar a compatibilidade, nem mesmo como zero."),
         "method":"block4.1-transferable-evidence-v1"}

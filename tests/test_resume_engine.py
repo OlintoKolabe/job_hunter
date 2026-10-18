@@ -119,6 +119,44 @@ class ResumeEngineTests(unittest.TestCase):
                 self.assertNotIn(report["jd_sha256"],seen)
                 seen.add(report["jd_sha256"])
 
+    def test_product_output_is_scored_from_reopened_docx(self):
+        """Inspect the actual DOCX paragraphs, not the selection plan alone."""
+        import re
+        from resume_engine import TOPICS, FACT_TOPICS, categories
+        cases=[
+            ("Business Analyst", "Translate product strategy and roadmap priorities into acceptance journeys and test cases; gather stakeholder requirements; optimize business processes; support UAT, release outcomes and acceptance criteria.",
+             {"analysis","product","project"}),
+            ("Product Owner", "Prioritize roadmap, product discovery, user research, backlog and stakeholder alignment; own outcomes and sprint planning.",
+             {"product","agility"}),
+            ("Marketing Manager", "Lead CRM campaigns, brand strategy, customer retention, acquisition, marketing budget and commercial teams.",
+             {"growth","people"}),
+            ("Project Manager", "Manage project portfolio, governance, resources, budgets, delivery and multi-disciplinary teams.",
+             {"project","people"}),
+        ]
+        for title,jd,expected in cases:
+            with self.subTest(title=title):
+                plan=build_plan(jd,title)
+                output=render_docx(plan)
+                self.assertTrue(audit(plan,output)["factual_bullets_verified"])
+                doc=Document(io.BytesIO(output))
+                rendered=[p.text.strip() for p in doc.paragraphs if p.text.strip()]
+                content=" ".join(rendered)
+                self.assertEqual(content.count("Resumo profissional"),1)
+                self.assertEqual(content.count("Experiência profissional"),1)
+                facts=[p.text for p in doc.paragraphs if p.style.name=="List Bullet"]
+                cv_evidence=[x for x in facts if x in {f for e in EXPERIENCE for f in e["facts"]}]
+                self.assertEqual(len(cv_evidence),len(set(cv_evidence)))
+                self.assertGreaterEqual(len(cv_evidence),3)
+                topics=set().union(*(categories(f,FACT_TOPICS) for f in cv_evidence))
+                coverage=len(topics & expected)/len(expected)
+                self.assertGreaterEqual(coverage,0.5,
+                    f"Rendered CV coverage too low: {title}, {coverage:.0%}")
+                # Explicitly disallow industry/technology claims found in the JD
+                # if the underlying career evidence does not contain them.
+                for unsupported in ("Oracle programming","PowerBuilder","life insurance claims","UAT"):
+                    if unsupported.casefold() not in " ".join(f for e in EXPERIENCE for f in e["facts"]).casefold():
+                        self.assertNotIn(unsupported.casefold(),content.casefold())
+
     def test_empty_jd_rejected(self):
         with self.assertRaises(ValueError):build_plan("  ","A")
 if __name__=="__main__":unittest.main()

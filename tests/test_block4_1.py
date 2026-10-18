@@ -118,6 +118,12 @@ class Block41Tests(unittest.TestCase):
               {"name":"Scrum","type":"desejavel","skill_id":"scrum"}]
         self.assertGreater(merge_semantic_requirements({"score":None},rows)["score"],0)
 
+    def test_business_product_role_with_engineering_words_stays_eligible(self):
+        from block4_score import hard_role_mismatch
+        self.assertFalse(hard_role_mismatch({"title":"Senior Product Manager - Software Engineering Platform"}))
+        self.assertFalse(hard_role_mismatch({"title":"Product Owner / QA Automation Platform"}))
+        self.assertTrue(hard_role_mismatch({"title":"Senior Software Engineer"}))
+
     def test_secret_unset_means_no_ai(self):
         with patch.dict("os.environ",{"JH_AI_ENABLED":"0","OPENAI_API_KEY":"dummy"}):
             self.assertIsNone(interpret("required project management"))

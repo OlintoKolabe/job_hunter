@@ -115,7 +115,7 @@ FACT_TOPICS={
 }
 def contains(text, phrase):
     # Word-aware matching avoids accidental substring hits.
-    return bool(re.search(r"(?<!\\w)"+re.escape(phrase)+r"(?!\\w)",text,re.IGNORECASE))
+    return bool(re.search(r"(?<!\w)"+re.escape(phrase)+r"(?!\w)",text,re.IGNORECASE))
 def categories(text, definitions):
     cleaned=html.unescape(re.sub(r"<[^>]+>"," ",text or "")).casefold()
     return {k for k,phrases in definitions.items() if any(contains(cleaned,p.casefold()) for p in phrases)}

@@ -178,7 +178,12 @@ def merge_semantic_requirements(base, extracted):
             (("marketing industry","advertising domain"),"Lagoa Parques: direção de marketing"),
         )
         domain_evidence=next((e for terms,e in transferable_domains if any(t in normalized for t in terms)),None)
-        if proof and specialized_payments:
+        relationship=row.get("relationship")
+        if proof and relationship=="transferivel":
+            degree="transferivel"
+            evidence=proof+"; habilidade documentada aplicável parcialmente ao contexto da vaga"
+            points=0.45
+        elif proof and specialized_payments:
             degree="transferivel"
             evidence=proof+"; competência de produto transferível, mas atuação nas regras de pagamento específicas não comprovada"
             points=0.4

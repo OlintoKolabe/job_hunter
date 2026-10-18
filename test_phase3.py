@@ -62,6 +62,26 @@ class Phase3ContractTests(unittest.TestCase):
         self.assertIn("content=true",seen[0])
         self.assertTrue(jobs[0]["description"])
 
+    def test_inhire_detail_uses_tenant_and_public_api(self):
+        from jd_enrichment import inhire_detail
+        job={"source":"inHire","url":"https://amcom.inhire.app/vagas/abc123/product-manager"}
+        self.assertEqual(inhire_detail(job),
+            ("https://api.inhire.app/job-posts/public/pages/abc123",{"X-Tenant":"amcom"}))
+        self.assertIsNone(inhire_detail({**job,"url":"https://evil.example/vagas/abc123"}))
+
+    def test_inhire_hydration_fetches_and_scores(self):
+        from jd_enrichment import hydrate_jobs
+        from app import url_key
+        from unittest.mock import Mock
+        cur=Mock();cur.fetchall.return_value=[]
+        row={"source":"inHire","company":"AMCOM","title":"Product Manager","location":"Brazil Remote",
+             "url":"https://amcom.inhire.app/vagas/abc123/product-manager"}
+        with patch("jd_enrichment.fetch_json",return_value={"description":"<h3>Requirements</h3><li>Product roadmap</li>"}) as request:
+            results,coverage=hydrate_jobs(cur,[row],"Product Manager",url_key)
+        self.assertEqual(coverage["fetched"],1)
+        self.assertEqual(results[0]["ranking"]["score"],100)
+        self.assertEqual(request.call_args.args[1],{"X-Tenant":"amcom"})
+
     def test_block4_greenhouse_detail_link_parses_real_job_id(self):
         from jd_enrichment import greenhouse_detail_url
         job={"company":"acme","source":"Greenhouse","url":"https://boards.greenhouse.io/acme/jobs/456789"}

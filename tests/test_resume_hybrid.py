@@ -81,12 +81,17 @@ class HybridResumeTests(unittest.TestCase):
         self.assertTrue(audit(new_plan,render_docx(new_plan))["factual_bullets_verified"])
     def test_cache_skips_ai(self):
         cursor=MagicMock()
-        candidate={"summary":"Profissional com atuação em gestão de produtos e roadmaps digitais, alinhando decisões com stakeholders e equipes técnicas.","source_ids":[str(e["source_index"]) for e in self.plan["experience"] if e["facts"]][:1],"evidence_ids":["1:0","1:1","2:0","2:1","4:0","6:0"]}
+        ids=[f"{e['source_index']}:{j}" for e in self.plan["experience"] for j,_ in
+             enumerate(__import__("resume_engine").EXPERIENCE[e["source_index"]]["facts"])
+             if j<2][:14]
+        candidate={"summary":"Profissional com atuação em gestão de produtos e roadmaps digitais, alinhando decisões com stakeholders e equipes técnicas.",
+                   "source_ids":[str(int(ids[0].split(":")[0]))],
+                   "evidence_ids":ids}
         cursor.fetchone.return_value=(candidate,)
         with patch.dict(os.environ,{"JH_CV_AI_ENABLED":"1","OPENAI_API_KEY":"dummy"}):
             with patch.object(h,"request_micro_summary",side_effect=AssertionError("should not call")):
                 plan,usage=h.apply_hybrid(cursor,"example.com/vaga",JD,self.plan)
-        self.assertIn(usage["mode"],("cached_hybrid","deterministic"))
+        self.assertEqual(usage["mode"],"cached_hybrid")
         self.assertEqual(usage["ai_calls"],0)
     def test_fallback_when_model_claim_invalid(self):
         cursor=MagicMock()

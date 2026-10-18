@@ -91,14 +91,20 @@ DISCOVERY={
 }
 def discovery_queries(roles,limit=12):
     terms=search_terms(roles)
+    families=[f for f in ("product","projects","marketing","growth","business") if f in requested_families(terms)]
+    queues={f:list(DISCOVERY[f]) for f in families}
     out=[]
-    for family in ("product","projects","marketing","growth","business"):
-        if family in requested_families(terms):
-            for t in DISCOVERY[family]:
-                if t not in out:out.append(t)
-    for t in terms:
-        if t not in out:out.append(t)
-    return out[:limit]
+    while len(out)<limit and any(queues.values()):
+        for family in families:
+            if queues[family]:
+                candidate=queues[family].pop(0)
+                if candidate not in out:out.append(candidate)
+                if len(out)>=limit:break
+    for term in terms:
+        if len(out)>=limit:break
+        if term not in out:out.append(term)
+    return out
+
 
 def detect_work_mode(job,evidence=None):
     """Infer a single work mode, or leave it unknown."""

@@ -217,6 +217,10 @@ def merge_semantic_requirements(base, extracted):
             degree="nao_comprovada"
             evidence=None
             points=0.0
+        elif proof and core_evidence and not specialized_payments:
+            degree="direta"
+            evidence=proof+"; competência básica inerente à atuação comprovada"
+            points=1.0
         elif proof and (relationship=="transferivel" or not explicit_skill):
             degree="transferivel"
             evidence=proof+"; habilidade documentada aplicável parcialmente ao contexto da vaga"
@@ -256,7 +260,7 @@ def merge_semantic_requirements(base, extracted):
                                     "Experiência aplicável parcialmente, sem equivalência plena de função ou tecnologia" if degree=="transferivel" else
                                     "Não há evidência suficiente no perfil documentado; isso não prova incapacidade")})
     if not rows:return base
-    weights=[3 if r["type"]=="obrigatorio" else 1 for r in rows]
+    weights=[5 if r["type"]=="obrigatorio" else 0.5 for r in rows]
     total=sum(weights)
     met=sum(w*r["match_points"] for r,w in zip(rows,weights))
     # The model may miss requirements; 1–3 extracted requirements are not
@@ -268,7 +272,7 @@ def merge_semantic_requirements(base, extracted):
             "computer science degree","degree in computer science",
             "software engineering degree","formacao em ciencia da computacao",
             "previous software developer experience","hands-on coding required",
-            "qa automation experience"))
+            "qa automation experience","advanced spanish","fluent spanish","spanish fluency","espanhol avancado","espanhol fluente"))
         and not any(term in fold(r["name"]) for term in ("or equivalent","ou equivalente","or similar experience"))
         for r in rows)
     fit=0 if mandatory_technical_gap else (round(100*met/total) if sufficiently_parsed and total and met>0 else None)

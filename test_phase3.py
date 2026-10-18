@@ -53,6 +53,20 @@ class Phase3ContractTests(unittest.TestCase):
         self.assertEqual(score_job(changed,"Product Manager")["score"],result["score"])
         self.assertNotEqual(score_job(changed,"Product Manager")["priority"],result["priority"])
 
+    def test_block4_review_jobs_also_have_ranking_for_score_sort(self):
+        from search_filters import analyze_filters
+        rows=[
+            {"title":"Product Owner","location":"Remote","workplaceType":"remote",
+             "description":"Required: product roadmap. Required: backlog."},
+            {"title":"Product Manager","location":"Brazil Remote",
+             "description":"Required: product roadmap. Preferred: Figma."},
+        ]
+        confirmed,pending,_=analyze_filters(rows,"Product Manager, Product Owner","BR","remote",0,"score")
+        self.assertEqual(len(confirmed),1)
+        self.assertEqual(len(pending),1)
+        self.assertIn("ranking",pending[0])
+        self.assertIsInstance(pending[0]["ranking"]["score"],int)
+
     def test_block4_unknown_jd_has_no_fit(self):
         from block4_score import score_job
         score=score_job({"title":"Product Owner","location":"Brazil Remote"},"Product Owner")

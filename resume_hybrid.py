@@ -106,6 +106,9 @@ def validate_text(proposal,plan):
     if any(x in normalized for x in ["garantido","especialista certificado","mais de 10 anos","fluente em espanhol"]):
         return None
     if any(f.casefold() in summary.casefold() for e in EXPERIENCE for f in e["facts"]):return None
+    risky=("elicitação de requisitos","requisitos funcionais","requisitos não funcionais","casos de uso","estimativa de esforços","gestão de riscos","regulamentação bancária")
+    shown=" ".join(f for e in chosen for f in e["facts"]).casefold()
+    if any(p in summary.casefold() and p not in shown for p in risky):return None
     return summary.strip()
 
 def request_micro_summary(plan,jd,opener=urllib.request.urlopen):

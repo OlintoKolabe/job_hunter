@@ -16,37 +16,48 @@ export function OpportunitiesPanel(){
 
    (d.items||[]).forEach(j=>all.set(j.url,j));record(d);count+=d.total||0;
    setResults([...all.values()]);setCounts({new:all.size,total:count});
+   await enrichAvailable();
+   // Score incomplete JDs as each batch arrives rather than waiting for the entire catalog.
+   const scoredOrAttempted=new Set();
+   let resolved=0;
+   async function enrichAvailable(){
+     const waiting=[...new Map([...all.values(),...uncertain.values()].filter(j=>!scoredOrAttempted.has(j.url) &&
+       (j.jd_status==='pendente' || (j.ranking?.score==null && ['greenhouse','inhire'].some(src=>j.source?.toLowerCase().includes(src)))).map(j=>[j.url,j])).values()];
+     if(!waiting.length)return;
+     setEvaluationTotal(v=>v+waiting.length);
+     for(let start=0;start<waiting.length;start+=10){
+       const chunk=waiting.slice(start,start+10);
+       chunk.forEach(j=>scoredOrAttempted.add(j.url));
+       setScoringNow(chunk.map(j=>j.url));
+       try{
+         const response=await fetch('/api/jd/enrich',{method:'POST',headers:{'Content-Type':'application/json'},
+           body:JSON.stringify({jobs:chunk,roles})});
+         if(!response.ok)throw Error('Falha HTTP '+response.status);
+         const data=await response.json();
+         for(const j of data.items||[]){
+           if(all.has(j.url))all.set(j.url,{...all.get(j.url),...j});
+           if(uncertain.has(j.url))uncertain.set(j.url,{...uncertain.get(j.url),...j});
+         }
+         setResults([...all.values()]);setReviews([...uncertain.values()]);
+       }catch(err){
+         setScoringFailed(prev=>[...prev,...chunk.map(j=>j.url)]);
+       }finally{
+         setScoringNow([]);
+         resolved+=chunk.length;setEvaluated(resolved);
+       }
+     }
+   }
    let offset=0;
    let skipped=0;
    for(let n=0;n<180;n++){
     let batch;try{batch=await requestJson('/api/catalog/scan?offset='+offset+'&limit=4&'+qs)}catch(err){skipped++;offset+=4;setMessage('Alguns quadros falharam; continuando os demais. Falhas: '+skipped);continue}
     (batch.items||[]).filter(j=>source==='all'||j.source?.toLowerCase()===source||(source==='greenhouse'&&j.source?.toLowerCase()==='greenhouse_eu')).forEach(j=>all.set(j.url,j));record(batch);
     offset=batch.next_offset;if(!Number.isFinite(offset))throw Error('Paginação inválida');
-    count+=batch.found||0;setResults([...all.values()]);setChecked(x=>x+(batch.details||[]).length);setCounts({new:all.size,total:count});
+    count+=batch.found||0;setResults([...all.values()]);await enrichAvailable();setChecked(x=>x+(batch.details||[]).length);setCounts({new:all.size,total:count});
     if(batch.complete){completedAll=true;break}
     if(!(batch.details||[]).length)break;
    }
-   // Resolve missing JDs after discovery, ten at a time, without blocking listing.
-   const pendingJD=[...new Map([...all.values(),...uncertain.values()].filter(j=>j.jd_status==='pendente' || (j.ranking?.score==null && ['greenhouse','inhire'].some(src=>j.source?.toLowerCase().includes(src)))).map(j=>[j.url,j])).values()];
-   setEvaluationTotal(pendingJD.length);
-   let resolved=0;
-   let scoringFailures=0;
-   for(let start=0;start<pendingJD.length;start+=10){
-     const chunk=pendingJD.slice(start,start+10);
-     setScoringNow(chunk.map(j=>j.url));
-     try{
-       const response=await fetch('/api/jd/enrich',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jobs:chunk,roles})});
-       if(!response.ok)throw Error('Falha ao avaliar lote '+(Math.floor(start/10)+1));
-       const data=await response.json();
-       for(const j of data.items||[]){
-         if(all.has(j.url))all.set(j.url,j);
-         if(uncertain.has(j.url))uncertain.set(j.url,j);
-       }
-       setResults([...all.values()]);setReviews([...uncertain.values()]);
-     }catch(e){scoringFailures+=chunk.length;setScoringFailed(prev=>[...prev,...chunk.map(j=>j.url)]);setMessage('Algumas avaliações de JD não foram concluídas; resultados preservados.');}
-     setScoringNow([]);
-     resolved+=chunk.length;setEvaluated(resolved);
-   }
+   await enrichAvailable();
    setCompleted(completedAll);
    setMessage(completedAll&&!skipped&&!scoringFailures?'Busca concluída.':'Busca parcial: '+skipped+' lotes de fontes e '+scoringFailures+' avaliações de JD falharam. Confira Fontes.');
   }catch(e){setError(e.message);setMessage('Busca parcial — os resultados encontrados continuam disponíveis.')}
@@ -61,7 +72,8 @@ export function OpportunitiesPanel(){
  const scoreStatus=v=>{
    if(v.ranking?.score!==null&&v.ranking?.score!==undefined)return 'scored';
    if(scoringFailed.includes(v.url))return 'failed';
-   if(busy)return scoringNow.includes(v.url)?'calculating':'waiting';
+   if(scoringNow.includes(v.url))return 'calculating';
+   if(busy && (v.jd_status==='pendente' || (v.ranking?.score==null && ['greenhouse','inhire'].some(src=>v.source?.toLowerCase().includes(src)))))return 'waiting';
    return 'unscored';
  };
  const scoreDisplay=v=>{

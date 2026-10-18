@@ -170,7 +170,7 @@ def merge_semantic_requirements(base, extracted):
         # payment-product ownership or knowledge of the Pix/card rails.
         payments_context=any(x in normalized for x in ("payment","payments","pagamento","pagamentos","pix","acquiring","adquirencia","settlement"))
         specialized_payments=any(x in normalized for x in ("pix","card acquiring","settlement","iso 8583","brazilian payment rails"))
-        technical_core=any(x in normalized for x in ("write code","hands-on coding","programming required","software development required","software engineer","developer role","test automation","qa automation","computer science degree","coding required"))
+        technical_core=any(x in normalized for x in ("write code","hands-on coding","programming required","software development required","previous software developer experience","hands-on software development","test automation","qa automation","computer science degree","coding required"))
         # A generic PM capability does not prove specialized Pix/card-rails expertise.
         transferable_domains=(
             (("healthcare domain","clinical operations","healthtech domain"),"Top Saúde: gestão de serviços médicos e processos"),

@@ -27,7 +27,7 @@ class ResumeEngineTests(unittest.TestCase):
         self.assertNotIn("PowerBuilder",content)
     def test_reproducible_bytes_and_hash(self):
         p=build_plan(JD,"Senior Business Analyst")
-        a=audit(p,render_docx(p,b"")) if False else audit(p,render_docx(p))
+        a=audit(p,render_docx(p))
         b=audit(p,render_docx(p))
         self.assertEqual(a["jd_sha256"],b["jd_sha256"])
     def test_empty_jd_rejected(self):

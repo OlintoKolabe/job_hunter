@@ -146,20 +146,20 @@ def relevant_jd_text(value):
         decoded=html.unescape(text)
         if decoded==text:break
         text=decoded
-    text=re.sub(r"<\\s*(?:br|/p|/li|/div|/h[1-6]|/section)\\b[^>]*>","\\n",text,flags=re.I)
+    text=re.sub(r"<\s*(?:br|/p|/li|/div|/h[1-6]|/section)\b[^>]*>","\n",text,flags=re.I)
     text=re.sub(r"<[^>]+>"," ",text)
-    text=re.sub(r"[ \\t]+"," ",text)
-    text=re.sub(r"\\n\\s+","\\n",text)
-    anchors=[r"\\brole expectations\\s*:",r"\\bresponsibilities\\s*:",
-             r"\\bwe are looking for\\b",r"\\bcomo\\s+.{0,95}\\s+voc[eê]\\s+vai\\s*:"]
+    text=re.sub(r"[ \t]+"," ",text)
+    text=re.sub(r"\n\s+","\n",text)
+    anchors=[r"\brole expectations\s*:",r"\bresponsibilities\s*:",
+             r"\bwe are looking for\b",r"\bcomo\s+.{0,95}\s+voc[eê]\s+vai\s*:"]
     for pattern in anchors:
         found=re.search(pattern,text,re.I)
         if found:
             text=text[found.start():]
             break
-    endings=[r"\\bwhy apply through\\b",r"\\bhow jobgether works\\b",r"\\bwhy work for us\\b",
-             r"\\bbenef[ií]cios\\s*:",r"\\bour benefits\\s*:",
-             r"\\bequal opportunity employer\\b",r"\\ba radix est[aá] sempre\\b"]
+    endings=[r"\bwhy apply through\b",r"\bhow jobgether works\b",r"\bwhy work for us\b",
+             r"\bbenef[ií]cios\s*:",r"\bour benefits\s*:",
+             r"\bequal opportunity employer\b",r"\ba radix est[aá] sempre\b"]
     tail=[m.start() for pattern in endings for m in re.finditer(pattern,text,re.I)]
     if tail and min(tail)>300:text=text[:min(tail)]
     return text.strip()

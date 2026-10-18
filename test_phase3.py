@@ -125,6 +125,13 @@ class Phase3ContractTests(unittest.TestCase):
         self.assertEqual([j["url"] for j in review],["https://x.example/fresh"])
         self.assertEqual(count,3)
 
+    def test_search_jobs_route_points_to_search_handler(self):
+        from app import app,search_jobs,exclude_history_matches
+        routes=[r for r in app.routes if getattr(r,"path",None)=="/api/search-jobs"]
+        self.assertEqual(len(routes),1)
+        self.assertIs(routes[0].endpoint,search_jobs)
+        self.assertIsNot(routes[0].endpoint,exclude_history_matches)
+
     def test_history_checked_for_both_result_types(self):
         from pathlib import Path
         code=Path("app.py").read_text()

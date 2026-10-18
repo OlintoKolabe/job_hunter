@@ -19,6 +19,22 @@ class ResumeEngineTests(unittest.TestCase):
             self.assertIn("Build=abcdef123456",tag)
             self.assertIn("JD="+plan["jd_sha256"][:16],tag)
             self.assertTrue(audit(plan,render_docx(plan))["factual_bullets_verified"])
+    def test_reopened_docx_technical_grading(self):
+        from resume_engine import evaluate_rendered_resume
+        plan=build_plan(JD,"Senior Business Analyst")
+        data=render_docx(plan)
+        result=evaluate_rendered_resume(plan,data,JD)
+        self.assertTrue(result["factual_ok"])
+        self.assertIn("factual_traceability",result["dimensions"])
+        self.assertEqual(result["jd_sha256"],plan["jd_sha256"])
+        self.assertGreater(result["technical_score"],0)
+
+    def test_complete_linkedin_history_adds_marketing_evidence(self):
+        from resume_engine import EXPERIENCE
+        self.assertTrue(any("R$ 7 milhões" in fact for fact in EXPERIENCE[12]["facts"]))
+        self.assertTrue(any("triplicada" in fact for fact in EXPERIENCE[9]["facts"]))
+        self.assertTrue(any("Hotjar" in fact for fact in EXPERIENCE[1]["facts"]))
+
     def test_program_manager_gets_governance_evidence(self):
         from resume_engine import EXPERIENCE
         jd="Program Manager governance portfolio cross-functional teams risk project delivery budget"

@@ -154,19 +154,61 @@ def analyze_requirements(jd,title):
             "jd_sha256":hashlib.sha256(jd.encode()).hexdigest()}
 
 def traceable_relevance(plan,jd,experience):
-    """Audit requirements against printed facts; uncovered requirements stay uncovered."""
+    """Conservative clause-level coverage of evidence actually printed in the CV.
+
+    A broad domain category is not proof of an exact qualification, technical
+    framework, tool, formal degree or mandatory specialization.
+    """
     req=analyze_requirements(jd,plan["title"])
     facts=[f for row in experience for f in row["facts"]]
-    all_evidence=[f for e in EXPERIENCE for f in e["facts"]]
+    source={f for item in EXPERIENCE for f in item["facts"]}
+    provenance=plan.get("bullet_provenance") or {}
+    def norm(v):
+        return unicodedata.normalize("NFKD",v.casefold()).encode("ascii","ignore").decode()
+    evidence_text=norm(" ".join(facts))
+    vocabulary={
+      "stakeholders":("stakeholders","stakeholder"),
+      "requirements":("requisitos","requirements","user stories","historias de usuarios","especificacoes"),
+      "roadmap":("roadmap","roadmaps"),
+      "discovery":("discovery","pesquisa de usuarios","user research"),
+      "agile":("scrum","kanban","sprint","agile","agil"),
+      "crm":("crm",),
+      "analytics":("analytics","analises","indicadores","kpi","metrics","metricas","dashboards","paineis","business intelligence"),
+      "media":("midia","media","google ads","social media ads","campanhas","campaigns","publicidade"),
+      "budget":("orcamento","budget"),
+      "experiments":("testes a/b","a/b","hypothesis","hipoteses","experiments","experimentos"),
+      "design":("figma","prototipos","prototypes","prototipacao"),
+      "industrial":("industrial","mining","mineracao","automacao"),
+      "software":("software","programacao","programming","engenharia de software"),
+    }
+    def keys(value):
+        text=norm(value)
+        return {key for key,aliases in vocabulary.items()
+                if any(re.search(r"(?<![a-z0-9])"+re.escape(norm(term))+r"(?![a-z0-9])",text) for term in aliases)}
     details=[]
     for clause in req["essential"]:
-        target=categories(clause,TOPICS)
-        matches=[f for f in facts if target and categories(f,FACT_TOPICS)&target]
-        details.append({"requirement":clause,"supported":bool(matches),
-                        "evidence":matches[:3]})
+        needed=keys(clause)
+        hits=[];matched=set()
+        for fact in facts:
+            shared=needed&keys(fact)
+            if shared:
+                hits.append(fact);matched|=shared
+        acronyms=[token for token in re.findall(r"\b[A-Z][A-Z0-9+.#]{2,}\b",clause)
+                  if token not in ("AND","THE","FOR","WITH","B2B","KPI","KPIS")]
+        missing_exact=[token for token in acronyms if norm(token) not in evidence_text]
+        qualification=bool(re.search(r"(?i)\b(graduacao|graduação|bacharel|superior|degree|bachelor)\b",clause))
+        coverage=len(matched)/len(needed) if needed else 0
+        supported=bool(needed and coverage==1 and not missing_exact and not qualification)
+        details.append({"requirement":clause,"supported":supported,
+                        "coverage_ratio":round(coverage,2),
+                        "matched_concepts":sorted(matched),"missing_concepts":sorted(needed-matched),
+                        "unverified_acronyms":missing_exact,
+                        "qualification_requires_review":qualification,
+                        "evidence":hits[:3]})
     return {"jd_sha256":req["jd_sha256"],"essential_count":len(details),
             "supported_count":sum(int(d["supported"]) for d in details),
-            "requirements":details,"factual_bullets_verified":all(f in all_evidence for f in facts)}
+            "requirements":details,
+            "factual_bullets_verified":all(f in source or provenance.get(f) in source for f in facts)}
 
 def validate_rewrites(proposal, selected):
     """Fail-closed factual rewrite check independent of the generating model.

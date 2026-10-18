@@ -52,6 +52,6 @@ def extract_public_jd(url):
                         if isinstance(value,str) and len(value)>250:return html.unescape(re.sub("<[^>]+>"," ",value))[:90000]
             except (ValueError,TypeError):pass
         parser=Extractor();parser.feed(page)
-        text=re.sub(r"\\s+"," "," ".join(parser.text)).strip()
+        text=re.sub(r"\s+"," "," ".join(parser.text)).strip()
         return text[:90000] if len(text)>=300 else None
     except Exception:return None

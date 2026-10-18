@@ -25,7 +25,7 @@ from search_filters import analyze_filters,apply_filters,search_terms,discovery_
 from catalog_engine import source_tasks,scan
 from catalog_bootstrap import maybe_start
 from jd_enrichment import hydrate_jobs
-from resume_engine import build_plan, render_docx, audit
+from resume_engine import build_plan, render_docx, audit, evaluate_rendered_resume
 from resume_hybrid import apply_hybrid
 
 app = FastAPI(docs_url=None, redoc_url=None)
@@ -479,6 +479,7 @@ def generate_resume(payload: ResumeGenerate, request: Request):
     # Use the real role supplied by the vacancy card; URL slugs can be opaque IDs.
     title=(payload.title or "").strip() or key.rstrip("/").split("/")[-1].replace("-"," ").title()
     plan=build_plan(row[0],title)
+    baseline_plan=plan
     # Serialize identical requests before looking up cache or reserving AI spend.
     # Scoped to this transaction; no new tables or schema changes needed.
     with psycopg.connect(DATABASE,connect_timeout=8) as cv_conn:
@@ -491,6 +492,20 @@ def generate_resume(payload: ResumeGenerate, request: Request):
     plan["cv_build"]=os.getenv("RENDER_GIT_COMMIT","local")[:12]
     data=render_docx(plan)
     report=audit(plan,data)
+    quality=evaluate_rendered_resume(plan,data,row[0])
+    # Evaluate the actual reopened DOCX, not only the model's proposal.
+    # Deterministic recovery prevents a personalized document from regressing
+    # behind the current proven baseline on technical quality dimensions.
+    if cv_usage["mode"] in ("hybrid","cached_hybrid"):
+        baseline_data=render_docx(baseline_plan)
+        baseline_quality=evaluate_rendered_resume(baseline_plan,baseline_data,row[0])
+        if not quality["factual_ok"] or quality["technical_score"] < baseline_quality["technical_score"]:
+            cv_usage["mode"]="quality_fallback"
+            plan={**baseline_plan,"cv_mode":"quality_fallback",
+                  "cv_build":plan["cv_build"]}
+            data=render_docx(plan)
+            report=audit(plan,data)
+            quality=evaluate_rendered_resume(plan,data,row[0])
     from urllib.parse import quote
     import re as _re
     company=payload.company or key.split("/")[0].split(".")[0].replace("-"," ").title()
@@ -500,7 +515,8 @@ def generate_resume(payload: ResumeGenerate, request: Request):
     filename="Olinto Manso Pereira - "+safe_name(role)+" - "+safe_name(company)+".docx"
     encoded_filename=quote(filename)
     headers={"X-Resume-Engine":report["engine"],"X-Document-SHA256":report["document_sha256"],
-             "X-JD-SHA256":report["jd_sha256"],"X-AI-Calls":str(cv_usage["ai_calls"]),"X-AI-Cost-USD":str(cv_usage["cost_usd"]),"X-CV-Mode":cv_usage["mode"],"X-CV-Build":plan["cv_build"],"X-CV-Provenance":"job-hunter-cv-provenance-v1"}
+             "X-JD-SHA256":report["jd_sha256"],"X-AI-Calls":str(cv_usage["ai_calls"]),"X-AI-Cost-USD":str(cv_usage["cost_usd"]),"X-CV-Mode":cv_usage["mode"],"X-CV-Build":plan["cv_build"],"X-CV-Provenance":"job-hunter-cv-provenance-v1",
+             "X-CV-Technical-Score":str(quality["technical_score"])}
     return StreamingResponse(io.BytesIO(data),
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         headers={**headers,"Content-Disposition":f"attachment; filename*=UTF-8''{encoded_filename}"})

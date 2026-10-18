@@ -46,7 +46,7 @@ class Phase3ContractTests(unittest.TestCase):
         r=score_job({"title":"Product Manager","location":"Brazil Remote","description":jd},"Product Manager")
         self.assertEqual(r["mandatory_count"],3)
         self.assertEqual(r["uninterpreted_count"],1)
-        self.assertEqual(r["score"],100)
+        self.assertIsNone(r["score"])
         self.assertEqual(r["confidence"],"amostra_limitada")
 
     def test_greenhouse_collects_full_job_descriptions(self):
@@ -130,7 +130,7 @@ class Phase3ContractTests(unittest.TestCase):
         row={"title":"Project Manager","description":"Requirements\nTeam leadership\nBudget management\nProject portfolio management"}
         r=score_job(row,"Project Manager")
         self.assertEqual(r["coverage_pct"],100)
-        self.assertEqual(r["score"],100)
+        self.assertIsNone(r["score"])  # Three requirements and short JD are insufficient.
         self.assertEqual(r["mandatory_count"],3)
 
     def test_block4_fit_is_about_requirements_not_preferences(self):
@@ -138,7 +138,7 @@ class Phase3ContractTests(unittest.TestCase):
         jd="Required: product roadmap and backlog management. Required: fluent Spanish."
         row={"title":"Product Manager","location":"Brazil - Remote","description":jd}
         result=score_job(row,"Product Manager")
-        self.assertEqual(result["score"],67)
+        self.assertIsNone(result["score"])  # Short JD cannot substantiate a numerical score.
         self.assertEqual(result["mandatory_count"],3)
         self.assertEqual(result["unverified_count"],1)
         self.assertEqual(result["confidence"],"amostra_limitada")
@@ -158,7 +158,7 @@ class Phase3ContractTests(unittest.TestCase):
         self.assertEqual(len(confirmed),1)
         self.assertEqual(len(pending),1)
         self.assertIn("ranking",pending[0])
-        self.assertIsInstance(pending[0]["ranking"]["score"],int)
+        self.assertIsNone(pending[0]["ranking"]["score"])  # Short JD stays visible without a made-up score.
 
     def test_block4_unknown_jd_has_no_fit(self):
         from block4_score import score_job
@@ -174,7 +174,7 @@ class Phase3ContractTests(unittest.TestCase):
         ]
         found,_,_=analyze_filters(rows,"Product Manager","BR","remote",0,"score")
         self.assertEqual(len(found),2)
-        self.assertEqual(found[0]["title"],"Senior Product Manager")
+        self.assertEqual(found[0]["title"],"Product Analyst")  # Both lack sufficient JD; date is tie-breaker.
         self.assertIsNone(found[1]["ranking"]["score"])
 
     def test_discovery_budget_covers_every_selected_family(self):

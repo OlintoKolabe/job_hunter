@@ -56,6 +56,7 @@ def validate_text(proposal,plan):
     normalized=unicodedata.normalize("NFKD",summary.casefold())
     if any(x in normalized for x in ["garantido","especialista certificado","mais de 10 anos","fluente em espanhol"]):
         return None
+    if any(f.casefold() in summary.casefold() for e in plan["experience"] for f in e["facts"]):return None
     return summary.strip()
 
 def request_micro_summary(plan,jd,opener=urllib.request.urlopen):
@@ -101,6 +102,8 @@ def apply_hybrid(cur,normalized_url,jd,plan):
         (normalized_url,plan["jd_sha256"],ENGINE_VERSION,RUBRIC,key_for(digest)))
     cached=cur.fetchone()
     if cached and isinstance(cached[0],dict):
+        if cached[0].get("_terminal_fallback"):
+            return plan,{"mode":"cached_fallback","ai_calls":0,"cost_usd":0.0}
         accepted=validate_text(cached[0],plan)
         if accepted:
             plan={**plan,"summary":accepted}
@@ -119,14 +122,16 @@ def apply_hybrid(cur,normalized_url,jd,plan):
         accepted=validate_text(candidate,plan)
         if accepted and actual<=MAX_COST_USD:
             plan={**plan,"summary":accepted}
+            success=True
+        # Cache success AND invalid output to prevent recurring charges for identical input.
+        if actual<=MAX_COST_USD:
             cur.execute("""INSERT INTO jh_score_cache
                 (normalized_url,jd_hash,profile_version,rubric_version,roles_hash,result,model)
                 VALUES (%s,%s,%s,%s,%s,%s,%s)
                 ON CONFLICT (normalized_url,jd_hash,profile_version,rubric_version,roles_hash)
                 DO UPDATE SET result=EXCLUDED.result,model=EXCLUDED.model,created_at=NOW()""",
                 (normalized_url,plan["jd_sha256"],ENGINE_VERSION,RUBRIC,key_for(digest),
-                 Jsonb(candidate),"cv_hybrid"))
-            success=True
+                 Jsonb(candidate if success else {"_terminal_fallback":True}),"cv_hybrid" if success else "cv_fallback"))
         info={"mode":"hybrid" if success else "fallback","ai_calls":1,"cost_usd":actual}
     except Exception:
         info={"mode":"fallback","ai_calls":1,"cost_usd":actual}

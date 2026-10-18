@@ -31,7 +31,7 @@ def get_previous_semantic(cur,url,jd_hash,roles):
         AND model='hybrid'""",
         (url,jd_hash,PROFILE_VERSION,"block4.1-v3-complete-scoring",key_for(roles)))
     row=cur.fetchone()
-    if not row or not isinstance(row[0],dict):return None
+    if not isinstance(row,(tuple,list)) or len(row)<1 or not isinstance(row[0],dict):return None
     requirements=row[0].get("requirements") or []
     if not isinstance(requirements,list) or not requirements:return None
     return [{"name":r.get("name"),"type":r.get("type"),

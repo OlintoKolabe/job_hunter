@@ -40,6 +40,28 @@ class Phase3ContractTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError,"desativado"):
                 js_fallback("quickin","test")
 
+    def test_block4_extracts_unlabeled_qualification_bullets(self):
+        from block4_score import score_job
+        jd="<h3>Requirements</h3><ul><li>Product roadmap planning</li><li>Experience in Jira</li><li>Python expertise</li></ul>"
+        r=score_job({"title":"Product Manager","location":"Brazil Remote","description":jd},"Product Manager")
+        self.assertEqual(r["mandatory_count"],3)
+        self.assertEqual(r["unverified_count"],1)
+        self.assertEqual(r["score"],67)
+        self.assertEqual(r["confidence"],"amostra_limitada")
+
+    def test_greenhouse_collects_full_job_descriptions(self):
+        from collectors import pull
+        seen=[]
+        def response(url,headers=None):
+            seen.append(url)
+            return {"jobs":[{"title":"Product Manager","absolute_url":"https://jobs.example/a",
+                            "location":{"name":"Brazil Remote"},
+                            "content":"<h3>Requirements</h3><li>Product roadmap</li>"}]}
+        with patch("collectors.fetch_json",side_effect=response):
+            _,jobs=pull("Greenhouse","example")
+        self.assertIn("content=true",seen[0])
+        self.assertTrue(jobs[0]["description"])
+
     def test_block4_fit_is_about_requirements_not_preferences(self):
         from block4_score import score_job
         jd="Required: product roadmap and backlog management. Required: fluent Spanish."
@@ -48,7 +70,7 @@ class Phase3ContractTests(unittest.TestCase):
         self.assertEqual(result["score"],67)
         self.assertEqual(result["mandatory_count"],3)
         self.assertEqual(result["unverified_count"],1)
-        self.assertEqual(result["confidence"],"requisitos_extraidos")
+        self.assertEqual(result["confidence"],"amostra_limitada")
         changed={**row,"location":"Brazil - Onsite","salary":"R$ 50000"}
         self.assertEqual(score_job(changed,"Product Manager")["score"],result["score"])
         self.assertNotEqual(score_job(changed,"Product Manager")["priority"],result["priority"])

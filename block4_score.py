@@ -163,7 +163,8 @@ def merge_semantic_requirements(base, extracted):
         if not name or kind not in ("obrigatorio","desejavel"):continue
         proof=SKILLS[skill][2] if skill in SKILLS else None
         rows.append({"name":name[:160],"type":kind,
-            "status":"comprovado" if proof else "nao_comprovado","evidence":proof})
+            "status":"comprovado" if proof else "nao_comprovado","evidence":proof,
+            "evidence_id":skill if proof else None})
     if not rows:return base
     total=sum(3 if r["type"]=="obrigatorio" else 1 for r in rows)
     met=sum((3 if r["type"]=="obrigatorio" else 1) for r in rows if r["status"]=="comprovado")

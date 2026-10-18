@@ -169,8 +169,8 @@ def apply_hybrid(cur,normalized_url,jd,plan):
             return plan,{"mode":"cached_fallback","ai_calls":0,"cost_usd":0.0}
         accepted=validate_text(cached[0],plan)
         selected=selected_evidence(cached[0],plan)
-        if selected and quality_gate(plan,selected,jd):
-            plan={**plan,"summary":accepted or plan["summary"],"experience":selected or plan["experience"]}
+        if accepted is not None and selected and quality_gate(plan,selected,jd):
+            plan={**plan,"summary":accepted,"experience":selected}
             return plan,{"mode":"cached_hybrid","ai_calls":0,"cost_usd":0.0}
     # Conservative upper bound based on tightly bounded message and max output.
     # A priced response is recorded using actual usage; budget never bypassed.
@@ -185,7 +185,7 @@ def apply_hybrid(cur,normalized_url,jd,plan):
         actual=price(usage)
         accepted=validate_text(candidate,plan)
         selected=selected_evidence(candidate,plan)
-        if actual<=MAX_COST_USD and selected and quality_gate(plan,selected,jd):
+        if actual<=MAX_COST_USD and accepted is not None and selected and quality_gate(plan,selected,jd):
             plan={**plan,"summary":accepted or plan["summary"],"experience":selected or plan["experience"]}
             success=True
         # Cache success AND invalid output to prevent recurring charges for identical input.

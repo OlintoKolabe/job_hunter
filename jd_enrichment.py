@@ -105,7 +105,7 @@ def hydrate_jobs(cursor,jobs,roles,url_key,limit=PER_BATCH_LIMIT):
         # Requires approved migration before deployment.
         if description:
             evaluation=get_cached(cursor,key,jd_hash,roles)
-            if evaluation is not None:ai_status='cache'
+            if evaluation is not None:ai_status='retry_later' if evaluation.get('_ai_retry_later') else 'cache'
         if evaluation is None:
             evaluation=score_job(complete,roles)
             model='deterministic'
@@ -129,6 +129,9 @@ def hydrate_jobs(cursor,jobs,roles,url_key,limit=PER_BATCH_LIMIT):
                         with psycopg.connect(os.environ['DATABASE_URL'],connect_timeout=7) as budget_conn:
                             with budget_conn.cursor() as budget_cur:
                                 settle(budget_cur,usage_id,actual,bool(extracted and extracted.get("requirements")))
+                    if ai_status=='failed':
+                        evaluation['_ai_retry_later']=True
+                        model='ai_error'
                     if extracted and extracted.get('requirements'):
                         evaluation=merge_semantic_requirements(evaluation,extracted['requirements'])
                         evaluation['ai_interpreted']=True
@@ -138,7 +141,7 @@ def hydrate_jobs(cursor,jobs,roles,url_key,limit=PER_BATCH_LIMIT):
                     ai_status='budget_exhausted'
             elif description:
                 ai_status='disabled'
-            if description and (evaluation.get('score') is not None or model=='hybrid'):save(cursor,key,jd_hash,roles,evaluation,model)
+            if description and (evaluation.get('score') is not None or model in ('hybrid','ai_error')):save(cursor,key,jd_hash,roles,evaluation,model)
         output.append({**j,"ranking":evaluation,"jd_evidence":signals(complete,roles),
                        "ai_status":ai_status,"jd_status":origin if description else ("pendente" if (key,j) in pending[limit:] else "indisponivel")})
     return output,count

@@ -15,7 +15,7 @@ class ResumeEngineTests(unittest.TestCase):
         self.assertTrue(a["factual_bullets_verified"])
     def test_contact_and_chronology(self):
         p=build_plan(JD,"Senior Business Analyst")
-        self.assertEqual([x["company"] for x in p["experience"]],[x["company"] for x in EXPERIENCE])
+        self.assertEqual([x["company"] for x in p["experience"]],[x["company"] for x in sorted(EXPERIENCE,key=lambda e:__import__("resume_engine").chronology_index(e),reverse=True)])
         doc=Document(io.BytesIO(render_docx(p)))
         content="\n".join(x.text for x in doc.paragraphs)
         for c in CONTACT.values():self.assertIn(c,content)

@@ -258,9 +258,9 @@ def evaluate_rendered_resume(plan, data, jd):
                 or fact_source.get(f) in {x for item in EXPERIENCE for x in item["facts"]})
     unique=len(facts)==len(set(facts))
     bullet_present=all(displayed.count(f)==1 for f in facts)
-    chronology=[chronology_index(EXPERIENCE[int(e["source_index"])])
-                for e in plan["experience"]+plan["additional_experience"]]
-    chronologically_sorted=chronology==sorted(chronology,reverse=True)
+    all_roles=sorted(EXPERIENCE,key=chronology_index,reverse=True)
+    offsets=[displayed.find(e["role"]+" — "+e["company"]) for e in all_roles]
+    chronologically_sorted=all(p>=0 for p in offsets) and offsets==sorted(offsets)
     factual_ok=factual==len(facts) and bullet_present and unique
     scores={
         "factual_traceability":2.0 if factual_ok else 0.0,

@@ -104,12 +104,12 @@ export function OpportunitiesPanel(){
    if(state==='waiting'||state==='calculating')return 'Nota pendente — a busca ainda está em andamento';
    if(state==='failed')return 'O lote falhou; tente uma nova busca';
    if(state==='scored')return v.ranking?.confidence==='requisitos_extraidos'?'% dos requisitos extraídos':v.ranking?.confidence==='amostra_limitada'?'Amostra limitada — conferir JD':'Nota calculada';
-   if(v.ai_status==='failed')return 'Falha na interpretação por IA — avaliação não concluída';
+   if(v.ai_status==='failed')return 'A análise automática falhou. Tente uma nova busca.';
    if(v.ai_status==='disabled')return 'IA desativada — avaliação apenas por regras';
    if(v.ai_status==='budget_exhausted')return 'Limite mensal de IA atingido';
    if(v.jd_status==='indisponivel')return 'Descrição da vaga não recuperada — sem nota';
    if(v.jd_status==='pendente')return 'Descrição ainda não avaliada — sem nota';
-   return v.ranking?.confidence==='cobertura_insuficiente'?'Requisitos pouco claros — sem nota confiável':'Evidências insuficientes para atribuir nota';
+   return v.ranking?.confidence==='cobertura_insuficiente'?'Não foi possível interpretar requisitos suficientes':'Não há evidências suficientes para uma nota confiável';
  };
  const ordered=[...combined.values()].sort((a,b)=>{
    const date=v=>{const x=Date.parse(v.published||'');return Number.isFinite(x)?x:0};

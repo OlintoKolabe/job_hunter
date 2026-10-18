@@ -95,6 +95,20 @@ class HybridResumeTests(unittest.TestCase):
         self.assertIsNotNone(picked)
         original={f for e in self.plan["experience"] for f in e["facts"]}
         self.assertTrue(original.issubset({f for e in picked for f in e["facts"]}))
+    def test_summary_cannot_cite_undisplayed_occupation(self):
+        # Even when a model outputs a valid index, it must be shown with facts.
+        candidate={"summary":"Gestão de campanhas de marketing e relacionamento com clientes corporativos.",
+                   "source_ids":["13"],"evidence_ids":["1:0"]}
+        self.assertIsNone(h.validate_text(candidate,self.plan))
+    def test_marketing_relevance_and_no_hallucinated_fact(self):
+        from resume_engine import EXPERIENCE
+        jd="Coordenação de marketing, campanhas, CRM, retenção e liderança de equipe."
+        plan=build_plan(jd,"Coordenador Marketing")
+        chosen=h.selected_evidence({"evidence_ids":["9:0","9:1","13:0"]},plan)
+        self.assertIsNotNone(chosen)
+        facts=[f for e in chosen for f in e["facts"]]
+        self.assertIn(EXPERIENCE[9]["facts"][0],facts)
+        self.assertTrue(audit({**plan,"experience":chosen},render_docx({**plan,"experience":chosen}))["factual_bullets_verified"])
     def test_render_unchanged_provenance(self):
         data=render_docx(self.plan)
         self.assertTrue(audit(self.plan,data)["factual_bullets_verified"])

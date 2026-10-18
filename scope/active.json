@@ -1,10 +1,10 @@
 {
-  "id": "JOB-HUNTER-BLOCK-5-HYBRID-EVIDENCE-V2",
+  "id": "JOB-HUNTER-CV-QUALITY-HOTFIX",
   "status": "active",
   "base_ref": "aafe8327f1ff9b9b6cdbc73af6135bf7074f5403",
   "production_ref": "feat/phase1-web-foundation",
-  "feature_ref": "feat/block5-hybrid-evidence-v2",
-  "objective": "Allow one bounded AI call to select verified evidence IDs across entire documented career and write a short grounded summary; preserve deterministic original facts, chronology, cache, cost ceilings and rollback.",
+  "feature_ref": "fix/cv-quality-grounded-ranking",
+  "objective": "Single-scope CV hotfix: validate summary only against rendered evidence and make fallback rejection observable without widening AI or modifying job rankings.",
   "allowed_files": [
     "scope/active.json",
     "scripts/check_scope.py",
@@ -64,5 +64,5 @@
     "AI may reorder/select verified facts but cannot author new professional bullets",
     "Old cached hybrid resumes invalidated by independent rubric version"
   ],
-  "deployment": "No deploy or merge without explicit approval"
+  "deployment": "No merge to main or deploy before explicit approval"
 }

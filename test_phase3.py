@@ -40,33 +40,35 @@ class Phase3ContractTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError,"desativado"):
                 js_fallback("quickin","test")
 
-    def test_block4_scoring_is_bounded_and_reproducible(self):
+    def test_block4_fit_is_about_requirements_not_preferences(self):
         from block4_score import score_job
-        row={"title":"Senior Product Manager","location":"Brazil Remote",
-             "workplaceType":"remote","description":"Own product strategy, product roadmap, product discovery, and product backlog. Manage stakeholders and improve customer adoption in healthcare while coordinating sprint planning, research insights and business goals with teams."}
-        first=score_job(row,"Product Manager")
-        self.assertEqual(first,score_job(row,"Product Manager"))
-        self.assertGreater(first["score"],0)
-        self.assertLessEqual(first["score"],97)
-        self.assertEqual(first["confidence"],"completa")
-        self.assertEqual(first["remote"],20)
+        jd="Required: product roadmap and backlog management. Required: fluent Spanish."
+        row={"title":"Product Manager","location":"Brazil - Remote","description":jd}
+        result=score_job(row,"Product Manager")
+        self.assertEqual(result["score"],50)
+        self.assertEqual(result["mandatory_count"],3)
+        self.assertEqual(result["unverified_count"],1)
+        self.assertEqual(result["confidence"],"requisitos_extraidos")
+        changed={**row,"location":"Brazil - Onsite","salary":"R$ 50000"}
+        self.assertEqual(score_job(changed,"Product Manager")["score"],result["score"])
+        self.assertNotEqual(score_job(changed,"Product Manager")["priority"],result["priority"])
 
-    def test_block4_unknown_jd_is_provisional(self):
+    def test_block4_unknown_jd_has_no_fit(self):
         from block4_score import score_job
         score=score_job({"title":"Product Owner","location":"Brazil Remote"},"Product Owner")
-        self.assertEqual(score["confidence"],"provisoria")
-        self.assertEqual(score["fit"],30)
+        self.assertEqual(score["confidence"],"sem_base")
+        self.assertIsNone(score["score"])
 
-    def test_block4_sorted_by_score_not_date(self):
+    def test_block4_sorted_by_fit_with_unscored_last(self):
         from search_filters import analyze_filters
         rows=[
             {"title":"Product Analyst","location":"Brazil Remote","description":"","published":"2026-10-16"},
-            {"title":"Senior Product Manager","location":"Brazil Remote","description":"Own product strategy, product roadmap, product discovery and product backlog for a healthcare company. Guide product requirements and product lifecycle through consistent stakeholder management.","published":"2026-10-12"}
+            {"title":"Senior Product Manager","location":"Brazil Remote","description":"Required: roadmap. Required: backlog. Preferred: Figma.","published":"2026-10-12"}
         ]
         found,_,_=analyze_filters(rows,"Product Manager","BR","remote",0,"score")
         self.assertEqual(len(found),2)
-        self.assertGreaterEqual(found[0]["ranking"]["score"],found[1]["ranking"]["score"])
         self.assertEqual(found[0]["title"],"Senior Product Manager")
+        self.assertIsNone(found[1]["ranking"]["score"])
 
     def test_discovery_budget_covers_every_selected_family(self):
         from search_filters import discovery_queries,DEFAULT_ROLES

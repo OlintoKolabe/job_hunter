@@ -37,7 +37,7 @@ def extra_pull(source,slug):
     jobs=[]
     if source=="greenhouse_eu":
         try:
-            raw,_=read("https://boards-api.greenhouse.io/v1/boards/"+urllib.parse.quote(slug)+"/jobs?content=false")
+            raw,_=read("https://boards-api.greenhouse.io/v1/boards/"+urllib.parse.quote(slug)+"/jobs?content=true")
             data=json.loads(raw)
         except urllib.error.HTTPError as e:
             if e.code !=404:raise
@@ -51,7 +51,7 @@ def extra_pull(source,slug):
             return jobs,"ok"
         for j in data.get("jobs",[]):
             location=j.get("location") or {}
-            val=item(slug,j.get("title"),j.get("absolute_url"),location.get("name","") if isinstance(location,dict) else location,source)
+            val=item(slug,j.get("title"),j.get("absolute_url"),location.get("name","") if isinstance(location,dict) else location,source,j.get("first_published"),j.get("content") or "")
             if val:jobs.append(val)
         return jobs,"ok"
     if source=="bamboohr":

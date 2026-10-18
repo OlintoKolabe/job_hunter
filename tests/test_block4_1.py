@@ -82,6 +82,28 @@ class Block41Tests(unittest.TestCase):
         x=merge_semantic_requirements({"score":None},rows)
         self.assertLess(x["score"],100)
 
+    def test_hard_technical_role_excludes_without_paid_ai(self):
+        from block4_score import hard_role_mismatch
+        self.assertTrue(hard_role_mismatch({"title":"Senior Software Engineer"}))
+        self.assertTrue(hard_role_mismatch({"title":"QA Engineer"}))
+        self.assertFalse(hard_role_mismatch({"title":"Technical Product Manager - Developer Experience"}))
+        self.assertFalse(hard_role_mismatch({"title":"Product Manager working with software engineers"}))
+    def test_hard_role_zero_is_returned_without_model_call(self):
+        from datetime import datetime,timezone
+        from unittest.mock import Mock
+        from jd_enrichment import hydrate_jobs
+        url="https://example.com/jobs/engineer"
+        jd="Senior Software Engineer: write production code with Python and maintain CI. "*10
+        cur=Mock()
+        cur.fetchall.return_value=[(url,jd,datetime.now(timezone.utc))]
+        with patch("jd_enrichment.get_cached",return_value=None),patch("jd_enrichment.interpret") as interpret_ai,patch("jd_enrichment.reserve") as reserve_ai,patch("jd_enrichment.save") as save:
+            jobs,_=hydrate_jobs(cur,[{"url":url,"title":"Senior Software Engineer"}],"Product Manager",lambda v:v)
+        self.assertEqual(jobs[0]["ranking"]["score"],0)
+        self.assertEqual(jobs[0]["ai_status"],"not_needed")
+        interpret_ai.assert_not_called()
+        reserve_ai.assert_not_called()
+        save.assert_called_once()
+
     def test_secret_unset_means_no_ai(self):
         with patch.dict("os.environ",{"JH_AI_ENABLED":"0","OPENAI_API_KEY":"dummy"}):
             self.assertIsNone(interpret("required project management"))

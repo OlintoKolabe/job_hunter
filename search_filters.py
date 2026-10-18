@@ -224,7 +224,7 @@ def analyze_filters(jobs,roles=DEFAULT_ROLES,country="BR",mode="remote",days=30,
         bucket,reason=classify(j,terms,country,mode,days)
         reasons[bucket+(":"+reason if reason else "")]=reasons.get(bucket+(":"+reason if reason else ""),0)+1
         if bucket=="confirmed":confirmed.append({**j,"detected_mode":detect_work_mode(j,signals(j,roles)),"jd_evidence":signals(j,roles),"ranking":score_job(j,roles),"description":""})
-        elif bucket=="review":review.append({**j,"detected_mode":detect_work_mode(j,signals(j,roles)),"jd_evidence":signals(j,roles),"description":"","needs_verification":reason.split(",")})
+        elif bucket=="review":review.append({**j,"detected_mode":detect_work_mode(j,signals(j,roles)),"jd_evidence":signals(j,roles),"ranking":score_job(j,roles),"description":"","needs_verification":reason.split(",")})
     order=lambda j:parse_date(j.get("published")) or datetime.min.replace(tzinfo=timezone.utc)
     if sort=="score":
         key=lambda j:(j["ranking"]["score"] is not None,j["ranking"]["score"] if j["ranking"]["score"] is not None else -1,-j["ranking"]["unverified_count"],order(j))

@@ -144,7 +144,7 @@ class HybridResumeTests(unittest.TestCase):
         from resume_engine import EXPERIENCE
         jd="Coordenação de marketing, campanhas, CRM, retenção e liderança de equipe."
         plan=build_plan(jd,"Coordenador Marketing")
-        chosen=h.selected_evidence({"evidence_ids":["9:0","9:1","13:0"]},plan)
+        chosen=h.selected_evidence({"evidence_ids":["9:0","9:1","3:3","11:0","12:0","13:0"]},plan)
         self.assertIsNotNone(chosen)
         facts=[f for e in chosen for f in e["facts"]]
         self.assertIn(EXPERIENCE[9]["facts"][0],facts)

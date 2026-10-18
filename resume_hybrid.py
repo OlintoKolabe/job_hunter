@@ -181,7 +181,7 @@ def validate_rewrites(proposal, selected):
     allowed_terms={"de","da","do","dos","das","em","na","no","nos","nas","para","com",
                    "por","e","a","o","as","os","um","uma","ao","aos","à","às",
                    "and","the","of","for","to","with","in","at","on","by",
-                   "responsável","atuação","experiência","gestão","desenvolvimento"}
+                   "e","ou","sob","entre","junto","junto a"}
     mapping={}
     for evidence_id,rewrite in proposed.items():
         if not isinstance(evidence_id,str) or evidence_id not in lookup:return None
@@ -208,6 +208,8 @@ def apply_validated_rewrites(plan,proposal):
         rendered.append(current)
         for source in row["facts"]:
             if source in rewrites:provenance[rewrites[source]]=source
+    all_facts=[f for row in rendered for f in row["facts"]]
+    if len(set(all_facts))!=len(all_facts):return None
     return {**plan,"experience":rendered,"bullet_provenance":provenance}
 
 def request_micro_summary(plan,jd,opener=urllib.request.urlopen):

@@ -19,6 +19,14 @@ class ResumeEngineTests(unittest.TestCase):
             self.assertIn("Build=abcdef123456",tag)
             self.assertIn("JD="+plan["jd_sha256"][:16],tag)
             self.assertTrue(audit(plan,render_docx(plan))["factual_bullets_verified"])
+    def test_encoded_job_html_does_not_rank_benefit_boilerplate(self):
+        from resume_engine import relevant_jd_text
+        html_jd="&lt;div&gt;Company introduction.&lt;/div&gt;&lt;p&gt;Role expectations: Deliver roadmaps, product discovery and stakeholder alignment.&lt;/p&gt;&lt;p&gt;Why work for us? Unlimited fruit and snacks.&lt;/p&gt;"
+        extracted=relevant_jd_text(html_jd)
+        self.assertIn("product discovery",extracted)
+        self.assertNotIn("fruit and snacks",extracted)
+        self.assertNotIn("Company introduction",extracted)
+
     def test_reopened_docx_technical_grading(self):
         from resume_engine import evaluate_rendered_resume
         plan=build_plan(JD,"Senior Business Analyst")

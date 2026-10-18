@@ -13,7 +13,7 @@ from urllib.parse import urlsplit
 
 from pathlib import Path
 from fastapi import FastAPI, Request, Response, HTTPException
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from pydantic import BaseModel
@@ -24,6 +24,7 @@ from search_filters import analyze_filters,apply_filters,search_terms,discovery_
 from catalog_engine import source_tasks,scan
 from catalog_bootstrap import maybe_start
 from jd_enrichment import hydrate_jobs
+from resume_engine import build_plan, render_docx, audit
 
 app = FastAPI(docs_url=None, redoc_url=None)
 DIST = Path(__file__).resolve().parent / "dist"
@@ -452,6 +453,34 @@ async def history_import(request: Request):
 def logout(response: Response):
     response.delete_cookie(COOKIE)
     return {"ok":True}
+
+class ResumeGenerate(BaseModel):
+    url: str
+
+@app.post("/api/resume/generate")
+def generate_resume(payload: ResumeGenerate, request: Request):
+    """Explicitly requested generation; only from pre-existing JD cache.
+    This endpoint never calls OpenAI and does not write a CV into the database.
+    """
+    require_auth(request)
+    key=normalized_url(payload.url)
+    if not key or len(key)>500:
+        raise HTTPException(400,"URL da vaga inválida")
+    with psycopg.connect(DATABASE,connect_timeout=8) as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT description FROM jh_jd_cache WHERE normalized_url=%s",(key,))
+            row=cur.fetchone()
+    if not row or not row[0]:
+        raise HTTPException(404,"Descrição da vaga não está armazenada; avalie a vaga primeiro.")
+    title=key.rstrip("/").split("/")[-1].replace("-"," ").title()
+    plan=build_plan(row[0],title)
+    data=render_docx(plan)
+    report=audit(plan,data)
+    headers={"X-Resume-Engine":report["engine"],"X-Document-SHA256":report["document_sha256"],
+             "X-JD-SHA256":report["jd_sha256"],"X-AI-Calls":"0","X-AI-Cost-USD":"0"}
+    return StreamingResponse(io.BytesIO(data),
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={**headers,"Content-Disposition":'attachment; filename="curriculo-job-hunter.docx"'})
 
 @app.get("/api/status")
 def status(request: Request):

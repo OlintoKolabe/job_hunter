@@ -32,7 +32,7 @@ class HybridResumeTests(unittest.TestCase):
         self.assertEqual(usage["ai_calls"],0)
     def test_fallback_when_model_claim_invalid(self):
         cursor=MagicMock()
-        cursor.fetchone.side_effect=[None,(0.0,0.0),(1001,)]
+        cursor.fetchone.side_effect=[None,(0.0,0.0),(1001,),("2026-10",0.002)]
         candidate={"summary":"Experiência comprovada como especialista em Oracle e PowerBuilder para engenharia financeira de alto desempenho.","source_ids":["1"]}
         with patch.dict(os.environ,{"JH_CV_AI_ENABLED":"1","OPENAI_API_KEY":"dummy"}):
             with patch.object(h,"request_micro_summary",return_value=(candidate,{"prompt_tokens":350,"completion_tokens":70})):

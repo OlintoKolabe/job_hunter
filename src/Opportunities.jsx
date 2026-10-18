@@ -21,18 +21,17 @@ export function OpportunitiesPanel(){
    let resolved=0;
    async function enrichAvailable(){
      const candidates=[...all.values()].filter(j=>!scoredOrAttempted.has(j.url) &&
-       (j.jd_status==='pendente' || (j.ranking?.score==null &&
-       ['greenhouse','inhire'].some(src=>j.source?.toLowerCase().includes(src)))));
+       j.ranking?.score==null);
      const waiting=[...new Map(candidates.map(j=>[j.url,j])).values()];
      if(!waiting.length)return;
      setEvaluationTotal(v=>v+waiting.length);
-     for(let start=0;start<waiting.length;start+=10){
-       const chunk=waiting.slice(start,start+10);
+     for(let start=0;start<waiting.length;start+=2){
+       const chunk=waiting.slice(start,start+2);
        chunk.forEach(j=>scoredOrAttempted.add(j.url));
        setScoringNow(chunk.map(j=>j.url));
        try{
          const response=await fetch('/api/jd/enrich',{method:'POST',headers:{'Content-Type':'application/json'},
-           signal:AbortSignal.timeout(30000),body:JSON.stringify({jobs:chunk,roles})});
+           signal:AbortSignal.timeout(65000),body:JSON.stringify({jobs:chunk,roles})});
          if(!response.ok)throw Error('Falha HTTP '+response.status);
          const data=await response.json();
          for(const j of data.items||[]){
@@ -91,7 +90,7 @@ export function OpportunitiesPanel(){
    if(v.ranking?.score!==null&&v.ranking?.score!==undefined)return 'scored';
    if(scoringFailed.includes(v.url))return 'failed';
    if(scoringNow.includes(v.url))return 'calculating';
-   if(v.confirmed && busy && !scoringAttempted.includes(v.url) && (v.jd_status==='pendente' || (v.ranking?.score==null && ['greenhouse','inhire'].some(src=>v.source?.toLowerCase().includes(src)))))return 'waiting';
+   if(v.confirmed && busy && !scoringAttempted.includes(v.url) && v.ranking?.score==null)return 'waiting';
    return 'unscored';
  };
  const scoreDisplay=v=>{
@@ -105,6 +104,9 @@ export function OpportunitiesPanel(){
    if(state==='waiting'||state==='calculating')return 'Nota pendente — a busca ainda está em andamento';
    if(state==='failed')return 'O lote falhou; tente uma nova busca';
    if(state==='scored')return v.ranking?.confidence==='requisitos_extraidos'?'% dos requisitos extraídos':v.ranking?.confidence==='amostra_limitada'?'Amostra limitada — conferir JD':'Nota calculada';
+   if(v.ai_status==='failed')return 'Falha na interpretação por IA — avaliação não concluída';
+   if(v.ai_status==='disabled')return 'IA desativada — avaliação apenas por regras';
+   if(v.ai_status==='budget_exhausted')return 'Limite mensal de IA atingido';
    if(v.jd_status==='indisponivel')return 'Descrição da vaga não recuperada — sem nota';
    if(v.jd_status==='pendente')return 'Descrição ainda não avaliada — sem nota';
    return v.ranking?.confidence==='cobertura_insuficiente'?'Requisitos pouco claros — sem nota confiável':'Evidências insuficientes para atribuir nota';

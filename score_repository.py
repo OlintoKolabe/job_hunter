@@ -5,17 +5,20 @@ import os
 from datetime import datetime,timezone
 from psycopg.types.json import Jsonb
 PROFILE_VERSION="profile-oct-2026"
-RUBRIC_VERSION="block4.1-v2-minimum-evidence"
+RUBRIC_VERSION="block4.1-v3-complete-scoring"
 MONTHLY_CAP_USD=5.0
 MAX_REQUEST_USD=0.002
 def key_for(roles):return hashlib.sha256(roles.encode()).hexdigest()
 def get_cached(cur,url,jd_hash,roles):
     require_hybrid=os.getenv('JH_AI_ENABLED')=='1' and bool(os.getenv('OPENAI_API_KEY'))
-    cur.execute("""SELECT result FROM jh_score_cache WHERE normalized_url=%s AND jd_hash=%s
+    cur.execute("""SELECT result,model FROM jh_score_cache WHERE normalized_url=%s AND jd_hash=%s
         AND profile_version=%s AND rubric_version=%s AND roles_hash=%s
         AND (%s=FALSE OR model='hybrid')""",
         (url,jd_hash,PROFILE_VERSION,RUBRIC_VERSION,key_for(roles),require_hybrid))
-    item=cur.fetchone();return item[0] if item else None
+    item=cur.fetchone()
+    if not item:return None
+    result=item[0]
+    return result if isinstance(result,dict) and (result.get('score') is not None or (require_hybrid and item[1]=='hybrid')) else None
 def save(cur,url,jd_hash,roles,result,model):
     cur.execute("""INSERT INTO jh_score_cache
         (normalized_url,jd_hash,profile_version,rubric_version,roles_hash,result,model)

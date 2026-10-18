@@ -485,6 +485,9 @@ def generate_resume(payload: ResumeGenerate, request: Request):
             cv_cur.execute("SELECT pg_advisory_xact_lock(hashtext(%s))",
                            ("cv:"+key+":"+plan["jd_sha256"],))
             plan,cv_usage=apply_hybrid(cv_cur,key,row[0],plan)
+    # Bind metadata to the response actually used, including cached fallback.
+    plan["cv_mode"]=cv_usage["mode"]
+    plan["cv_build"]=os.getenv("RENDER_GIT_COMMIT","local")[:12]
     data=render_docx(plan)
     report=audit(plan,data)
     from urllib.parse import quote
@@ -496,7 +499,7 @@ def generate_resume(payload: ResumeGenerate, request: Request):
     filename="Olinto Manso Pereira - "+safe_name(role)+" - "+safe_name(company)+".docx"
     encoded_filename=quote(filename)
     headers={"X-Resume-Engine":report["engine"],"X-Document-SHA256":report["document_sha256"],
-             "X-JD-SHA256":report["jd_sha256"],"X-AI-Calls":str(cv_usage["ai_calls"]),"X-AI-Cost-USD":str(cv_usage["cost_usd"]),"X-CV-Mode":cv_usage["mode"]}
+             "X-JD-SHA256":report["jd_sha256"],"X-AI-Calls":str(cv_usage["ai_calls"]),"X-AI-Cost-USD":str(cv_usage["cost_usd"]),"X-CV-Mode":cv_usage["mode"],"X-CV-Build":plan["cv_build"],"X-CV-Provenance":"job-hunter-cv-provenance-v1"}
     return StreamingResponse(io.BytesIO(data),
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         headers={**headers,"Content-Disposition":f"attachment; filename*=UTF-8''{encoded_filename}"})

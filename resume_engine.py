@@ -13,6 +13,7 @@ from docx import Document
 from docx.shared import Pt
 
 ENGINE_VERSION = "block5-deterministic-v3"
+CV_DOCUMENT_VERSION = "job-hunter-cv-provenance-v1"
 CONTACT = {"name":"Olinto Manso Pereira","email":"olinto_manso@hotmail.com",
            "phone":"+55 64 98116-4936","location":"Caldas Novas, GO, Brasil",
            "linkedin":"https://www.linkedin.com/in/olintomanso"}
@@ -168,6 +169,16 @@ def render_docx(plan):
     section=doc.sections[0]
     from docx.shared import Inches
     section.top_margin=Inches(.62);section.bottom_margin=Inches(.62)
+    # Provenance is embedded in DOCX metadata, invisible to recruiters/ATS.
+    provenance = (
+        f"JobHunterCV={CV_DOCUMENT_VERSION};"
+        f"Engine={ENGINE_VERSION};"
+        f"AI={plan.get('cv_mode', 'deterministic')};"
+        f"JD={plan['jd_sha256'][:16]};"
+        f"Build={plan.get('cv_build', 'unknown')}"
+    )
+    doc.core_properties.keywords = provenance
+    doc.core_properties.comments = "Job Hunter CV provenance: " + provenance
     doc.add_heading(CONTACT["name"],0)
     doc.add_paragraph(" | ".join([CONTACT["location"],CONTACT["phone"],CONTACT["email"],CONTACT["linkedin"]]))
     doc.add_heading("Resumo profissional",1);doc.add_paragraph(plan["summary"])

@@ -6,6 +6,19 @@ from resume_engine import build_plan,render_docx,audit,EXPERIENCE,CONTACT
 JD="We need a business analyst who manages stakeholder needs, roadmaps and backlog in Azure DevOps, works with product owners and defines user stories. Previous hands-on Oracle programming experience is a plus."
 
 class ResumeEngineTests(unittest.TestCase):
+    def test_document_provenance_survives_download_and_fallback(self):
+        from resume_engine import CV_DOCUMENT_VERSION
+        for mode in ("hybrid","cached_hybrid","fallback","cached_fallback","deterministic"):
+            plan=build_plan(JD,"Senior Business Analyst")
+            plan["cv_mode"]=mode
+            plan["cv_build"]="abcdef123456"
+            doc=Document(io.BytesIO(render_docx(plan)))
+            tag=doc.core_properties.keywords
+            self.assertIn("JobHunterCV="+CV_DOCUMENT_VERSION,tag)
+            self.assertIn("AI="+mode,tag)
+            self.assertIn("Build=abcdef123456",tag)
+            self.assertIn("JD="+plan["jd_sha256"][:16],tag)
+            self.assertTrue(audit(plan,render_docx(plan))["factual_bullets_verified"])
     def test_generates_document_without_ai(self):
         p=build_plan(JD,"Senior Business Analyst")
         b=render_docx(p)

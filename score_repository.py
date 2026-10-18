@@ -13,7 +13,7 @@ def get_cached(cur,url,jd_hash,roles):
     require_hybrid=os.getenv('JH_AI_ENABLED')=='1' and bool(os.getenv('OPENAI_API_KEY'))
     cur.execute("""SELECT result,model,created_at FROM jh_score_cache WHERE normalized_url=%s AND jd_hash=%s
         AND profile_version=%s AND rubric_version=%s AND roles_hash=%s
-        AND (%s=FALSE OR model IN ('hybrid','ai_error'))""",
+        AND (%s=FALSE OR model IN ('hybrid','ai_error','hard_exclusion'))""",
         (url,jd_hash,PROFILE_VERSION,RUBRIC_VERSION,key_for(roles),require_hybrid))
     item=cur.fetchone()
     if not item:return None

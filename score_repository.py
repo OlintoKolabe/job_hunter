@@ -4,6 +4,7 @@ import json
 import os
 from datetime import datetime,timezone,timedelta
 from psycopg.types.json import Jsonb
+from block4_score import SKILLS
 PROFILE_VERSION="profile-oct-2026"
 RUBRIC_VERSION="block4.1-v5-professional-core"
 MONTHLY_CAP_USD=5.0
@@ -32,7 +33,7 @@ def get_previous_semantic(cur,url,jd_hash,roles):
     requirements=row[0].get("requirements") or []
     if not isinstance(requirements,list) or not requirements:return None
     return [{"name":r.get("name"),"type":r.get("type"),
-             "skill_id":r.get("evidence_id") if isinstance(r.get("evidence_id"),str) and r.get("evidence_id") in __import__("block4_score").SKILLS else None,"relationship":r.get("match_level")}
+             "skill_id":r.get("evidence_id") if isinstance(r.get("evidence_id"),str) and r.get("evidence_id") in SKILLS else None,"relationship":r.get("match_level")}
             for r in requirements if isinstance(r,dict)]
 
 def save(cur,url,jd_hash,roles,result,model):

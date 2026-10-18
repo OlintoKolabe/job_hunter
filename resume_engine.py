@@ -332,6 +332,8 @@ def evaluate_rendered_resume(plan, data, jd):
     facts=[f for e in plan["experience"] for f in e["facts"]]
     requirements=categories(jd+" "+plan["title"],TOPICS)
     title_requirements=categories(plan["title"],TOPICS)
+    if re.search(r"(?i)\b(m[ií]dia|performance|tr[aá]fego|aquisi[cç][aã]o)\b",plan["title"]):
+        title_requirements.add("growth")
     fact_topics=set().union(*(categories(f,FACT_TOPICS) for f in facts)) if facts else set()
     covered=requirements&fact_topics
     fact_source=plan.get("bullet_provenance") or {}

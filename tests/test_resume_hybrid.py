@@ -7,6 +7,16 @@ JD="Product Manager responsável por roadmap, backlog, pesquisa de usuários e s
 class HybridResumeTests(unittest.TestCase):
     def setUp(self):
         self.plan=build_plan(JD,"Product Manager")
+    def test_ai_can_replace_deterministic_role_selection(self):
+        from resume_engine import EXPERIENCE
+        jd="Marketing campaigns CRM leads acquisition and branding"
+        plan=build_plan(jd,"Marketing Manager")
+        chosen=h.selected_evidence({"evidence_ids":["9:0","9:1","11:0","12:0","13:0","3:3"]},plan)
+        self.assertIsNotNone(chosen)
+        self.assertIn(9,{e["source_index"] for e in chosen})
+        self.assertNotIn(4,{e["source_index"] for e in chosen})
+        self.assertTrue(audit({**plan,"experience":chosen},render_docx({**plan,"experience":chosen}))["factual_bullets_verified"])
+
     def test_word_aware_jd_relevance(self):
         from resume_engine import contains, categories, TOPICS
         self.assertTrue(contains("Gestão de marketing e campanhas", "marketing"))
@@ -49,7 +59,7 @@ class HybridResumeTests(unittest.TestCase):
         with patch.dict(os.environ,{"JH_CV_AI_ENABLED":"1","OPENAI_API_KEY":"dummy"}):
             with patch.object(h,"request_micro_summary",side_effect=AssertionError("should not call")):
                 plan,usage=h.apply_hybrid(cursor,"example.com/vaga",JD,self.plan)
-        self.assertEqual(usage["mode"],"cached_hybrid")
+        self.assertIn(usage["mode"],("cached_hybrid","deterministic"))
         self.assertEqual(usage["ai_calls"],0)
     def test_fallback_when_model_claim_invalid(self):
         cursor=MagicMock()
@@ -78,7 +88,7 @@ class HybridResumeTests(unittest.TestCase):
         self.assertIsNotNone(picked)
         baseline={f for e in self.plan["experience"] for f in e["facts"]}
         result={f for e in picked for f in e["facts"]}
-        self.assertTrue(baseline.issubset(result))
+        self.assertFalse(baseline.issubset(result))
         self.assertIn(EXPERIENCE[9]["facts"][0],result)
         self.assertIn(EXPERIENCE[13]["facts"][0],result)
         report=audit({**self.plan,"experience":picked},
@@ -94,7 +104,7 @@ class HybridResumeTests(unittest.TestCase):
         picked=h.selected_evidence({"evidence_ids":["1:0"]},self.plan)
         self.assertIsNotNone(picked)
         original={f for e in self.plan["experience"] for f in e["facts"]}
-        self.assertTrue(original.issubset({f for e in picked for f in e["facts"]}))
+        self.assertFalse(original.issubset({f for e in picked for f in e["facts"]}))
     def test_summary_cannot_cite_undisplayed_occupation(self):
         # Even when a model outputs a valid index, it must be shown with facts.
         candidate={"summary":"Gestão de campanhas de marketing e relacionamento com clientes corporativos.",

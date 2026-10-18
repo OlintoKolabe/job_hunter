@@ -1,10 +1,10 @@
 {
-  "id": "JOB-HUNTER-BLOCK-5-CALIBRATION",
+  "id": "JOB-HUNTER-BLOCK-5-HYBRID",
   "status": "active",
   "base_ref": "aafe8327f1ff9b9b6cdbc73af6135bf7074f5403",
   "production_ref": "feat/phase1-web-foundation",
-  "feature_ref": "feat/block5-deterministic-calibration",
-  "objective": "Improve deterministic CV selection, deduplication, factual JD-tailored narrative, chronology, and filename; no AI calls; safe rollback.",
+  "feature_ref": "feat/block5-hybrid-mini-narrative",
+  "objective": "Optional economical AI rewrite for a short evidence-grounded CV summary, with server-side budget reservation, database cache, deterministic fallback, truthful claims and automatic tests.",
   "allowed_files": [
     "scope/active.json",
     "scripts/check_scope.py",
@@ -21,7 +21,9 @@
     "migrations/block4_1.sql",
     "resume_engine.py",
     "tests/test_resume_engine.py",
-    "Dockerfile"
+    "Dockerfile",
+    "resume_hybrid.py",
+    "tests/test_resume_hybrid.py"
   ],
   "forbidden_paths": [
     ".github/workflows/",
@@ -55,7 +57,12 @@
     "No duplicate factual bullets",
     "No AI requests in CV path",
     "Relevant roles prioritized without changing chronology",
-    "Safe filename candidate-role-company"
+    "Safe filename candidate-role-company",
+    "At most one microgeneration call per novel CV key",
+    "Persisted cache for identical JD/profile/model",
+    "No unsupported achievement claims",
+    "Deterministic fallback when AI unavailable or invalid",
+    "No changes to global vacancy rating and no new migration"
   ],
   "deployment": "No deploy or merge without explicit approval"
 }

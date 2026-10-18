@@ -380,14 +380,9 @@ def jd_enrich(request: Request, payload: JDRequest):
         rows.append({k:j.get(k,"") for k in ("url","title","company","source","description","location","published","detected_mode","needs_verification")})
     with psycopg.connect(DATABASE,connect_timeout=7) as conn:
         with conn.cursor() as cur:
-            keys=[url_key(j["url"]) for j in rows]
-            pairs=[pair_key(j["company"],j["title"]) for j in rows if j["company"]]
-            cur.execute("SELECT normalized_url,pair_key FROM jh_history WHERE normalized_url=ANY(%s) OR pair_key=ANY(%s)",(keys,pairs))
-            history=cur.fetchall()
-            known_urls={r[0] for r in history};known_pairs={r[1] for r in history}
-            fresh=[j for j in rows if url_key(j["url"]) not in known_urls and
-                    (not j["company"] or pair_key(j["company"],j["title"]) not in known_pairs)]
-            result,coverage=hydrate_jobs(cur,fresh,payload.roles,url_key,limit=10)
+            # History is a discovery filter, not a scoring/cache filter.
+            # Repeated searches must return persisted scores for previously seen jobs.
+            result,coverage=hydrate_jobs(cur,rows,payload.roles,url_key,limit=10)
     return {"items":result,"jd_coverage":coverage}
 
 @app.get("/api/history")

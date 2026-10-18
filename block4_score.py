@@ -135,7 +135,7 @@ def score_job(job,roles):
     uncertainty=sum(r["status"]=="nao_comprovado" for r in requirements)
     uninterpreted=sum(r["status"]=="nao_interpretado" for r in requirements)
     coverage=round(100*len(interpreted)/len(requirements)) if requirements else 0
-    if coverage<60:fit=None
+    if coverage<60 or len(requirements)<4 or len(str(jd_raw).strip())<300:fit=None
     priority={
         "remote":detect_work_mode(job,signals(job,roles))=="remote",
         "salary_informed":any(bool(job.get(k)) for k in ("salary","salaryRange","compensation")),

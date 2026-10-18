@@ -200,6 +200,13 @@ def merge_semantic_requirements(base, extracted):
             (("marketing industry","advertising domain"),"Lagoa Parques: direção de marketing"),
         )
         domain_evidence=next((e for terms,e in transferable_domains if any(t in normalized for t in terms)),None)
+        # Core duties of documented professional roles are not industry specializations.
+        core_role_terms=(
+            ("product",("discovery","user research","customer research","roadmap","backlog","prioritization","user stories","product kpi","product metric","product analytics","product strategy","product lifecycle","product delivery","stakeholder")),
+            ("marketing",("marketing strategy","campaign","branding","media planning","marketing funnel","lead generation","go to market","customer acquisition","marketing analytics")),
+            ("projects",("project management","project planning","sprint planning","scrum","kanban","project delivery","project governance","risk management")),
+        )
+        core_evidence=next((PROFILE[family][0] for family,terms in core_role_terms if any(term in normalized for term in terms)),None)
         relationship=row.get("relationship")
         explicit_skill=bool(proof and any(fold(term) in normalized for term in SKILLS[skill][0]))
         if technical_core or relationship=="nenhuma":
@@ -217,6 +224,10 @@ def merge_semantic_requirements(base, extracted):
         elif proof:
             degree="direta"
             evidence=proof
+            points=1.0
+        elif core_evidence and not specialized_payments:
+            degree="direta"
+            evidence=core_evidence+"; competência fundamental demonstrada pela atuação profissional"
             points=1.0
         elif payments_context:
             degree="transferivel"

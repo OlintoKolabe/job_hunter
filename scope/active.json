@@ -1,0 +1,50 @@
+{
+  "id": "JOB-HUNTER-BLOCK-4.1",
+  "status": "active",
+  "base_ref": "aafe8327f1ff9b9b6cdbc73af6135bf7074f5403",
+  "production_ref": "feat/phase1-web-foundation",
+  "feature_ref": "feat/block4-1-ai-scoring",
+  "objective": "Score only confirmed eligible jobs automatically; retrieve missing JD safely; cache semantic extraction and deterministic scores; allow on-demand unconfirmed job evaluation; enforce cost limits and terminal UI states.",
+  "allowed_files": [
+    "scope/active.json",
+    "scripts/check_scope.py",
+    "tests/test_scope.py",
+    "app.py",
+    "jd_enrichment.py",
+    "block4_score.py",
+    "src/Opportunities.jsx",
+    "requirements.txt",
+    "tests/test_block4_1.py",
+    "ai_interpreter.py",
+    "jd_retrieval.py",
+    "score_repository.py",
+    "migrations/block4_1.sql"
+  ],
+  "forbidden_paths": [
+    ".github/workflows/",
+    "src/Phase2.jsx",
+    "src/Phase3.jsx",
+    "collectors.py",
+    "search_filters.py",
+    "catalog_engine.py"
+  ],
+  "forbidden_changes": [
+    "production deploy",
+    "merge to main",
+    "modify Render environment",
+    "execute migration on production database without separate authorization",
+    "unbounded calls to AI",
+    "automatically score pending eligibility rows",
+    "CV generation"
+  ],
+  "acceptance": [
+    "No AI call when cached analysis is current",
+    "No automatic AI calls for nonconfirmed jobs",
+    "JD fetch through cache then source API then safe public HTML",
+    "Manual pending job evaluation is user-triggered",
+    "Terminal UI state for every attempted evaluation",
+    "Backend-side spend reservation/limit and request logging",
+    "No changed paths beyond allowlist"
+  ],
+  "deployment": "No deploy or merge without explicit approval"
+}

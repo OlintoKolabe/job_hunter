@@ -79,6 +79,18 @@ class Block41Tests(unittest.TestCase):
             with patch("urllib.request.urlopen",return_value=BytesIO(json.dumps(payload).encode())):
                 result=interpret(jd)
         self.assertEqual(len(result["requirements"]),1)
+    def test_failed_interpretation_is_cooled_down(self):
+        from datetime import datetime,timezone,timedelta
+        from unittest.mock import Mock
+        from score_repository import get_cached
+        cur=Mock()
+        cur.fetchone.return_value=({"score":None,"_ai_retry_later":True},"ai_error",datetime.now(timezone.utc))
+        with patch.dict("os.environ",{"JH_AI_ENABLED":"1","OPENAI_API_KEY":"test-only"}):
+            result=get_cached(cur,"https://example.com/job","hash","Product Manager")
+        self.assertTrue(result["_ai_retry_later"])
+        cur.fetchone.return_value=({"score":None,"_ai_retry_later":True},"ai_error",datetime.now(timezone.utc)-timedelta(hours=2))
+        with patch.dict("os.environ",{"JH_AI_ENABLED":"1","OPENAI_API_KEY":"test-only"}):
+            self.assertIsNone(get_cached(cur,"https://example.com/job","hash","Product Manager"))
     def test_ai_empty_output_fails_explicitly(self):
         import json
         from io import BytesIO

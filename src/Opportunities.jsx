@@ -47,6 +47,7 @@ export function OpportunitiesPanel(){
        }
      }
    }
+   await enrichAvailable();
    let offset=0;
    let skipped=0;
    for(let n=0;n<180;n++){

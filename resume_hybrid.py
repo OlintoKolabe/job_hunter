@@ -44,7 +44,10 @@ def quality_gate(plan,candidate,jd):
         title_hits=sum(1 for f in facts if categories(f,FACT_TOPICS)&title_topics)
         relevant=sum(1 for f in facts if relevance(f,needs,words(jd))>0)
         return (len(covered&needs),title_hits,relevant)
-    return metrics(candidate)>=metrics(plan["experience"])
+    baseline=metrics(plan["experience"])
+    proposed=metrics(candidate)
+    # None of the independent relevance dimensions may regress.
+    return all(new>=old for new,old in zip(proposed,baseline))
 
 def selected_evidence(proposal,plan):
     """Merge only verified source facts into the complete chronology.

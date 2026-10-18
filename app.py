@@ -457,6 +457,8 @@ def logout(response: Response):
 
 class ResumeGenerate(BaseModel):
     url: str
+    title: str = ''
+    company: str = ''
 
 @app.post("/api/resume/generate")
 def generate_resume(payload: ResumeGenerate, request: Request):
@@ -479,8 +481,8 @@ def generate_resume(payload: ResumeGenerate, request: Request):
     report=audit(plan,data)
     from urllib.parse import quote
     import re as _re
-    company=key.split("/")[0].split(".")[0].replace("-"," ").title()
-    role=title
+    company=payload.company or key.split("/")[0].split(".")[0].replace("-"," ").title()
+    role=payload.title or title
     def safe_name(value):
         return _re.sub(r"[^\\wÀ-ÿ -]","",value,flags=_re.UNICODE).strip()[:90]
     filename="Olinto Manso Pereira - "+safe_name(role)+" - "+safe_name(company)+".docx"

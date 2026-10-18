@@ -126,16 +126,18 @@ def relevance(fact, required, jd_words):
     return 4*len(matched)+specificity
 def build_plan(jd, title):
     if not jd or not jd.strip():raise ValueError("JD vazio")
-    needs=categories(jd,TOPICS)
+    # Job title is high-signal; descriptions often mention unrelated tools and domains.
+    needs=categories(jd+" "+title,TOPICS)
+    title_needs=categories(title,TOPICS)
     tokens=words(jd)
     scored=[]
     for idx,item in sorted(enumerate(EXPERIENCE),key=lambda x:chronology_index(x[1]),reverse=True):
         ordered=sorted(item["facts"],key=lambda f:(-relevance(f,needs,tokens),item["facts"].index(f)))
-        strength=sum(max(0,relevance(f,needs,tokens)-1) for f in ordered[:3])
+        strength=sum(max(0,relevance(f,needs,tokens)-1) for f in ordered[:3]) + sum(5 for f in ordered[:3] if categories(f,FACT_TOPICS)&title_needs)
         scored.append((idx,item,ordered,strength))
     prioritized=sorted(scored,key=lambda x:(-x[3],-chronology_index(x[1])[0],-chronology_index(x[1])[1]))
     # Evidence is selected per role, not copied into two different sections.
-    major={idx for idx,_,_,score in prioritized[:4] if score>=5}
+    major={idx for idx,_,_,score in prioritized[:6] if score>=5}
     experiences=[];older=[]
     for idx,item,facts,score in scored:
         if idx in major:
@@ -158,7 +160,7 @@ def build_plan(jd, title):
     top_topics=sorted(needs,key=lambda topic:-sum(relevance(f,{topic},tokens) for _,e,_,_ in scored for f in e["facts"]))[:3]
     if not top_topics:top_topics=["product","project"]
     focus=", ".join(label[t] for t in top_topics)
-    summary="Profissional com atuação em tecnologia e negócios, reunindo experiência em "+focus+". Atuação em diferentes setores, com responsabilidades em entregas e colaboração multidisciplinar."
+    summary="Experiência profissional em "+focus+", com atuação documentada em tecnologia e negócios. Histórico de atividades em equipes e projetos de diferentes setores."
     # Only a profile-level statement here, never repeated verbatim from the roles.
     return {"title":title[:120],"summary":summary,"focus_topics":top_topics,
             "experience":experiences,"additional_experience":older,

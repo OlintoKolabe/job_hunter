@@ -19,6 +19,20 @@ class ResumeEngineTests(unittest.TestCase):
             self.assertIn("Build=abcdef123456",tag)
             self.assertIn("JD="+plan["jd_sha256"][:16],tag)
             self.assertTrue(audit(plan,render_docx(plan))["factual_bullets_verified"])
+    def test_program_manager_gets_governance_evidence(self):
+        from resume_engine import EXPERIENCE
+        jd="Program Manager governance portfolio cross-functional teams risk project delivery budget"
+        p=build_plan(jd,"Program Manager")
+        detail={e["source_index"]:e["facts"] for e in p["experience"]}
+        self.assertIn(2,detail)
+        self.assertIn(8,detail)
+        self.assertTrue(any("Governança corporativa" in f for f in detail[8]))
+        self.assertTrue(audit(p,render_docx(p))["factual_bullets_verified"])
+    def test_marketing_manager_highlights_earlier_marketing_leadership(self):
+        p=build_plan("Marketing strategy CRM campaigns branding and marketing budget","Marketing Manager")
+        detailed={e["source_index"] for e in p["experience"]}
+        self.assertIn(9,detailed)
+        self.assertTrue({9,11,12,13}&detailed)
     def test_generates_document_without_ai(self):
         p=build_plan(JD,"Senior Business Analyst")
         b=render_docx(p)

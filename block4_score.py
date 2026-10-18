@@ -209,7 +209,11 @@ def merge_semantic_requirements(base, extracted):
         core_evidence=next((PROFILE[family][0] for family,terms in core_role_terms if any(term in normalized for term in terms)),None)
         relationship=row.get("relationship")
         explicit_skill=bool(proof and any(fold(term) in normalized for term in SKILLS[skill][0]))
-        if technical_core or relationship=="nenhuma":
+        if technical_core:
+            degree="nao_comprovada"
+            evidence=None
+            points=0.0
+        elif proof and relationship=="nenhuma" and not explicit_skill:
             degree="nao_comprovada"
             evidence=None
             points=0.0
@@ -229,6 +233,10 @@ def merge_semantic_requirements(base, extracted):
             degree="direta"
             evidence=core_evidence+"; competência fundamental demonstrada pela atuação profissional"
             points=1.0
+        elif relationship=="nenhuma":
+            degree="nao_comprovada"
+            evidence=None
+            points=0.0
         elif payments_context:
             degree="transferivel"
             evidence="Neocoder/LiberPay: consultoria e estratégia em pagamentos com criptoativos e stablecoins; sem evidência de liderança de produto de Pix"

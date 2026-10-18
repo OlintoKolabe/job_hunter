@@ -70,6 +70,64 @@ EXPERIENCE = [
     {"role":"CEO","company":"Digital Design Comunicação","dates":"jan 2000 – out 2011",
      "facts":["Gestão de agência de comunicação, branding, campanhas e projetos para clientes corporativos."]}
 ]
+# Additional career facts verified against the complete 10-page LinkedIn profile.
+# Append, never renumber existing fact IDs: cached/source trace references depend on them.
+EXPERIENCE[1]["facts"].extend([
+    "Apoio ao posicionamento de produto Web3, com foco em UX e integrações B2B.",
+    "Acompanhamento de churn, margem e resultados financeiros para priorização do produto.",
+    "Ferramentas documentadas: Aha!, Hotjar, Codex, Claude Code e Lovable.",
+])
+EXPERIENCE[2]["facts"].extend([
+    "Gestão de recursos e priorização de portfólio de projetos de marketing para Web3.",
+    "Atuação em conformidade, qualidade, gestão de mudanças e mitigação de riscos.",
+])
+EXPERIENCE[3]["facts"].extend([
+    "Planejamento de viabilidade econômica e estruturação do plano de negócios da clínica.",
+    "Estratégias de geração de leads com Google Ads e campanhas de conteúdo.",
+    "Desenvolvimento do SysTop com informação operacional e inteligência de negócios.",
+])
+EXPERIENCE[4]["facts"].extend([
+    "Testes e melhorias de usabilidade e confiabilidade com equipes em Morton e Perth.",
+])
+EXPERIENCE[6]["facts"].extend([
+    "Growth Hacking, Google Analytics, Google Ads, Social Media Ads e SEO para produtos digitais.",
+    "Gestão de comunidades e redes sociais, com foco em engajamento.",
+    "Evolução de design systems e padrões de interação web e mobile.",
+    "Gestão do delivery e orçamento de aplicações web e mobile ao longo do ciclo do produto.",
+    "Validação de modelo de negócio e pesquisa de mercado em startup selecionada no programa Centelha.",
+])
+EXPERIENCE[7]["facts"].extend([
+    "Painéis de dados com comportamentos de clientes, SKUs, marcas e categorias do varejo.",
+])
+EXPERIENCE[8]["facts"].extend([
+    "Modelo de governança corporativa com marca, sustentabilidade e relatórios de compliance.",
+    "Supervisão de projeto de praia artificial com retorno financeiro de R$ 5 milhões na primeira temporada.",
+])
+EXPERIENCE[9]["facts"].extend([
+    "Estratégias de campanhas de marketing digital e tradicional para hotéis e parques.",
+    "Gestão de funil de vendas, CRM e campanhas omnichannel para fidelização de clientes.",
+    "Reestruturação comercial com receita triplicada em três anos e redução de rotatividade em 45%.",
+])
+EXPERIENCE[10]["facts"].extend([
+    "Planejamento de negócios imobiliários e viabilidade econômica para novos empreendimentos.",
+    "Direção de orçamento de marketing, campanhas digitais e suporte comercial.",
+])
+EXPERIENCE[11]["facts"].extend([
+    "Lançamento de produtos de hotelaria e entretenimento, com integração de branding e trade marketing.",
+    "Lançamento do Privé Riviera Park Hotel, com reservas 58% acima do orçamento no primeiro mês.",
+    "Gestão de equipe interna de criação e campanhas de marketing promocional e de guerrilha.",
+])
+EXPERIENCE[12]["facts"].extend([
+    "Gestão regional de marketing em Goiás, Minas Gerais e Distrito Federal, com orçamento superior a R$ 7 milhões.",
+    "Supervisão de criação e equipe interna responsável por cerca de 2.000 demandas de design ao ano.",
+    "Branding, campanhas digitais e tradicionais, parcerias comerciais e ações de crossbranding.",
+])
+EXPERIENCE[13]["facts"].extend([
+    "Planejamento de branding, mídia, orçamento e campanhas para clientes corporativos.",
+    "Estratégias de marketing e merchandising em pontos de venda.",
+    "Publicidade em rádio, televisão, mídia impressa, mídia externa e campanhas promocionais.",
+])
+
 EDUCATION = ["MBA em Marketing — Universidade de São Paulo (2015–2016)",
              "MBA em Administração e Gestão — Fundação Getulio Vargas (2001–2003)",
              "Graduação em Odontologia — Universidade de São Paulo (1996–1999)",

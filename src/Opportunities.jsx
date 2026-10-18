@@ -53,7 +53,7 @@ export function OpportunitiesPanel(){
    let skipped=0;
    for(let n=0;n<180;n++){
     let batch;try{batch=await requestJson('/api/catalog/scan?offset='+offset+'&limit=4&'+qs)}catch(err){skipped++;offset+=4;setMessage('Alguns quadros falharam; continuando os demais. Falhas: '+skipped);continue}
-    (batch.items||[]).filter(j=>source==='all'||j.source?.toLowerCase()===source||(source==='greenhouse'&&j.source?.toLowerCase()==='greenhouse_eu')).forEach(j=>{const old=all.get(j.url);all.set(j.url,old?.ranking?.score!=null&&!j.ranking?.score?old:j)});record(batch);
+    (batch.items||[]).filter(j=>source==='all'||j.source?.toLowerCase()===source||(source==='greenhouse'&&j.source?.toLowerCase()==='greenhouse_eu')).forEach(j=>{const old=all.get(j.url);all.set(j.url,old&&(old.ranking?.score!=null||scoredOrAttempted.has(j.url))?old:j)});record(batch);
     offset=batch.next_offset;if(!Number.isFinite(offset))throw Error('Paginação inválida');
     count+=batch.found||0;setResults([...all.values()]);await enrichAvailable();setChecked(x=>x+(batch.details||[]).length);setCounts({new:all.size,total:count});
     if(batch.complete){completedAll=true;break}
@@ -104,12 +104,13 @@ export function OpportunitiesPanel(){
    if(state==='waiting'||state==='calculating')return 'Nota pendente — a busca ainda está em andamento';
    if(state==='failed')return 'O lote falhou; tente uma nova busca';
    if(state==='scored')return v.ranking?.confidence==='requisitos_extraidos'?'% dos requisitos extraídos':v.ranking?.confidence==='amostra_limitada'?'Amostra limitada — conferir JD':'Nota calculada';
-   if(v.ai_status==='failed')return 'Falha na interpretação por IA — avaliação não concluída';
+   if(v.ai_status==='failed')return 'A análise automática falhou. Tente uma nova busca.';
+   if(v.ai_status==='retry_later')return 'A análise falhou; nova tentativa automática disponível em até 30 minutos';
    if(v.ai_status==='disabled')return 'IA desativada — avaliação apenas por regras';
    if(v.ai_status==='budget_exhausted')return 'Limite mensal de IA atingido';
    if(v.jd_status==='indisponivel')return 'Descrição da vaga não recuperada — sem nota';
    if(v.jd_status==='pendente')return 'Descrição ainda não avaliada — sem nota';
-   return v.ranking?.confidence==='cobertura_insuficiente'?'Requisitos pouco claros — sem nota confiável':'Evidências insuficientes para atribuir nota';
+   return v.ranking?.confidence==='cobertura_insuficiente'?'Não foi possível interpretar requisitos suficientes':'Não há evidências suficientes para uma nota confiável';
  };
  const ordered=[...combined.values()].sort((a,b)=>{
    const date=v=>{const x=Date.parse(v.published||'');return Number.isFinite(x)?x:0};

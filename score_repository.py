@@ -2,7 +2,7 @@
 import hashlib
 import json
 import os
-from datetime import datetime,timezone
+from datetime import datetime,timezone,timedelta
 from psycopg.types.json import Jsonb
 PROFILE_VERSION="profile-oct-2026"
 RUBRIC_VERSION="block4.1-v3-complete-scoring"
@@ -11,14 +11,19 @@ MAX_REQUEST_USD=0.002
 def key_for(roles):return hashlib.sha256(roles.encode()).hexdigest()
 def get_cached(cur,url,jd_hash,roles):
     require_hybrid=os.getenv('JH_AI_ENABLED')=='1' and bool(os.getenv('OPENAI_API_KEY'))
-    cur.execute("""SELECT result,model FROM jh_score_cache WHERE normalized_url=%s AND jd_hash=%s
+    cur.execute("""SELECT result,model,created_at FROM jh_score_cache WHERE normalized_url=%s AND jd_hash=%s
         AND profile_version=%s AND rubric_version=%s AND roles_hash=%s
-        AND (%s=FALSE OR model='hybrid')""",
+        AND (%s=FALSE OR model IN ('hybrid','ai_error'))""",
         (url,jd_hash,PROFILE_VERSION,RUBRIC_VERSION,key_for(roles),require_hybrid))
     item=cur.fetchone()
     if not item:return None
     result=item[0]
-    return result if isinstance(result,dict) and (result.get('score') is not None or (require_hybrid and item[1]=='hybrid')) else None
+    if not isinstance(result,dict):return None
+    if item[1]=='ai_error':
+        stamp=item[2]
+        if stamp is not None and stamp.tzinfo is None:stamp=stamp.replace(tzinfo=timezone.utc)
+        return result if stamp and stamp>=datetime.now(timezone.utc)-timedelta(minutes=30) else None
+    return result if result.get('score') is not None or (require_hybrid and item[1]=='hybrid') else None
 def save(cur,url,jd_hash,roles,result,model):
     cur.execute("""INSERT INTO jh_score_cache
         (normalized_url,jd_hash,profile_version,rubric_version,roles_hash,result,model)

@@ -17,6 +17,18 @@ class HybridResumeTests(unittest.TestCase):
         self.assertNotIn(4,{e["source_index"] for e in chosen})
         self.assertTrue(audit({**plan,"experience":chosen},render_docx({**plan,"experience":chosen}))["factual_bullets_verified"])
 
+    def test_rewrites_keep_provenance(self):
+        proposal={"rewrites":{"1:0":"Criação e gestão de roadmaps de produto, priorizando impacto."}}
+        selected=h.selected_evidence({"evidence_ids":["1:0","1:1","2:0","2:1","4:0","6:0"]},self.plan)
+        prepared=h.apply_validated_rewrites({**self.plan,"experience":selected},proposal)
+        self.assertIsNotNone(prepared)
+        doc=render_docx(prepared)
+        self.assertTrue(audit(prepared,doc)["factual_bullets_verified"])
+    def test_rewrites_reject_fabricated_achievements(self):
+        selected=h.selected_evidence({"evidence_ids":["1:0","1:1","2:0","2:1","4:0","6:0"]},self.plan)
+        self.assertIsNone(h.validate_rewrites(
+            {"rewrites":{"1:0":"Aumentei a receita em 300% criando plataformas financeiras."}},selected))
+
     def test_jd_clause_classification(self):
         jd="Required roadmap and stakeholder alignment.\nNice to have: Oracle certification.\nLead CRM campaigns."
         result=h.analyze_requirements(jd,"Product Manager")

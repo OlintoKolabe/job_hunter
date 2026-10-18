@@ -110,7 +110,7 @@ export function OpportunitiesPanel(){
    if(v.ai_status==='budget_exhausted')return 'Limite mensal de IA atingido';
    if(v.jd_status==='indisponivel')return 'Não foi possível obter a descrição completa da vaga.';
    if(v.jd_status==='pendente')return 'A descrição ainda aguarda avaliação.';
-   return (v.ai_status==='interpreted'||v.ai_status==='cache')?'A IA analisou a vaga, mas não encontrou quatro requisitos utilizáveis para uma nota confiável.':v.ranking?.confidence==='cobertura_insuficiente'?'Os requisitos identificados não permitem calcular uma nota confiável.':'Não há evidências suficientes para calcular uma nota confiável.';
+   return (v.ai_status==='interpreted'||v.ai_status==='cache')?'A IA analisou a descrição, mas os requisitos e as evidências identificados ainda não sustentam uma nota confiável.':v.ranking?.confidence==='cobertura_insuficiente'?'Os requisitos identificados não permitem calcular uma nota confiável.':'Não há evidências suficientes para calcular uma nota confiável.';
  };
  const ordered=[...combined.values()].sort((a,b)=>{
    const date=v=>{const x=Date.parse(v.published||'');return Number.isFinite(x)?x:0};

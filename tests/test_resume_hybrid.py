@@ -109,6 +109,22 @@ class HybridResumeTests(unittest.TestCase):
         facts=[f for e in chosen for f in e["facts"]]
         self.assertIn(EXPERIENCE[9]["facts"][0],facts)
         self.assertTrue(audit({**plan,"experience":chosen},render_docx({**plan,"experience":chosen}))["factual_bullets_verified"])
+    def test_summary_number_cannot_hide_in_undisplayed_fact(self):
+        from resume_engine import EXPERIENCE
+        # A fact in another source occupation must not justify a summary claim.
+        proposal={"summary":"Profissional com 2023 entregas estratégicas e experiência em produtos digitais.",
+                  "source_ids":["1"],"evidence_ids":["1:0","1:1","2:0"]}
+        self.assertIsNone(h.validate_text(proposal,self.plan))
+
+    def test_quality_gate_rejects_tradeoff_among_dimensions(self):
+        from resume_engine import EXPERIENCE
+        jd="Product Manager roadmap stakeholders discovery backlog scrum"
+        baseline=build_plan(jd,"Product Manager")
+        # This ensures no improvement in one axis can excuse regression in another.
+        trimmed=[{"source_index":e["source_index"],"facts":e["facts"][:1]}
+                 for e in baseline["experience"] if e["facts"]]
+        self.assertFalse(h.quality_gate(baseline,trimmed,jd))
+
     def test_rejects_unsupported_analyst_claim_even_with_valid_sources(self):
         proposal={"summary":"Experiência em elicitação de requisitos e casos de uso, com stakeholders e Scrum.",
                   "source_ids":["1"],"evidence_ids":["1:0","1:1","2:0"]}

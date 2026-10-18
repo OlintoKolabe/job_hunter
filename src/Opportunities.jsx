@@ -20,7 +20,7 @@ export function OpportunitiesPanel(){
    const scoredOrAttempted=new Set();
    let resolved=0;
    async function enrichAvailable(){
-     const candidates=[...all.values(),...uncertain.values()].filter(j=>!scoredOrAttempted.has(j.url) &&
+     const candidates=[...all.values()].filter(j=>!scoredOrAttempted.has(j.url) &&
        (j.jd_status==='pendente' || (j.ranking?.score==null &&
        ['greenhouse','inhire'].some(src=>j.source?.toLowerCase().includes(src)))));
      const waiting=[...new Map(candidates.map(j=>[j.url,j])).values()];
@@ -32,7 +32,7 @@ export function OpportunitiesPanel(){
        setScoringNow(chunk.map(j=>j.url));
        try{
          const response=await fetch('/api/jd/enrich',{method:'POST',headers:{'Content-Type':'application/json'},
-           body:JSON.stringify({jobs:chunk,roles})});
+           signal:AbortSignal.timeout(30000),body:JSON.stringify({jobs:chunk,roles})});
          if(!response.ok)throw Error('Falha HTTP '+response.status);
          const data=await response.json();
          for(const j of data.items||[]){

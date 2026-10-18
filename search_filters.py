@@ -212,6 +212,7 @@ def classify(job,terms,country,mode,days):
 
 def analyze_filters(jobs,roles=DEFAULT_ROLES,country="BR",mode="remote",days=30,sort="newest"):
     from jd_signals import signals
+    from block4_score import score_job
     terms=search_terms(roles)
     if len(roles)>700:raise ValueError("Filtros de cargo excessivamente longos")
     if country not in COUNTRY_NAMES:raise ValueError("País desconhecido")
@@ -222,7 +223,7 @@ def analyze_filters(jobs,roles=DEFAULT_ROLES,country="BR",mode="remote",days=30,
     for j in jobs:
         bucket,reason=classify(j,terms,country,mode,days)
         reasons[bucket+(":"+reason if reason else "")]=reasons.get(bucket+(":"+reason if reason else ""),0)+1
-        if bucket=="confirmed":confirmed.append({**j,"detected_mode":detect_work_mode(j,signals(j,roles)),"jd_evidence":signals(j,roles),"description":""})
+        if bucket=="confirmed":confirmed.append({**j,"detected_mode":detect_work_mode(j,signals(j,roles)),"jd_evidence":signals(j,roles),"ranking":score_job(j,roles),"description":""})
         elif bucket=="review":review.append({**j,"detected_mode":detect_work_mode(j,signals(j,roles)),"jd_evidence":signals(j,roles),"description":"","needs_verification":reason.split(",")})
     order=lambda j:parse_date(j.get("published")) or datetime.min.replace(tzinfo=timezone.utc)
     confirmed.sort(key=order,reverse=sort=="newest")

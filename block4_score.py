@@ -170,6 +170,7 @@ def merge_semantic_requirements(base, extracted):
         # payment-product ownership or knowledge of the Pix/card rails.
         payments_context=any(x in normalized for x in ("payment","payments","pagamento","pagamentos","pix","acquiring","adquirencia","settlement"))
         specialized_payments=any(x in normalized for x in ("pix","card acquiring","settlement","iso 8583","brazilian payment rails"))
+        technical_core=any(x in normalized for x in ("write code","hands-on coding","programming required","software development required","software engineer","developer role","test automation","qa automation","computer science degree","coding required"))
         # A generic PM capability does not prove specialized Pix/card-rails expertise.
         transferable_domains=(
             (("healthcare domain","clinical operations","healthtech domain"),"Top Saúde: gestão de serviços médicos e processos"),
@@ -179,7 +180,11 @@ def merge_semantic_requirements(base, extracted):
         )
         domain_evidence=next((e for terms,e in transferable_domains if any(t in normalized for t in terms)),None)
         relationship=row.get("relationship")
-        if proof and relationship=="transferivel":
+        if technical_core:
+            degree="nao_comprovada"
+            evidence=None
+            points=0.0
+        elif proof and relationship=="transferivel":
             degree="transferivel"
             evidence=proof+"; habilidade documentada aplicável parcialmente ao contexto da vaga"
             points=0.45

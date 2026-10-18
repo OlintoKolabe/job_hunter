@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from docx import Document
 from docx.shared import Pt
 
-ENGINE_VERSION = "block5-deterministic-v4"
+ENGINE_VERSION = "block5-traceable-rewrite-v5"
 CV_DOCUMENT_VERSION = "job-hunter-cv-provenance-v1"
 CONTACT = {"name":"Olinto Manso Pereira","email":"olinto_manso@hotmail.com",
            "phone":"+55 64 98116-4936","location":"Caldas Novas, GO, Brasil",
@@ -233,9 +233,11 @@ def audit(plan,data):
     assert CONTACT["email"] in content and CONTACT["phone"] in content
     original={f for e in EXPERIENCE for f in e["facts"]}
     selected=[f for e in plan["experience"] for f in e["facts"]]
+    provenance=plan.get("bullet_provenance") or {}
     assert selected and len(selected)==len(set(selected))
-    assert all(f in original for f in selected)
+    assert all(f in original or provenance.get(f) in original for f in selected)
     assert all(content.count(f)==1 for f in selected)
+    assert all(source in original for source in provenance.values())
     return {"engine":ENGINE_VERSION,"document_sha256":hashlib.sha256(data).hexdigest(),
             "jd_sha256":plan["jd_sha256"],"factual_bullets_verified":True,
             "cost_usd":0.0,"ai_calls":0,"paragraphs":len(parsed.paragraphs)}

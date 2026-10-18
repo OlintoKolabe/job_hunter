@@ -23,6 +23,7 @@ from collectors import collect
 from search_filters import analyze_filters,apply_filters,search_terms,discovery_queries,DEFAULT_ROLES,COUNTRIES
 from catalog_engine import source_tasks,scan
 from catalog_bootstrap import maybe_start
+from jd_enrichment import hydrate_jobs
 
 app = FastAPI(docs_url=None, redoc_url=None)
 DIST = Path(__file__).resolve().parent / "dist"
@@ -187,9 +188,14 @@ def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:
     visible,pending,history_excluded=exclude_history_matches(items,review,known_urls,known_pairs)
     visible=[j for j in visible if not any(b in normalized(j["company"]) for b in ("kraken","payward"))]
     pending=[j for j in pending if not any(b in normalized(j["company"]) for b in ("kraken","payward"))]
+    with psycopg.connect(DATABASE,connect_timeout=7) as score_conn:
+        with score_conn.cursor() as score_cur:
+            scored,coverage=hydrate_jobs(score_cur,visible+pending,roles,url_key)
+    visible=scored[:len(visible)]
+    pending=scored[len(visible):]
     fresh_count=len(visible)
     return {"source":"Multifuente","queried":len(sources),"total":len(items),
-        "new":fresh_count,"duplicates":history_excluded,"items":visible[:100],"review_items":pending[:150],"filter_stats":filter_stats,"raw_count":raw_count,"details":sources,
+        "new":fresh_count,"duplicates":history_excluded,"jd_coverage":coverage,"items":visible[:100],"review_items":pending[:150],"filter_stats":filter_stats,"raw_count":raw_count,"details":sources,
         "notice":"Vagas coletadas, ainda sem triagem de elegibilidade Brasil/remoto ou score."}
 
 
@@ -343,11 +349,16 @@ def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False
     visible,pending,history_excluded=exclude_history_matches(items,review,known_urls,known_pairs)
     visible=[j for j in visible if not any(b in normalized(j["company"]) for b in ("kraken","payward"))]
     pending=[j for j in pending if not any(b in normalized(j["company"]) for b in ("kraken","payward"))]
+    with psycopg.connect(DATABASE,connect_timeout=7) as score_conn:
+        with score_conn.cursor() as score_cur:
+            scored,coverage=hydrate_jobs(score_cur,visible+pending,roles,url_key)
+    visible=scored[:len(visible)]
+    pending=scored[len(visible):]
     fresh_count=len(visible)
     return {"total_sources":len(tasks),"due_only":due_only,"offset":offset,"next_offset":offset+len(batch),
             "complete":offset+len(batch)>=len(tasks),"details":details,
             "found":len(items),"new":fresh_count,"duplicates":history_excluded,"raw_count":raw_count,"filter_stats":filter_stats,
-            "review_items":pending[:150],"items":visible[:80],"notice":"Vagas candidatas: remoto/Brasil e requisitos ainda aguardam análise completa."}
+            "jd_coverage":coverage,"review_items":pending[:150],"items":visible[:80],"notice":"Vagas candidatas: remoto/Brasil e requisitos ainda aguardam análise completa."}
 
 @app.get("/api/history")
 def history(request: Request, q: str="", state: str="", limit:int=50, offset:int=0):

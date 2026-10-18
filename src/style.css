@@ -24,3 +24,7 @@
 .jh-score-spinner{display:inline-block;width:13px;height:13px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:jh-score-rotate .8s linear infinite;flex-shrink:0}
 @keyframes jh-score-rotate{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.jh-score-spinner{animation:none;border-right-color:currentColor}}
+
+/* Block 4: visible progress only while individual JD is actually pending. */
+.jh-score-spinner{display:inline-block;width:13px;height:13px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:jh-score-spin .75s linear infinite;flex:none}
+@keyframes jh-score-spin{to{transform:rotate(360deg)}}

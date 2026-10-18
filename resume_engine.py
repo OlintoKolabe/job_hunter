@@ -163,7 +163,7 @@ TOPICS={
 }
 # A concept is credited only if it occurs in the exact documented evidence.
 FACT_TOPICS={
- "analysis":("requisitos","histórias de usuários","backlog","stakeholders","pesquisa de mercado","validação","discovery"),
+ "analysis":("requisitos","histórias de usuários","backlog","stakeholders","validação","discovery"),
  "agility":("scrum","kanban","sprints","backlog"),
  "project":("projetos","processos","recursos","orçamento","portfólio","delivery","implantação"),
  "product":("produto","product","roadmap","discovery","priorização","usuários","protótipos","figma","jornadas"),
@@ -200,7 +200,9 @@ def build_plan(jd, title):
         scored.append((idx,item,ordered,strength))
     prioritized=sorted(scored,key=lambda x:(-x[3],-chronology_index(x[1])[0],-chronology_index(x[1])[1]))
     # Evidence is selected per role, not copied into two different sections.
-    major={idx for idx,_,_,score in prioritized[:6] if score>=5}
+    title_aligned=[idx for idx,_,ordered,score in prioritized
+           if score>=5 and (not title_needs or any(categories(f,FACT_TOPICS)&title_needs for f in ordered[:3]))]
+    major=set(title_aligned[:6])
     # Reserve one evidence slot for a directly matching prior career specialty.
     # A performance-media candidate must not bury all of their documented
     # marketing leadership while six recent generalist roles occupy the page.

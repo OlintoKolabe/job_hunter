@@ -167,7 +167,7 @@ FACT_TOPICS={
  "agility":("scrum","kanban","sprints","backlog"),
  "project":("projetos","processos","recursos","orçamento","portfólio","delivery","implantação"),
  "product":("produto","product","roadmap","discovery","priorização","usuários","protótipos","figma","jornadas"),
- "growth":("growth","marketing","leads","crm","retenção","churn","fidelização","vendas","google ads","ticket médio"),
+ "growth":("growth","marketing","leads","crm","retenção","churn","fidelização","vendas","comercial","receita","google ads","ticket médio"),
  "data":("indicadores","kpis","okrs","métricas","análises","painéis","testes a/b","analytics"),
  "people":("stakeholders","equipes","liderança","alinhamento","colaboração"),
  "tools":("jira","azure devops","confluence","figma","posthog","trello","miro")
@@ -195,7 +195,11 @@ def build_plan(jd, title):
     tokens=words(jd)
     scored=[]
     for idx,item in sorted(enumerate(EXPERIENCE),key=lambda x:chronology_index(x[1]),reverse=True):
-        ordered=sorted(item["facts"],key=lambda f:(-7*len(categories(f,FACT_TOPICS)&title_needs)-relevance(f,needs,tokens),item["facts"].index(f)))
+        def evidence_priority(f):
+            directly_relevant=bool(categories(f,FACT_TOPICS)&title_needs)
+            quantified=bool(re.search(r"(?:R\\$\\s*\\d|\\d[.,]\\d+%|\\d+%|triplicad)",f,re.I))
+            return 7*len(categories(f,FACT_TOPICS)&title_needs)+relevance(f,needs,tokens)+(3 if directly_relevant and quantified else 0)
+        ordered=sorted(item["facts"],key=lambda f:(-evidence_priority(f),item["facts"].index(f)))
         strength=sum(max(0,relevance(f,needs,tokens)-1) for f in ordered[:3]) + sum(5 for f in ordered[:3] if categories(f,FACT_TOPICS)&title_needs)
         scored.append((idx,item,ordered,strength))
     prioritized=sorted(scored,key=lambda x:(-x[3],-chronology_index(x[1])[0],-chronology_index(x[1])[1]))
@@ -221,6 +225,10 @@ def build_plan(jd, title):
             cap=3 if score>=8 else 2
             chosen=[f for f in facts if relevance(f,needs,tokens)>0][:cap]
             if not chosen:chosen=facts[:1]
+            if "growth" in title_needs and "marketing" in item["role"].casefold():
+                quantified=[f for f in facts if re.search(r"(?:R\\$\\s*\\d|\\d[.,]\\d+%|\\d+%|triplicad)",f,re.I) and categories(f,FACT_TOPICS)&title_needs]
+                if quantified and not any(f in chosen for f in quantified):
+                    chosen=chosen[:-1]+[quantified[0]] if len(chosen)>=cap else chosen+[quantified[0]]
             experiences.append({"role":item["role"],"company":item["company"],"dates":item["dates"],
                                 "facts":chosen,"source_index":idx})
         else:

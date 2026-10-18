@@ -109,6 +109,20 @@ class HybridResumeTests(unittest.TestCase):
         facts=[f for e in chosen for f in e["facts"]]
         self.assertIn(EXPERIENCE[9]["facts"][0],facts)
         self.assertTrue(audit({**plan,"experience":chosen},render_docx({**plan,"experience":chosen}))["factual_bullets_verified"])
+    def test_rejects_unsupported_analyst_claim_even_with_valid_sources(self):
+        proposal={"summary":"Experiência em elicitação de requisitos e casos de uso, com stakeholders e Scrum.",
+                  "source_ids":["1"],"evidence_ids":["1:0","1:1","2:0"]}
+        self.assertIsNone(h.validate_text(proposal,self.plan))
+    def test_comparison_gate_does_not_accept_weaker_coverage(self):
+        from resume_engine import EXPERIENCE
+        candidate=[{"source_index":1,"facts":[EXPERIENCE[1]["facts"][4]]}]
+        jd="Product Manager roadmap backlog discovery stakeholders"
+        p=build_plan(jd,"Product Manager")
+        self.assertFalse(h.quality_gate(p,candidate,jd))
+    def test_comparison_gate_approves_superset_of_proven_evidence(self):
+        candidate=h.selected_evidence({"evidence_ids":["8:0","9:0","13:0"]},self.plan)
+        self.assertIsNotNone(candidate)
+        self.assertTrue(h.quality_gate(self.plan,candidate,JD))
     def test_render_unchanged_provenance(self):
         data=render_docx(self.plan)
         self.assertTrue(audit(self.plan,data)["factual_bullets_verified"])

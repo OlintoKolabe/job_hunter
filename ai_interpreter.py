@@ -11,8 +11,9 @@ MAX_OUTPUT=1000
 def interpret(description):
     if os.getenv("JH_AI_ENABLED")!="1" or not os.getenv("OPENAI_API_KEY"):
         return None
-    plain=html.unescape(re.sub(r'<[^>]+>',' ',description))
-    plain=re.sub(r'\s+',' ',plain).strip()
+    plain=re.sub(r'</(?:p|li|div|h[1-6])>', '\n', description, flags=re.I)
+    plain=html.unescape(re.sub(r'<[^>]+>',' ',plain))
+    plain=re.sub(r'[ \t]+',' ',plain).strip()
     skill_keys='; '.join(f'{key}: {details[2]}' for key,details in SKILLS.items())
     prompt=("Extract up to 12 important distinct job requirements verbatim from the supplied job description. "
             "Return a JSON object with 'requirements' array of objects, each with 'name' "

@@ -12,10 +12,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 RUN python -m playwright install --with-deps chromium
-COPY app.py collectors.py catalog_engine.py source_extensions.py catalog_bootstrap.py scrapling_fallback.py search_filters.py jd_signals.py block4_score.py jd_enrichment.py jd_retrieval.py ai_interpreter.py score_repository.py resume_engine.py catalog_seed.json test_phase3.py ./
+COPY app.py collectors.py catalog_engine.py source_extensions.py catalog_bootstrap.py scrapling_fallback.py search_filters.py jd_signals.py block4_score.py jd_enrichment.py jd_retrieval.py ai_interpreter.py score_repository.py resume_engine.py resume_hybrid.py catalog_seed.json test_phase3.py ./
 COPY scripts/check_scope.py ./scripts/check_scope.py
-COPY tests/test_block4_1.py tests/test_resume_engine.py ./tests/
-RUN python -m compileall -q app.py collectors.py catalog_engine.py source_extensions.py catalog_bootstrap.py scrapling_fallback.py search_filters.py jd_signals.py block4_score.py jd_enrichment.py test_phase3.py && python -m unittest -q test_phase3 && python -m unittest discover -s tests -p test_block4_1.py -q && python -m unittest discover -s tests -p test_resume_engine.py -q
+COPY tests/test_block4_1.py tests/test_resume_engine.py tests/test_resume_hybrid.py ./tests/
+RUN python -m compileall -q app.py collectors.py catalog_engine.py source_extensions.py catalog_bootstrap.py scrapling_fallback.py search_filters.py jd_signals.py block4_score.py jd_enrichment.py test_phase3.py && python -m unittest -q test_phase3 && python -m unittest discover -s tests -p test_block4_1.py -q && python -m unittest discover -s tests -p test_resume_engine.py -q && python -m unittest discover -s tests -p test_resume_hybrid.py -q
 COPY --from=frontend /app/dist ./dist
 EXPOSE 10000
 CMD ["sh","-c","uvicorn app:app --host 0.0.0.0 --port ${PORT:-10000}"]

@@ -1,5 +1,6 @@
 """Block 4.1 unit regressions; run without API keys or external requests."""
 import unittest
+import re
 from unittest.mock import patch
 from jd_retrieval import safe_public_url
 from ai_interpreter import interpret
@@ -29,6 +30,12 @@ class Block41Tests(unittest.TestCase):
     def test_unknown_semantic_skills_are_not_awarded_points(self):
         rows=[{"name":str(i),"type":"obrigatorio","skill_id":"imaginary_skill"} for i in range(4)]
         self.assertIsNone(merge_semantic_requirements({"score":None},rows)["score"])
+    def test_jsonld_script_pattern(self):
+        html='<script type="application/ld+json">{"@type":"JobPosting"}</script>'
+        pattern=r'<script[^>]*type=.[aA]pplication/ld[+]json.[^>]*>(.*?)</script>'
+        self.assertEqual(len(re.findall(pattern,html,re.I|re.S)),1)
+    def test_html_whitespace_normalization(self):
+        self.assertEqual(re.sub(r"\\s+"," ","A  B\\nC"),"A B C")
     def test_gate_does_not_allow_new_file(self):
         contract={"allowed_files":["app.py"],"forbidden_paths":[],"base_ref":"sha","feature_ref":"branch"}
         self.assertEqual(validate(["src/Unauthorized.jsx"],contract),["src/Unauthorized.jsx"])

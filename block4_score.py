@@ -150,3 +150,33 @@ def score_job(job,roles):
             "reason":("Percentual sobre requisitos extraídos do JD; não representa cobertura integral se o anúncio for incompleto"
                       if available else "JD sem requisitos identificáveis: sem nota de aderência"),
             "method":"block4-evidencias-cobertura-v2"}
+
+def merge_semantic_requirements(base, extracted):
+    """Deterministic, evidence-anchored fit from AI-classified JD requirements."""
+    if not extracted:return base
+    rows=[]
+    for row in extracted:
+        if not isinstance(row,dict):continue
+        name=str(row.get("name") or "").strip()
+        kind=row.get("type")
+        skill=row.get("skill_id")
+        if not name or kind not in ("obrigatorio","desejavel"):continue
+        proof=SKILLS[skill][2] if skill in SKILLS else None
+        rows.append({"name":name[:160],"type":kind,
+            "status":"comprovado" if proof else "nao_comprovado","evidence":proof})
+    if not rows:return base
+    total=sum(3 if r["type"]=="obrigatorio" else 1 for r in rows)
+    met=sum((3 if r["type"]=="obrigatorio" else 1) for r in rows if r["status"]=="comprovado")
+    verified=sum(r["status"]=="comprovado" for r in rows)
+    # Small/uncertain samples are not presented as definitive fit.
+    fit=round(100*met/total) if len(rows)>=4 and verified else None
+    return {**base,"score":fit,"fit":fit,"requirements":rows,
+        "evaluated_requirements":len(rows),
+        "mandatory_count":sum(r["type"]=="obrigatorio" for r in rows),
+        "desirable_count":sum(r["type"]=="desejavel" for r in rows),
+        "unverified_count":len(rows)-verified,
+        "uninterpreted_count":0,
+        "coverage_pct":100,
+        "confidence":"semantic_evidence" if fit is not None else "semantic_insufficient",
+        "reason":"Compatibilidade calculada com regras fixas e evidências profissionais documentadas; equivalências interpretadas por IA.",
+        "method":"block4.1-semantic-evidence-v1"}

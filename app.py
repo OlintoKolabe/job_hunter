@@ -152,6 +152,18 @@ def extract_jobs(data):
     return []
 
 @app.post("/api/search-jobs")
+def exclude_history_matches(items,review,known_urls,known_pairs):
+    """Hide history entries from BOTH confirmed and review results.
+    The sets are always queried fresh during every search/catalog batch.
+    """
+    def is_known(job):
+        return url_key(job["url"]) in known_urls or (
+            bool(job.get("company")) and pair_key(job["company"],job["title"]) in known_pairs
+        )
+    confirmed=[job for job in items if not is_known(job)]
+    pending=[job for job in review if not is_known(job)]
+    return confirmed,pending,(len(items)+len(review)-len(confirmed)-len(pending))
+
 def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:str="remote",days:int=30,sort:str="newest",source:str="all"):
     require_auth(request)
     allowed_sources={"all","inhire","quickin","gupy","greenhouse","ashby","lever","bamboohr","dynamite","linkedin_guest","jobgether","workable"}
@@ -162,21 +174,22 @@ def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:
     except ValueError as e: raise HTTPException(400,str(e))
     with psycopg.connect(DATABASE,connect_timeout=8) as conn:
         with conn.cursor() as cur:
-            keys=[url_key(j["url"]) for j in items]
+            keys=[url_key(j["url"]) for j in items+review]
             known_urls=set()
             known_pairs=set()
             if keys:
                 cur.execute("SELECT normalized_url FROM jh_history WHERE normalized_url=ANY(%s)",(keys,))
                 known_urls={row[0] for row in cur.fetchall()}
-            pairs=[pair_key(j["company"],j["title"]) for j in items if j["company"]]
+            pairs=[pair_key(j["company"],j["title"]) for j in items+review if j["company"]]
             if pairs:
                 cur.execute("SELECT pair_key FROM jh_history WHERE pair_key=ANY(%s)",(pairs,))
                 known_pairs={row[0] for row in cur.fetchall()}
-    visible=[{**j,"already_known":url_key(j["url"]) in known_urls or (bool(j["company"]) and pair_key(j["company"],j["title"]) in known_pairs)} for j in items
-             if not any(b in normalized(j["company"]) for b in ("kraken","payward"))]
-    fresh_count=sum(not j["already_known"] for j in visible)
+    visible,pending,history_excluded=exclude_history_matches(items,review,known_urls,known_pairs)
+    visible=[j for j in visible if not any(b in normalized(j["company"]) for b in ("kraken","payward"))]
+    pending=[j for j in pending if not any(b in normalized(j["company"]) for b in ("kraken","payward"))]
+    fresh_count=len(visible)
     return {"source":"Multifuente","queried":len(sources),"total":len(items),
-        "new":fresh_count,"duplicates":len(visible)-fresh_count,"items":visible[:100],"review_items":review[:150],"filter_stats":filter_stats,"raw_count":raw_count,"details":sources,
+        "new":fresh_count,"duplicates":history_excluded,"items":visible[:100],"review_items":pending[:150],"filter_stats":filter_stats,"raw_count":raw_count,"details":sources,
         "notice":"Vagas coletadas, ainda sem triagem de elegibilidade Brasil/remoto ou score."}
 
 
@@ -311,8 +324,8 @@ def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False
     raw_count=len(unique)
     try: items,review,filter_stats=analyze_filters(list(unique.values()),roles,country,mode,days,sort)
     except ValueError as e:raise HTTPException(400,str(e))
-    urls=[url_key(v["url"]) for v in items]
-    pairs=[pair_key(v["company"],v["title"]) for v in items if v["company"]]
+    urls=[url_key(v["url"]) for v in items+review]
+    pairs=[pair_key(v["company"],v["title"]) for v in items+review if v["company"]]
     known_urls=set();known_pairs=set()
     with psycopg.connect(DATABASE,connect_timeout=7) as conn:
         with conn.cursor() as cur:
@@ -327,13 +340,14 @@ def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False
             if pairs:
                 cur.execute("SELECT pair_key FROM jh_history WHERE pair_key=ANY(%s)",(pairs,))
                 known_pairs={r[0] for r in cur.fetchall()}
-    visible=[{**j,"already_known":url_key(j["url"]) in known_urls or (bool(j["company"]) and pair_key(j["company"],j["title"]) in known_pairs)} for j in items
-             if not any(b in normalized(j["company"]) for b in ("kraken","payward"))]
-    fresh_count=sum(not j["already_known"] for j in visible)
+    visible,pending,history_excluded=exclude_history_matches(items,review,known_urls,known_pairs)
+    visible=[j for j in visible if not any(b in normalized(j["company"]) for b in ("kraken","payward"))]
+    pending=[j for j in pending if not any(b in normalized(j["company"]) for b in ("kraken","payward"))]
+    fresh_count=len(visible)
     return {"total_sources":len(tasks),"due_only":due_only,"offset":offset,"next_offset":offset+len(batch),
             "complete":offset+len(batch)>=len(tasks),"details":details,
-            "found":len(items),"new":fresh_count,"duplicates":len(visible)-fresh_count,"raw_count":raw_count,"filter_stats":filter_stats,
-            "review_items":review[:150],"items":visible[:80],"notice":"Vagas candidatas: remoto/Brasil e requisitos ainda aguardam análise completa."}
+            "found":len(items),"new":fresh_count,"duplicates":history_excluded,"raw_count":raw_count,"filter_stats":filter_stats,
+            "review_items":pending[:150],"items":visible[:80],"notice":"Vagas candidatas: remoto/Brasil e requisitos ainda aguardam análise completa."}
 
 @app.get("/api/history")
 def history(request: Request, q: str="", state: str="", limit:int=50, offset:int=0):

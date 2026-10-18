@@ -171,6 +171,13 @@ def merge_semantic_requirements(base, extracted):
         payments_context=any(x in normalized for x in ("payment","payments","pagamento","pagamentos","pix","acquiring","adquirencia","settlement"))
         specialized_payments=any(x in normalized for x in ("pix","card acquiring","settlement","iso 8583","brazilian payment rails"))
         # A generic PM capability does not prove specialized Pix/card-rails expertise.
+        transferable_domains=(
+            (("healthcare domain","clinical operations","healthtech domain"),"Top Saúde: gestão de serviços médicos e processos"),
+            (("mining domain","mining operations"),"Hexagon Mining: experiência em produto na mineração"),
+            (("loyalty programs","retail loyalty"),"Dotz: experiência em produto e CRM"),
+            (("marketing industry","advertising domain"),"Lagoa Parques: direção de marketing"),
+        )
+        domain_evidence=next((e for terms,e in transferable_domains if any(t in normalized for t in terms)),None)
         if proof and specialized_payments:
             degree="transferivel"
             evidence=proof+"; competência de produto transferível, mas atuação nas regras de pagamento específicas não comprovada"
@@ -183,6 +190,10 @@ def merge_semantic_requirements(base, extracted):
             degree="transferivel"
             evidence="Neocoder/LiberPay: consultoria e estratégia em pagamentos com criptoativos e stablecoins; sem evidência de liderança de produto de Pix"
             points=0.25
+        elif domain_evidence:
+            degree="transferivel"
+            evidence=domain_evidence+"; domínio transferível não comprova todas as competências técnicas da vaga"
+            points=0.35
         else:
             degree="nao_comprovada"
             evidence=None

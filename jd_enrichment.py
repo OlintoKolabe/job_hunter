@@ -73,7 +73,7 @@ def hydrate_jobs(cursor,jobs,roles,url_key,limit=PER_BATCH_LIMIT):
             endpoint,headers=detail
             result=fetch_json(endpoint,headers) if headers else fetch_json(endpoint)
             value=(result.get("jobPage") or result.get("page") or result) if isinstance(result,dict) else {}
-            if not isinstance(value,dict):return key,None
+            if not isinstance(value,dict):return key,extract_public_jd(str(job.get("url") or ""))
             content=value.get("content") or value.get("description") or value.get("jobDescription") or ""
             if not content and isinstance(value.get("job"),dict):content=value["job"].get("description") or ""
             if not isinstance(content,str) or not content.strip():return key,extract_public_jd(str(job.get('url') or ''))
@@ -90,7 +90,7 @@ def hydrate_jobs(cursor,jobs,roles,url_key,limit=PER_BATCH_LIMIT):
                     ON CONFLICT(normalized_url) DO UPDATE SET
                     description=EXCLUDED.description,content_hash=EXCLUDED.content_hash,
                     fetched_at=NOW(),source=EXCLUDED.source""",
-                    (key,content,hashlib.sha256(content.encode()).hexdigest(),"greenhouse"))
+                    (key,content,hashlib.sha256(content.encode()).hexdigest(),str(next((job.get("source") for k,job in pending if k==key),"public_html"))[:64]))
                 fetched+=1
     output=[]
     count={"cached":0,"fetched":fetched,"missing":0,"not_attempted":max(0,len(pending)-limit)}
@@ -124,8 +124,8 @@ def hydrate_jobs(cursor,jobs,roles,url_key,limit=PER_BATCH_LIMIT):
                     finally:
                         with psycopg.connect(os.environ['DATABASE_URL'],connect_timeout=7) as budget_conn:
                             with budget_conn.cursor() as budget_cur:
-                                settle(budget_cur,usage_id,actual,extracted is not None)
-                    if extracted:
+                                settle(budget_cur,usage_id,actual,bool(extracted and extracted.get("requirements")))
+                    if extracted and extracted.get('requirements'):
                         evaluation=merge_semantic_requirements(evaluation,extracted['requirements'])
                         evaluation['ai_interpreted']=True
                         model='hybrid'

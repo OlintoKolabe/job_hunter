@@ -35,6 +35,27 @@ class Block41Tests(unittest.TestCase):
         score=merge_semantic_requirements({"score":None},rows)
         self.assertEqual(score["score"],70)
         self.assertEqual(score["unverified_count"],1)
+    def test_semantic_evidence_id_matches_documented_skill(self):
+        rows=[{"name":"roadmap","type":"obrigatorio","skill_id":"roadmap"},
+              {"name":"unproven expertise","type":"obrigatorio","skill_id":None},
+              {"name":"backlog","type":"obrigatorio","skill_id":"backlog"},
+              {"name":"crm","type":"desejavel","skill_id":"crm"}]
+        out=merge_semantic_requirements({"score":None},rows)
+        self.assertEqual(out["requirements"][0]["evidence_id"],"roadmap")
+        self.assertIsNone(out["requirements"][1]["evidence_id"])
+        self.assertLess(out["score"],100)
+    def test_ai_discards_requirements_not_in_jd(self):
+        import json
+        from io import BytesIO
+        jd="Must have roadmap and backlog experience, plus CRM skills."
+        response={"choices":[{"message":{"content":json.dumps({"requirements":[
+            {"name":"roadmap","type":"obrigatorio","skill_id":"roadmap"},
+            {"name":"invented SQL requirement","type":"obrigatorio","skill_id":None}
+        ]})}}],"usage":{"prompt_tokens":30,"completion_tokens":20}}
+        with patch.dict("os.environ",{"JH_AI_ENABLED":"1","OPENAI_API_KEY":"test-only"}):
+            with patch("urllib.request.urlopen",return_value=BytesIO(json.dumps(response).encode())):
+                result=interpret(jd)
+        self.assertEqual([item["name"] for item in result["requirements"]],["roadmap"])
     def test_unknown_semantic_skills_are_not_awarded_points(self):
         rows=[{"name":str(i),"type":"obrigatorio","skill_id":"imaginary_skill"} for i in range(4)]
         self.assertIsNone(merge_semantic_requirements({"score":None},rows)["score"])

@@ -190,9 +190,9 @@ def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:
     pending=[j for j in pending if not any(b in normalized(j["company"]) for b in ("kraken","payward"))]
     with psycopg.connect(DATABASE,connect_timeout=7) as score_conn:
         with score_conn.cursor() as score_cur:
-            scored,coverage=hydrate_jobs(score_cur,visible+pending,roles,url_key)
-    visible=scored[:len(visible)]
-    pending=scored[len(visible):]
+            scored,coverage=hydrate_jobs(score_cur,visible,roles,url_key)
+    visible=scored
+    # Pending eligibility is not automatically enriched or scored.
     fresh_count=len(visible)
     return {"source":"Multifuente","queried":len(sources),"total":len(items),
         "new":fresh_count,"duplicates":history_excluded,"jd_coverage":coverage,"items":visible[:100],"review_items":pending[:150],"filter_stats":filter_stats,"raw_count":raw_count,"details":sources,
@@ -351,9 +351,9 @@ def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False
     pending=[j for j in pending if not any(b in normalized(j["company"]) for b in ("kraken","payward"))]
     with psycopg.connect(DATABASE,connect_timeout=7) as score_conn:
         with score_conn.cursor() as score_cur:
-            scored,coverage=hydrate_jobs(score_cur,visible+pending,roles,url_key)
-    visible=scored[:len(visible)]
-    pending=scored[len(visible):]
+            scored,coverage=hydrate_jobs(score_cur,visible,roles,url_key)
+    visible=scored
+    # Pending eligibility is not automatically enriched or scored.
     fresh_count=len(visible)
     return {"total_sources":len(tasks),"due_only":due_only,"offset":offset,"next_offset":offset+len(batch),
             "complete":offset+len(batch)>=len(tasks),"details":details,

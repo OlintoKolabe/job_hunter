@@ -103,6 +103,7 @@ export function OpportunitiesPanel(){
    const state=scoreStatus(v);
    if(state==='waiting'||state==='calculating')return 'Analisando os requisitos da vaga. A nota aparecerá quando a avaliação terminar.';
    if(state==='failed')return 'O lote falhou; tente uma nova busca';
+   if(state==='scored' && v.ranking?.confidence==='essential_gap')return 'Exigência técnica obrigatória não comprovada no perfil';
    if(state==='scored' && v.ranking?.confidence==='hard_role_mismatch')return 'Incompatibilidade essencial com função técnica — nenhuma chamada de IA foi necessária';
    if(state==='scored')return v.ranking?.confidence==='requisitos_extraidos'?'% dos requisitos extraídos':v.ranking?.confidence==='amostra_limitada'?'Amostra limitada — conferir JD':'Nota calculada';
    if(v.ai_status==='failed')return 'A análise automática falhou. Tente uma nova busca.';

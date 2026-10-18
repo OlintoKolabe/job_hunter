@@ -82,11 +82,25 @@ def score_job(job,roles):
     title=fold(job.get("title",""))
     requirements=[]
     used=set()
+    section=None
+    heading_required=("requirements","qualifications","what you bring","what we look for","requisitos","qualificacoes","qualificações","skills and experience")
+    heading_optional=("nice to have","preferred qualifications","desejaveis","diferenciais")
+    heading_end=("benefits","perks","what we offer","about us","sobre nos","responsibilities","responsabilidades","what you will do","about the role")
     for line in requirement_lines(str(jd_raw)):
-        is_mandatory=any(x in line for x in MANDATORY)
-        is_desirable=any(x in line for x in DESIRABLE)
+        if len(line)<95 and any(line.startswith(h) for h in heading_optional):
+            section="desejavel"
+            continue
+        if len(line)<95 and any(line.startswith(h) for h in heading_required):
+            section="obrigatorio"
+            continue
+        if len(line)<95 and any(line.startswith(h) for h in heading_end):
+            section=None
+            continue
+        is_mandatory=any(x in line for x in MANDATORY) or section=="obrigatorio"
+        is_desirable=any(x in line for x in DESIRABLE) or section=="desejavel"
         if not (is_mandatory or is_desirable):continue
         kind="obrigatorio" if is_mandatory else "desejavel"
+        before=len(requirements)
         for skill,(phrases,family,proof) in SKILLS.items():
             if skill not in used and any(p in line for p in phrases):
                 requirements.append({"name":skill,"type":kind,"status":"comprovado","evidence":proof})
@@ -95,6 +109,8 @@ def score_job(job,roles):
             if skill not in used and any(p in line for p in phrases):
                 requirements.append({"name":skill,"type":kind,"status":"nao_comprovado","evidence":None})
                 used.add(skill)
+        if len(requirements)==before and len(line)>12:
+            requirements.append({"name":line[:110],"type":kind,"status":"nao_comprovado","evidence":None})
     mandatory=[r for r in requirements if r["type"]=="obrigatorio"]
     desirable=[r for r in requirements if r["type"]=="desejavel"]
     # No requirements extracted means no professional-fit claim can be substantiated.
@@ -114,6 +130,6 @@ def score_job(job,roles):
             "desirable_count":len(desirable),"unverified_count":uncertainty,
             "priority":priority,
             "profile_evidence":[{"family":r["name"],"source":[r["evidence"]]} for r in requirements if r["evidence"]],
-            "reason":("Aderência calculada apenas sobre requisitos identificados; revise requisitos não comprovados"
+            "reason":("Percentual sobre requisitos extraídos do JD; não representa cobertura integral se o anúncio for incompleto"
                       if available else "JD sem requisitos identificáveis: sem nota de aderência"),
             "method":"block4-evidencias-v1"}

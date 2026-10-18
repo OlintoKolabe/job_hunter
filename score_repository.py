@@ -19,10 +19,7 @@ def get_cached(cur,url,jd_hash,roles):
     if not item:return None
     result=item[0]
     if not isinstance(result,dict):return None
-    if item[1]=='ai_error':
-        stamp=item[2]
-        if stamp is not None and stamp.tzinfo is None:stamp=stamp.replace(tzinfo=timezone.utc)
-        return result if stamp and stamp>=datetime.now(timezone.utc)-timedelta(minutes=30) else None
+    if item[1]=='ai_error':return result
     return result if result.get('score') is not None or (require_hybrid and item[1]=='hybrid') else None
 def get_previous_semantic(cur,url,jd_hash,roles):
     """Re-score already paid-for extraction after a rubric change; never call AI."""

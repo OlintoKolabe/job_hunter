@@ -7,6 +7,11 @@ JD="Product Manager responsável por roadmap, backlog, pesquisa de usuários e s
 class HybridResumeTests(unittest.TestCase):
     def setUp(self):
         self.plan=build_plan(JD,"Product Manager")
+    def test_word_aware_jd_relevance(self):
+        from resume_engine import contains, categories, TOPICS
+        self.assertTrue(contains("Gestão de marketing e campanhas", "marketing"))
+        self.assertFalse(contains("remarketing", "marketing"))
+        self.assertIn("growth", categories("Campanhas Google Ads e marketing", TOPICS))
     def test_no_api_when_disabled(self):
         cursor=MagicMock()
         with patch.dict(os.environ,{"JH_CV_AI_ENABLED":"0","OPENAI_API_KEY":"dummy"}):

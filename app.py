@@ -477,11 +477,19 @@ def generate_resume(payload: ResumeGenerate, request: Request):
     plan=build_plan(row[0],title)
     data=render_docx(plan)
     report=audit(plan,data)
+    from urllib.parse import quote
+    import re as _re
+    company=key.split("/")[0].split(".")[0].replace("-"," ").title()
+    role=title
+    def safe_name(value):
+        return _re.sub(r"[^\\wÀ-ÿ -]","",value,flags=_re.UNICODE).strip()[:90]
+    filename="Olinto Manso Pereira - "+safe_name(role)+" - "+safe_name(company)+".docx"
+    encoded_filename=quote(filename)
     headers={"X-Resume-Engine":report["engine"],"X-Document-SHA256":report["document_sha256"],
              "X-JD-SHA256":report["jd_sha256"],"X-AI-Calls":"0","X-AI-Cost-USD":"0"}
     return StreamingResponse(io.BytesIO(data),
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        headers={**headers,"Content-Disposition":'attachment; filename="curriculo-job-hunter.docx"'})
+        headers={**headers,"Content-Disposition":f"attachment; filename*=UTF-8''{encoded_filename}"})
 
 @app.get("/api/status")
 def status(request: Request):

@@ -5,7 +5,7 @@ import urllib.request
 import re
 import html
 import unicodedata
-from block4_score import SKILLS,PROFILE
+from block4_score import SKILLS
 MODEL=os.getenv("JH_AI_MODEL","gpt-4.1-nano")
 MAX_OUTPUT=1100
 def interpret(description):

@@ -14,14 +14,14 @@ from block4_score import score_job
 from search_filters import detect_work_mode
 
 TTL_DAYS=7
-PER_BATCH_LIMIT=20
+PER_BATCH_LIMIT=10
 MAX_JD_CHARS=90000
 
 def greenhouse_detail_url(job):
     source=str(job.get("source") or "").lower()
     if source not in ("greenhouse","greenhouse_eu"):return None
     url=str(job.get("url") or "")
-    match=re.search(r"/jobs/(\\d+)",url) or re.search(r"[?&]gh_jid=(\\d+)",url)
+    match=re.search(r"/jobs/(\d+)",url) or re.search(r"[?&]gh_jid=(\d+)",url)
     board=str(job.get("company") or "").strip()
     if not match or not re.fullmatch(r"[a-zA-Z0-9_-]{2,100}",board):return None
     return "https://boards-api.greenhouse.io/v1/boards/"+board+"/jobs/"+match.group(1)

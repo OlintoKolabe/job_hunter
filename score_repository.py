@@ -5,7 +5,7 @@ import os
 from datetime import datetime,timezone,timedelta
 from psycopg.types.json import Jsonb
 PROFILE_VERSION="profile-oct-2026"
-RUBRIC_VERSION="block4.1-v4-transferable-evidence"
+RUBRIC_VERSION="block4.1-v5-professional-core"
 MONTHLY_CAP_USD=5.0
 MAX_REQUEST_USD=0.002
 def key_for(roles):return hashlib.sha256(roles.encode()).hexdigest()
@@ -26,13 +26,13 @@ def get_previous_semantic(cur,url,jd_hash,roles):
     cur.execute("""SELECT result FROM jh_score_cache WHERE normalized_url=%s AND jd_hash=%s
         AND profile_version=%s AND rubric_version=%s AND roles_hash=%s
         AND model='hybrid'""",
-        (url,jd_hash,PROFILE_VERSION,"block4.1-v3-complete-scoring",key_for(roles)))
+        (url,jd_hash,PROFILE_VERSION,"block4.1-v4-transferable-evidence",key_for(roles)))
     row=cur.fetchone()
     if not isinstance(row,(tuple,list)) or len(row)<1 or not isinstance(row[0],dict):return None
     requirements=row[0].get("requirements") or []
     if not isinstance(requirements,list) or not requirements:return None
     return [{"name":r.get("name"),"type":r.get("type"),
-             "skill_id":r.get("evidence_id") if isinstance(r.get("evidence_id"),str) else None}
+             "skill_id":r.get("evidence_id") if isinstance(r.get("evidence_id"),str) and r.get("evidence_id") in __import__("block4_score").SKILLS else None,"relationship":r.get("match_level")}
             for r in requirements if isinstance(r,dict)]
 
 def save(cur,url,jd_hash,roles,result,model):

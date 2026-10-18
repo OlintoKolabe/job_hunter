@@ -12,7 +12,10 @@ from collectors import fetch_json
 from jd_signals import signals
 from block4_score import score_job
 from jd_retrieval import extract_public_jd
-from score_repository import get_cached,save,PROFILE_VERSION,RUBRIC_VERSION
+from score_repository import get_cached,save,reserve,settle
+from ai_interpreter import interpret
+import os
+import psycopg
 from search_filters import detect_work_mode
 
 TTL_DAYS=7
@@ -98,13 +101,31 @@ def hydrate_jobs(cursor,jobs,roles,url_key,limit=PER_BATCH_LIMIT):
         complete={**j,"description":description}
         jd_hash=hashlib.sha256(description.encode()).hexdigest() if description else ''
         evaluation=None
-        # Cache is optional until the Block 4.1 migration has been approved and applied.
+        # Requires approved migration before deployment.
         if description:
-            try:evaluation=get_cached(cursor,key,jd_hash,roles)
-            except Exception:cursor.connection.rollback();raise
+            evaluation=get_cached(cursor,key,jd_hash,roles)
         if evaluation is None:
             evaluation=score_job(complete,roles)
-            if description:save(cursor,key,jd_hash,roles,evaluation,'deterministic')
+            model='deterministic'
+            # AI must never run without explicit activation, cached miss and a reserved budget.
+            if description and os.getenv('JH_AI_ENABLED')=='1' and os.getenv('OPENAI_API_KEY'):
+                with psycopg.connect(os.environ['DATABASE_URL'],connect_timeout=7) as budget_conn:
+                    with budget_conn.cursor() as budget_cur:
+                        usage_id=reserve(budget_cur,key)
+                if usage_id is not None:
+                    extracted=None
+                    try:
+                        extracted=interpret(description)
+                    except Exception:
+                        pass
+                    finally:
+                        with psycopg.connect(os.environ['DATABASE_URL'],connect_timeout=7) as budget_conn:
+                            with budget_conn.cursor() as budget_cur:
+                                settle(budget_cur,usage_id,0.002,extracted is not None)
+                    if extracted:
+                        evaluation={**evaluation,'semantic_requirements':extracted,'ai_interpreted':True}
+                        model='hybrid'
+            if description:save(cursor,key,jd_hash,roles,evaluation,model)
         output.append({**j,"ranking":evaluation,"jd_evidence":signals(complete,roles),
                        "jd_status":origin if description else ("pendente" if (key,j) in pending[limit:] else "indisponivel")})
     return output,count

@@ -169,8 +169,8 @@ class ResumeEngineTests(unittest.TestCase):
                 doc=Document(io.BytesIO(output))
                 rendered=[p.text.strip() for p in doc.paragraphs if p.text.strip()]
                 content=" ".join(rendered)
-                self.assertEqual(content.count("Resumo profissional"),1)
-                self.assertEqual(content.count("Experiência profissional"),1)
+                self.assertEqual(rendered.count("Resumo profissional"),1)
+                self.assertEqual(rendered.count("Experiência profissional"),1)
                 facts=[p.text for p in doc.paragraphs if p.style.name=="List Bullet"]
                 cv_evidence=[x for x in facts if x in {f for e in EXPERIENCE for f in e["facts"]}]
                 self.assertEqual(len(cv_evidence),len(set(cv_evidence)))

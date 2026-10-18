@@ -17,6 +17,14 @@ class Block41Tests(unittest.TestCase):
     def test_no_jd_does_not_create_perfect_fit(self):
         out=score_job({"title":"Product Manager","description":""},"Product Manager")
         self.assertIsNone(out["score"])
+    def test_one_matching_requirement_does_not_mean_100_percent(self):
+        jd="Requirements: must have experience with product roadmap. "+("Business context and team details. "*15)
+        out=score_job({"title":"Product Manager","description":jd},"Product Manager")
+        self.assertIsNone(out["score"])
+    def test_short_jd_does_not_generate_a_score(self):
+        jd="Requirements: must have product roadmap. Must have backlog. Must have Scrum. Must have CRM."
+        out=score_job({"title":"Product Manager","description":jd},"Product Manager")
+        self.assertIsNone(out["score"])
     def test_semantic_scoring_uses_only_documented_skills(self):
         rows=[
             {"name":"roadmap","type":"obrigatorio","skill_id":"roadmap"},

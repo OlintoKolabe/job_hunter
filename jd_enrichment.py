@@ -10,7 +10,7 @@ from datetime import datetime,timezone,timedelta
 from urllib.parse import urlsplit,quote
 from collectors import fetch_json
 from jd_signals import signals
-from block4_score import score_job,merge_semantic_requirements,hard_role_mismatch
+from block4_score import score_job,merge_semantic_requirements,hard_role_mismatch,recommend_application
 from jd_retrieval import extract_public_jd
 from score_repository import get_cached,get_previous_semantic,save,reserve,settle
 from ai_interpreter import interpret
@@ -158,6 +158,6 @@ def hydrate_jobs(cursor,jobs,roles,url_key,limit=PER_BATCH_LIMIT):
             elif description and not previous and not is_technical_role:
                 ai_status='disabled'
             if description and (evaluation.get('score') is not None or model in ('hybrid','ai_error','hard_exclusion')):save(cursor,key,jd_hash,roles,evaluation,model)
-        output.append({**j,"ranking":evaluation,"jd_evidence":signals(complete,roles),
+        output.append({**j,"ranking":{**evaluation,"application_recommendation":recommend_application(complete,evaluation)},"jd_evidence":signals(complete,roles),
                        "ai_status":ai_status,"jd_status":origin if description else ("pendente" if (key,j) in pending[limit:] else "indisponivel")})
     return output,count

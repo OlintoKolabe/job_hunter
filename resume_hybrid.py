@@ -52,10 +52,10 @@ def selected_evidence(proposal,plan):
         if fact not in groups.setdefault(idx,[]):groups[idx].append(fact)
     baseline={e["source_index"]:list(e["facts"]) for e in plan["experience"]}
     # Keep all previously verified facts as a minimum; add the most relevant
-    # model choices up to three bullets per career position, max 7 positions.
+    # model choices up to three bullets per career position, max 9 positions.
     final={i:facts[:3] for i,facts in baseline.items() if facts}
     for idx,facts in groups.items():
-        if idx not in final and len(final)>=7:continue
+        if idx not in final and len(final)>=9:continue
         current=final.setdefault(idx,[])
         for fact in facts:
             if fact not in current and len(current)<3:current.append(fact)

@@ -104,6 +104,20 @@ class Block41Tests(unittest.TestCase):
         reserve_ai.assert_not_called()
         save.assert_called_once()
 
+    def test_required_cs_degree_rejects_without_evidence(self):
+        rows=[{"name":"Degree in computer science","type":"obrigatorio","skill_id":None},
+              {"name":"Roadmap","type":"obrigatorio","skill_id":"roadmap"},
+              {"name":"Backlog","type":"obrigatorio","skill_id":"backlog"},
+              {"name":"Scrum","type":"desejavel","skill_id":"scrum"}]
+        self.assertEqual(merge_semantic_requirements({"score":None},rows)["score"],0)
+
+    def test_or_equivalent_experience_not_automatic_rejection(self):
+        rows=[{"name":"Degree in computer science or equivalent experience","type":"obrigatorio","skill_id":None},
+              {"name":"Roadmap","type":"obrigatorio","skill_id":"roadmap"},
+              {"name":"Backlog","type":"obrigatorio","skill_id":"backlog"},
+              {"name":"Scrum","type":"desejavel","skill_id":"scrum"}]
+        self.assertGreater(merge_semantic_requirements({"score":None},rows)["score"],0)
+
     def test_secret_unset_means_no_ai(self):
         with patch.dict("os.environ",{"JH_AI_ENABLED":"0","OPENAI_API_KEY":"dummy"}):
             self.assertIsNone(interpret("required project management"))

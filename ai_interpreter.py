@@ -22,10 +22,10 @@ def interpret(description):
     with urllib.request.urlopen(req,timeout=15) as response:
         result=json.load(response)
     content=result["choices"][0]["message"]["content"]
-    parsed=json.loads(content)
-    rows=parsed.get("requirements",[])
+    if not isinstance(content,str) or not content.strip():\n        raise ValueError("empty model response")\n    parsed=json.loads(content)
+    if not isinstance(parsed,dict):raise ValueError("invalid response object")\n    rows=parsed.get("requirements",[])
     if not isinstance(rows,list):raise ValueError("invalid requirements payload")
-    requirements=[{"name":str(r.get("name",""))[:160],"type":r.get("type"),"skill_id":r.get("skill_id") if r.get("skill_id") in SKILLS else None}
+    requirements=[{"name":str(r.get("name") or "")[:160],"type":r.get("type"),"skill_id":r.get("skill_id") if isinstance(r.get("skill_id"),str) and r.get("skill_id") in SKILLS else None}
         for r in rows[:12] if isinstance(r,dict) and r.get("type") in ("obrigatorio","desejavel")]
     # Reject invented requirements: each must appear verbatim in the job description.
     jd_text=description.casefold()

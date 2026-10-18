@@ -56,6 +56,17 @@ class HybridResumeTests(unittest.TestCase):
         self.assertEqual(usage["mode"],"fallback")
         self.assertEqual(usage["ai_calls"],1)
         self.assertEqual(plan["summary"],self.plan["summary"])
+    def test_partial_ai_result_applies_verified_evidence(self):
+        cursor=MagicMock()
+        cursor.fetchone.side_effect=[None,(0.0,0.0),(1234,),("2026-10",0.002)]
+        candidate={"summary":"Especialista certificado em Oracle e PowerBuilder com experiência de longa duração.","source_ids":["1"],"evidence_ids":["1:0","2:0","4:0"]}
+        with patch.dict(os.environ,{"JH_CV_AI_ENABLED":"1","OPENAI_API_KEY":"dummy"}):
+            with patch.object(h,"request_micro_summary",return_value=(candidate,{"prompt_tokens":1600,"completion_tokens":200})):
+                plan,usage=h.apply_hybrid(cursor,"example.com/new",JD,self.plan)
+        self.assertEqual(usage["mode"],"hybrid")
+        self.assertEqual(plan["summary"],self.plan["summary"])
+        self.assertTrue(any(e["facts"] for e in plan["experience"] if e["source_index"]==2))
+        self.assertTrue(audit(plan,render_docx(plan))["factual_bullets_verified"])
     def test_render_unchanged_provenance(self):
         data=render_docx(self.plan)
         self.assertTrue(audit(self.plan,data)["factual_bullets_verified"])

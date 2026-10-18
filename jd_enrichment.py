@@ -111,6 +111,7 @@ def hydrate_jobs(cursor,jobs,roles,url_key,limit=PER_BATCH_LIMIT):
             model='deterministic'
             # Re-grade previously paid AI extraction before considering another API request.
             previous=get_previous_semantic(cursor,key,jd_hash,roles) if description else None
+            if previous and len(previous)<4:previous=None
             if previous:
                 evaluation=merge_semantic_requirements(evaluation,previous)
                 evaluation['ai_interpreted']=True

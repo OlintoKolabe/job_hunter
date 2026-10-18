@@ -19,7 +19,7 @@ OUTPUT_TOKEN_CAP=1050
 MAX_COST_USD=0.002
 
 def clean(text):
-    return re.sub(r"\s+"," ",html.unescape(re.sub(r"<[^>]+>"," ",str(text or "")))).strip()
+    return re.sub(r"\s+"," ",relevant_jd_text(text)).strip()
 
 def fingerprint(plan,jd):
     payload=json.dumps({"engine":ENGINE_VERSION,"jd":plan["jd_sha256"],"evidence":[
@@ -142,8 +142,7 @@ def validate_text(proposal,plan):
 
 def analyze_requirements(jd,title):
     """Extract explicit, independently inspectable JD clauses before selection."""
-    raw=html.unescape(re.sub(r"<(?:br|/p|/li)[^>]*>", "\n", str(jd or ""),flags=re.I))
-    raw=re.sub(r"<[^>]+>"," ",raw)
+    raw=relevant_jd_text(jd)
     clauses=[clean(x) for x in re.split(r"[\n•;]+|(?<=[.!?])\s+(?=[A-ZÁÉÍÓÚ])",raw)]
     clauses=[c[:500] for c in clauses if len(c)>=18]
     essentials=[];desirables=[]

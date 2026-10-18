@@ -180,6 +180,22 @@ class Block41Tests(unittest.TestCase):
         rows.append({"type":"desejavel","match_points":0,"match_level":"nao_comprovada"})
         result=recommend_application({"detected_mode":"remote"}, {"score":97,"requirements":rows})
         self.assertEqual(result["decision"],"recomendada")
+    def test_recommendation_is_persisted_without_ai_on_cached_score(self):
+        from datetime import datetime,timezone
+        from unittest.mock import Mock
+        from jd_enrichment import hydrate_jobs
+        url="https://example.com/jobs/business-analyst"
+        jd="Manage product roadmap and product discovery with stakeholders. "*20
+        cur=Mock()
+        cur.fetchall.return_value=[(url,jd,datetime.now(timezone.utc))]
+        cached={"score":72,"confidence":"semantic_evidence","requirements":[
+            {"name":"Product roadmap","type":"obrigatorio","match_points":1,"match_level":"direta"}]}
+        with patch("jd_enrichment.get_cached",return_value=cached),patch("jd_enrichment.interpret") as ai:
+            first,_=hydrate_jobs(cur,[{"url":url,"title":"Product Manager","detected_mode":"remote"}],"Product Manager",lambda v:v)
+        self.assertIsNotNone(first[0]["ranking"]["application_recommendation"]["score"])
+        self.assertTrue(any("jsonb_set" in str(call) for call in cur.execute.call_args_list))
+        ai.assert_not_called()
+
     def test_secret_unset_means_no_ai(self):
         with patch.dict("os.environ",{"JH_AI_ENABLED":"0","OPENAI_API_KEY":"dummy"}):
             self.assertIsNone(interpret("required project management"))

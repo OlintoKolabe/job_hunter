@@ -51,6 +51,16 @@ class ResumeEngineTests(unittest.TestCase):
         p=build_plan(JD,"Senior Business Analyst")
         self.assertTrue(p["additional_experience"])
         self.assertTrue(all("facts" not in e for e in p["additional_experience"]))
+    def test_single_chronological_career_timeline(self):
+        from resume_engine import chronology_index
+        p=build_plan(JD,"Business Analyst")
+        parsed=Document(io.BytesIO(render_docx(p)))
+        text="\\n".join(x.text for x in parsed.paragraphs)
+        self.assertNotIn("Outras experiências",text)
+        order=sorted(EXPERIENCE,key=chronology_index,reverse=True)
+        positions=[text.find(e["role"]+" — "+e["company"]) for e in order]
+        self.assertTrue(all(position>=0 for position in positions))
+        self.assertEqual(positions,sorted(positions))
     def test_empty_jd_rejected(self):
         with self.assertRaises(ValueError):build_plan("  ","A")
 if __name__=="__main__":unittest.main()

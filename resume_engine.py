@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from docx import Document
 from docx.shared import Pt
 
-ENGINE_VERSION = "block5-deterministic-v2"
+ENGINE_VERSION = "block5-deterministic-v3"
 CONTACT = {"name":"Olinto Manso Pereira","email":"olinto_manso@hotmail.com",
            "phone":"+55 64 98116-4936","location":"Caldas Novas, GO, Brasil",
            "linkedin":"https://www.linkedin.com/in/olintomanso"}
@@ -134,7 +134,7 @@ def build_plan(jd, title):
         scored.append((idx,item,ordered,strength))
     prioritized=sorted(scored,key=lambda x:(-x[3],-chronology_index(x[1])[0],-chronology_index(x[1])[1]))
     # Evidence is selected per role, not copied into two different sections.
-    major={idx for idx,_,_,score in prioritized[:5] if score>0}
+    major={idx for idx,_,_,score in prioritized[:4] if score>=5}
     experiences=[];older=[]
     for idx,item,facts,score in scored:
         if idx in major:
@@ -157,7 +157,7 @@ def build_plan(jd, title):
     top_topics=sorted(needs,key=lambda topic:-sum(relevance(f,{topic},tokens) for _,e,_,_ in scored for f in e["facts"]))[:3]
     if not top_topics:top_topics=["product","project"]
     focus=", ".join(label[t] for t in top_topics)
-    summary="Profissional com atuação em tecnologia e negócios, reunindo experiência em "+focus+". Trajetória em projetos de produtos digitais e liderança multidisciplinar."
+    summary="Profissional com atuação em tecnologia e negócios, reunindo experiência em "+focus+". Atuação em diferentes setores, com responsabilidades em entregas e colaboração multidisciplinar."
     # Only a profile-level statement here, never repeated verbatim from the roles.
     return {"title":title[:120],"summary":summary,"focus_topics":top_topics,
             "experience":experiences,"additional_experience":older,
@@ -172,15 +172,18 @@ def render_docx(plan):
     doc.add_paragraph(" | ".join([CONTACT["location"],CONTACT["phone"],CONTACT["email"],CONTACT["linkedin"]]))
     doc.add_heading("Resumo profissional",1);doc.add_paragraph(plan["summary"])
     doc.add_heading("Experiência profissional",1)
-    for e in plan["experience"]:
+    detailed={e["source_index"]:e for e in plan["experience"]}
+    compact={e["source_index"]:e for e in plan["additional_experience"]}
+    chronology=sorted([*detailed,*compact],key=lambda i:chronology_index(EXPERIENCE[i]),reverse=True)
+    for idx in chronology:
+        e=detailed.get(idx) or compact[idx]
+        if idx not in detailed:
+            doc.add_paragraph(e["role"]+" — "+e["company"]+" | "+e["dates"])
+            continue
         heading=doc.add_heading(e["role"]+" — "+e["company"],2)
         heading.paragraph_format.keep_with_next=True
         dates=doc.add_paragraph(e["dates"]);dates.paragraph_format.keep_with_next=True
         for fact in e["facts"]:doc.add_paragraph(fact,style="List Bullet")
-    if plan["additional_experience"]:
-        doc.add_heading("Outras experiências",1)
-        for e in plan["additional_experience"]:
-            doc.add_paragraph(e["role"]+" — "+e["company"]+" ("+e["dates"]+")")
     doc.add_heading("Formação e certificações",1)
     for degree in EDUCATION:doc.add_paragraph(degree,style="List Bullet")
     doc.add_paragraph("Idiomas: Português (nativo); Inglês (profissional); Italiano (intermediário).")

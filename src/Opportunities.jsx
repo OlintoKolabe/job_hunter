@@ -21,8 +21,7 @@ export function OpportunitiesPanel(){
    let resolved=0;
    async function enrichAvailable(){
      const candidates=[...all.values()].filter(j=>!scoredOrAttempted.has(j.url) &&
-       (j.jd_status==='pendente' || (j.ranking?.score==null &&
-       ['greenhouse','inhire'].some(src=>j.source?.toLowerCase().includes(src)))));
+       j.ranking?.score==null);
      const waiting=[...new Map(candidates.map(j=>[j.url,j])).values()];
      if(!waiting.length)return;
      setEvaluationTotal(v=>v+waiting.length);
@@ -91,7 +90,7 @@ export function OpportunitiesPanel(){
    if(v.ranking?.score!==null&&v.ranking?.score!==undefined)return 'scored';
    if(scoringFailed.includes(v.url))return 'failed';
    if(scoringNow.includes(v.url))return 'calculating';
-   if(v.confirmed && busy && !scoringAttempted.includes(v.url) && (v.jd_status==='pendente' || (v.ranking?.score==null && ['greenhouse','inhire'].some(src=>v.source?.toLowerCase().includes(src)))))return 'waiting';
+   if(v.confirmed && busy && !scoringAttempted.includes(v.url) && v.ranking?.score==null)return 'waiting';
    return 'unscored';
  };
  const scoreDisplay=v=>{

@@ -110,7 +110,7 @@ def score_job(job,roles):
                 requirements.append({"name":skill,"type":kind,"status":"nao_comprovado","evidence":None})
                 used.add(skill)
         if len(requirements)==before and len(line)>12:
-            requirements.append({"name":line[:110],"type":kind,"status":"nao_comprovado","evidence":None})
+            requirements.append({"name":line[:110],"type":kind,"status":"nao_interpretado","evidence":None})
     mandatory=[r for r in requirements if r["type"]=="obrigatorio"]
     desirable=[r for r in requirements if r["type"]=="desejavel"]
     # No requirements extracted means no professional-fit claim can be substantiated.

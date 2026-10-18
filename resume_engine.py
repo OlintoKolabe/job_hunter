@@ -195,7 +195,7 @@ def build_plan(jd, title):
     tokens=words(jd)
     scored=[]
     for idx,item in sorted(enumerate(EXPERIENCE),key=lambda x:chronology_index(x[1]),reverse=True):
-        ordered=sorted(item["facts"],key=lambda f:(-relevance(f,needs,tokens),item["facts"].index(f)))
+        ordered=sorted(item["facts"],key=lambda f:(-7*len(categories(f,FACT_TOPICS)&title_needs)-relevance(f,needs,tokens),item["facts"].index(f)))
         strength=sum(max(0,relevance(f,needs,tokens)-1) for f in ordered[:3]) + sum(5 for f in ordered[:3] if categories(f,FACT_TOPICS)&title_needs)
         scored.append((idx,item,ordered,strength))
     prioritized=sorted(scored,key=lambda x:(-x[3],-chronology_index(x[1])[0],-chronology_index(x[1])[1]))
@@ -235,11 +235,35 @@ def build_plan(jd, title):
     top_topics=sorted(needs,key=lambda topic:-sum(relevance(f,{topic},tokens) for _,e,_,_ in scored for f in e["facts"]))[:3]
     if not top_topics:top_topics=["product","project"]
     focus=", ".join(label[t] for t in top_topics)
-    # Document-grounded specialization comes first, without inventing metrics.
-    if "growth" in title_needs and any("marketing" in e["role"].casefold() for e in experiences):
-        summary=("Trajetória em liderança de marketing, campanhas e gestão comercial, "
-                 "com atuação documentada em CRM, análise de indicadores e desenvolvimento "
-                 "de negócios. Experiência adicional em projetos e produtos digitais.")
+    # Position the documented career according to the role family, never invent credentials.
+    if "growth" in title_needs:
+        summary=("Executivo de marketing e growth com trajetória em agência de publicidade, "
+                 "grupos de hotelaria e saúde. Experiência em campanhas digitais e omnichannel, "
+                 "Google Ads e Analytics, CRM, funil comercial, testes A/B e leitura de KPIs. "
+                 "Histórico de liderança de marketing, equipes de criação, planejamento de mídia e orçamento.")
+    elif "analysis" in title_needs:
+        summary=("Profissional de produtos digitais com atuação na priorização de backlog, "
+                 "escrita de histórias de usuários e tradução de necessidades de stakeholders "
+                 "em entregas de produto. Experiência em solução industrial de mineração "
+                 "com veículos autônomos e uso de Jira, Azure DevOps, Trello e Figma. "
+                 "Vivência complementar em discovery, prototipação e melhoria de processos.")
+    elif "product" in title_needs and "project" in needs:
+        summary=("Product Manager com experiência em produtos digitais B2B e plataformas "
+                 "operacionais para mineração, pagamentos e serviços. Atuação em definição de "
+                 "roadmaps, discovery, validação de hipóteses e priorização de backlog, "
+                 "integrando stakeholders e equipes multidisciplinares. "
+                 "Histórico adicional em gestão de projetos, Scrum, Kanban e orçamento de delivery.")
+    elif "project" in title_needs:
+        summary=("Líder de projetos, portfólio e processos, com experiência em PMO, "
+                 "gestão de recursos, indicadores e orçamento. Implantação de Scrum e Kanban "
+                 "com equipes multidisciplinares em empresas de tecnologia e negócios. "
+                 "Experiência em governança, melhoria de processos e coordenação de entregas digitais.")
+    elif "product" in title_needs:
+        summary=("Product Manager e Product Owner com experiência em produtos digitais "
+                 "B2B, plataformas de mineração, CRM e soluções de pagamentos. "
+                 "Atuação em product discovery, roadmaps, backlog, pesquisa de usuários, "
+                 "priorização por valor, métricas e colaboração com stakeholders. "
+                 "Histórico na gestão de delivery de aplicações web e mobile.")
     else:
         summary=("Experiência profissional em "+focus+
                  ", com atuação documentada em tecnologia e negócios. "

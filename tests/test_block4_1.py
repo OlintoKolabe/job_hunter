@@ -8,6 +8,29 @@ from block4_score import score_job,merge_semantic_requirements
 from scripts.check_scope import validate
 
 class Block41Tests(unittest.TestCase):
+    def test_historical_job_is_passed_to_cache_lookup(self):
+        from unittest.mock import Mock
+        from app import jd_enrich,JDRequest
+        row={"url":"https://example.com/jobs/123","title":"Product Manager","company":"Acme","source":"greenhouse"}
+        with patch("app.require_auth"),patch("app.psycopg.connect"),patch("app.hydrate_jobs",return_value=([row],{})) as hydrate:
+            response=jd_enrich(Mock(),JDRequest(jobs=[row],roles="Product Manager"))
+        self.assertEqual(len(response["items"]),1)
+        self.assertEqual(hydrate.call_args.args[1][0]["url"],row["url"])
+    def test_cached_score_does_not_call_ai_again(self):
+        from datetime import datetime,timezone
+        from unittest.mock import Mock
+        from jd_enrichment import hydrate_jobs
+        url="https://example.com/jobs/123"
+        jd="Required product roadmap management. "*20
+        cur=Mock()
+        cur.fetchall.return_value=[(url,jd,datetime.now(timezone.utc))]
+        stored={"score":82,"confidence":"semantic_evidence","requirements":[]}
+        with patch("jd_enrichment.get_cached",return_value=stored),patch("jd_enrichment.interpret") as interpret_ai,patch("jd_enrichment.score_job") as compute:
+            jobs,coverage=hydrate_jobs(cur,[{"url":url,"title":"Product Manager","source":"greenhouse"}],"Product Manager",lambda v:v)
+        self.assertEqual(jobs[0]["ranking"]["score"],82)
+        self.assertEqual(coverage["cached"],1)
+        interpret_ai.assert_not_called()
+        compute.assert_not_called()
     def test_secret_unset_means_no_ai(self):
         with patch.dict("os.environ",{"JH_AI_ENABLED":"0","OPENAI_API_KEY":"dummy"}):
             self.assertIsNone(interpret("required project management"))

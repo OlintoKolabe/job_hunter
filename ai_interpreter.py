@@ -23,11 +23,13 @@ def interpret(description):
         result=json.load(response)
     content=result["choices"][0]["message"]["content"]
     if not isinstance(content,str) or not content.strip():
-        raise ValueError("empty model response")\n    try:
+        raise ValueError("empty model response")
+    try:
         parsed=json.loads(content)
     except json.JSONDecodeError as exc:
         raise ValueError("invalid or truncated model JSON") from exc
-    if not isinstance(parsed,dict):raise ValueError("invalid response object")\n    rows=parsed.get("requirements",[])
+    if not isinstance(parsed,dict):raise ValueError("invalid response object")
+    rows=parsed.get("requirements",[])
     if not isinstance(rows,list):raise ValueError("invalid requirements payload")
     requirements=[{"name":str(r.get("name") or "")[:160],"type":r.get("type"),"skill_id":r.get("skill_id") if isinstance(r.get("skill_id"),str) and r.get("skill_id") in SKILLS else None}
         for r in rows[:12] if isinstance(r,dict) and r.get("type") in ("obrigatorio","desejavel")]

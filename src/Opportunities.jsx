@@ -3,12 +3,12 @@ const defaultRoles='Product Manager, Product Owner, Project Manager, Gerente de 
 const initialCountries=[{value:'LATAM',label:'América Latina'},{value:'BR',label:'Brasil'}];
 export function OpportunitiesPanel(){
  const [searchedQuery,setSearchedQuery]=useState(''),[source,setSource]=useState('all'),[sources,setSources]=useState([{value:'all',label:'Todas as fontes'},{value:'inhire',label:'inHire'},{value:'quickin',label:'Quickin'},{value:'gupy',label:'Gupy'}]),[roles,setRoles]=useState(defaultRoles),[days,setDays]=useState('0'),[country,setCountry]=useState('BR'),[countries,setCountries]=useState(initialCountries),[mode,setMode]=useState('remote'),[sort,setSort]=useState('score');
- const [sourceStats,setSourceStats]=useState({}),[reviews,setReviews]=useState([]),[filterStats,setFilterStats]=useState({}),[rawScanned,setRawScanned]=useState(0),[busy,setBusy]=useState(false),[results,setResults]=useState([]),[message,setMessage]=useState(''),[error,setError]=useState(''),[checked,setChecked]=useState(0),[counts,setCounts]=useState({new:0,total:0}),[completed,setCompleted]=useState(false),[visibleCount,setVisibleCount]=useState(10),[evaluated,setEvaluated]=useState(0),[evaluationTotal,setEvaluationTotal]=useState(0),[scoringNow,setScoringNow]=useState([]),[scoringFailed,setScoringFailed]=useState([]);
+ const [sourceStats,setSourceStats]=useState({}),[reviews,setReviews]=useState([]),[filterStats,setFilterStats]=useState({}),[rawScanned,setRawScanned]=useState(0),[busy,setBusy]=useState(false),[results,setResults]=useState([]),[message,setMessage]=useState(''),[error,setError]=useState(''),[checked,setChecked]=useState(0),[counts,setCounts]=useState({new:0,total:0}),[completed,setCompleted]=useState(false),[visibleCount,setVisibleCount]=useState(10),[evaluated,setEvaluated]=useState(0),[evaluationTotal,setEvaluationTotal]=useState(0),[scoringNow,setScoringNow]=useState([]),[scoringFailed,setScoringFailed]=useState([]),[scoringAttempted,setScoringAttempted]=useState([]);
  useEffect(()=>{fetch('/api/search-filters').then(r=>r.ok?r.json():null).then(d=>{if(d?.countries)setCountries(d.countries);if(d?.sources)setSources(d.sources)}).catch(()=>{})},[]);
  const query=()=>new URLSearchParams({roles,country,mode,days,sort,source}).toString();
  const changeSource=value=>{setSource(value);setResults([]);setReviews([]);setChecked(0);setCompleted(false);setMessage("Fonte alterada. Clique em Buscar oportunidades para executar a nova seleção.");setError("");};
  async function search(){
-  setVisibleCount(10);setEvaluated(0);setEvaluationTotal(0);setScoringNow([]);setScoringFailed([]);setBusy(true);setSearchedQuery(query());setError('');setResults([]);setReviews([]);setSourceStats({});setFilterStats({});setRawScanned(0);setChecked(0);setCompleted(false);setMessage('Consultando '+(sources.find(x=>x.value===source)?.label||source)+'…');
+  setVisibleCount(10);setEvaluated(0);setEvaluationTotal(0);setScoringNow([]);setScoringFailed([]);setScoringAttempted([]);setBusy(true);setSearchedQuery(query());setError('');setResults([]);setReviews([]);setSourceStats({});setFilterStats({});setRawScanned(0);setChecked(0);setCompleted(false);setMessage('Consultando '+(sources.find(x=>x.value===source)?.label||source)+'…');
   const qs=query();const all=new Map();const uncertain=new Map();const totals={};const sourceTotals={};let inspected=0;const record=(d)=>{(d.details||[]).forEach(x=>{const source=x.source||'desconhecida';const n=sourceTotals[source]||{consultas:0,recebidas:0,erros:0};n.consultas++;n.recebidas+=x.received||0;if(x.status==='error'||x.state==='pendente')n.erros++;sourceTotals[source]=n});setSourceStats({...sourceTotals});(d.review_items||[]).forEach(j=>uncertain.set(j.url,j));for(const [key,n] of Object.entries(d.filter_stats||{})){totals[key]=(totals[key]||0)+n}inspected+=d.raw_count||0;setReviews([...uncertain.values()]);setFilterStats({...totals});setRawScanned(inspected)};let count=0;let completedAll=false;
   try{
    const requestJson=async url=>{let problem;for(let retry=0;retry<2;retry++){try{const r=await fetch(url,{method:'POST'});const ct=r.headers.get('content-type')||'';if(!ct.includes('application/json'))throw Error('Servidor retornou HTML ('+r.status+'); lote não processado');const d=await r.json();if(!r.ok)throw Error(typeof d.detail==='string'?d.detail:('Erro HTTP '+r.status+' ao consultar vagas'));return d}catch(err){problem=err}}throw problem};
@@ -16,7 +16,6 @@ export function OpportunitiesPanel(){
 
    (d.items||[]).forEach(j=>all.set(j.url,j));record(d);count+=d.total||0;
    setResults([...all.values()]);setCounts({new:all.size,total:count});
-   await enrichAvailable();
    // Score incomplete JDs as each batch arrives rather than waiting for the entire catalog.
    const scoredOrAttempted=new Set();
    let resolved=0;
@@ -42,6 +41,7 @@ export function OpportunitiesPanel(){
        }catch(err){
          setScoringFailed(prev=>[...prev,...chunk.map(j=>j.url)]);
        }finally{
+         setScoringAttempted(prev=>[...prev,...chunk.map(j=>j.url)]);
          setScoringNow([]);
          resolved+=chunk.length;setEvaluated(resolved);
        }
@@ -51,7 +51,7 @@ export function OpportunitiesPanel(){
    let skipped=0;
    for(let n=0;n<180;n++){
     let batch;try{batch=await requestJson('/api/catalog/scan?offset='+offset+'&limit=4&'+qs)}catch(err){skipped++;offset+=4;setMessage('Alguns quadros falharam; continuando os demais. Falhas: '+skipped);continue}
-    (batch.items||[]).filter(j=>source==='all'||j.source?.toLowerCase()===source||(source==='greenhouse'&&j.source?.toLowerCase()==='greenhouse_eu')).forEach(j=>all.set(j.url,j));record(batch);
+    (batch.items||[]).filter(j=>source==='all'||j.source?.toLowerCase()===source||(source==='greenhouse'&&j.source?.toLowerCase()==='greenhouse_eu')).forEach(j=>{const old=all.get(j.url);all.set(j.url,old?.ranking?.score!=null&&!j.ranking?.score?old:j)});record(batch);
     offset=batch.next_offset;if(!Number.isFinite(offset))throw Error('Paginação inválida');
     count+=batch.found||0;setResults([...all.values()]);await enrichAvailable();setChecked(x=>x+(batch.details||[]).length);setCounts({new:all.size,total:count});
     if(batch.complete){completedAll=true;break}
@@ -59,7 +59,7 @@ export function OpportunitiesPanel(){
    }
    await enrichAvailable();
    setCompleted(completedAll);
-   setMessage(completedAll&&!skipped&&!scoringFailures?'Busca concluída.':'Busca parcial: '+skipped+' lotes de fontes e '+scoringFailures+' avaliações de JD falharam. Confira Fontes.');
+   setMessage(completedAll&&!skipped?'Busca concluída.':'Busca parcialmente concluída: '+skipped+' lotes falharam. Confira Fontes.');
   }catch(e){setError(e.message);setMessage('Busca parcial — os resultados encontrados continuam disponíveis.')}
   finally{setBusy(false)}
  }
@@ -73,7 +73,7 @@ export function OpportunitiesPanel(){
    if(v.ranking?.score!==null&&v.ranking?.score!==undefined)return 'scored';
    if(scoringFailed.includes(v.url))return 'failed';
    if(scoringNow.includes(v.url))return 'calculating';
-   if(busy && (v.jd_status==='pendente' || (v.ranking?.score==null && ['greenhouse','inhire'].some(src=>v.source?.toLowerCase().includes(src)))))return 'waiting';
+   if(busy && !scoringAttempted.includes(v.url) && (v.jd_status==='pendente' || (v.ranking?.score==null && ['greenhouse','inhire'].some(src=>v.source?.toLowerCase().includes(src)))))return 'waiting';
    return 'unscored';
  };
  const scoreDisplay=v=>{

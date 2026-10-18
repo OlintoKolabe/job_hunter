@@ -35,7 +35,7 @@ class Block41Tests(unittest.TestCase):
         pattern=r'<script[^>]*type=.[aA]pplication/ld[+]json.[^>]*>(.*?)</script>'
         self.assertEqual(len(re.findall(pattern,html,re.I|re.S)),1)
     def test_html_whitespace_normalization(self):
-        self.assertEqual(re.sub(r"\\s+"," ","A  B\\nC"),"A B C")
+        self.assertEqual(re.sub(r"\s+"," ","A  B\nC"),"A B C")
     def test_gate_does_not_allow_new_file(self):
         contract={"allowed_files":["app.py"],"forbidden_paths":[],"base_ref":"sha","feature_ref":"branch"}
         self.assertEqual(validate(["src/Unauthorized.jsx"],contract),["src/Unauthorized.jsx"])

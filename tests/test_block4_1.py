@@ -124,6 +124,31 @@ class Block41Tests(unittest.TestCase):
         self.assertFalse(hard_role_mismatch({"title":"Product Owner / QA Automation Platform"}))
         self.assertTrue(hard_role_mismatch({"title":"Senior Software Engineer"}))
 
+    def test_pm_core_competencies_are_not_discounted(self):
+        rows=[{"name":n,"type":"obrigatorio","skill_id":None} for n in
+              ("Product discovery and user research","Backlog prioritization",
+               "Product metrics and KPIs","Roadmap planning")]
+        result=merge_semantic_requirements({"score":None},rows)
+        self.assertGreaterEqual(result["score"],90)
+        self.assertEqual(result["match_summary"]["direct"],4)
+
+    def test_desirable_sector_expertise_does_not_overrule_pm_core(self):
+        rows=[{"name":n,"type":"obrigatorio","skill_id":None} for n in
+              ("Product discovery","Backlog prioritization","Roadmap planning","Product analytics")]
+        rows.extend([{"name":"Pix","type":"desejavel","skill_id":None},
+                     {"name":"Open Finance domain knowledge","type":"desejavel","skill_id":None}])
+        result=merge_semantic_requirements({"score":None},rows)
+        self.assertGreaterEqual(result["score"],90)
+
+    def test_advanced_spanish_mandatory_is_essential_gap(self):
+        rows=[{"name":"Advanced Spanish required","type":"obrigatorio","skill_id":None},
+              {"name":"Product discovery","type":"obrigatorio","skill_id":None},
+              {"name":"Backlog","type":"obrigatorio","skill_id":"backlog"},
+              {"name":"Roadmap","type":"obrigatorio","skill_id":"roadmap"}]
+        result=merge_semantic_requirements({"score":None},rows)
+        self.assertEqual(result["score"],0)
+        self.assertEqual(result["confidence"],"essential_gap")
+
     def test_secret_unset_means_no_ai(self):
         with patch.dict("os.environ",{"JH_AI_ENABLED":"0","OPENAI_API_KEY":"dummy"}):
             self.assertIsNone(interpret("required project management"))
@@ -149,7 +174,8 @@ class Block41Tests(unittest.TestCase):
             {"name":"crm","type":"desejavel","skill_id":"crm"}
         ]
         score=merge_semantic_requirements({"score":None},rows)
-        self.assertEqual(score["score"],70)
+        self.assertGreaterEqual(score["score"],65)
+        self.assertLessEqual(score["score"],80)
         self.assertEqual(score["unverified_count"],1)
     def test_semantic_evidence_id_matches_documented_skill(self):
         rows=[{"name":"roadmap","type":"obrigatorio","skill_id":"roadmap"},

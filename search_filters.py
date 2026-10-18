@@ -188,7 +188,8 @@ def classify(job,terms,country,mode,days):
     from jd_signals import signals
     evidence=signals(job,", ".join(terms))
     if evidence["spanish_required"]:return "excluded","espanhol_obrigatorio"
-    if NON_TARGET_TITLE.search(title):return "excluded","cargo"\n    if not role_match(title,terms) and not evidence["family_evidence"]:return "excluded","cargo"
+    if NON_TARGET_TITLE.search(title):return "excluded","cargo"
+    if not role_match(title,terms) and not evidence["family_evidence"]:return "excluded","cargo"
     loc=fold(job.get("location",""))
     structured_geo=fold(" ".join(str(job.get(k) or "") for k in ("country","countryCode","countryName","city","state","region","eligibleLocations","remoteRegions")))
     loc=(loc+" "+structured_geo).strip()

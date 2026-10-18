@@ -66,6 +66,22 @@ class Block41Tests(unittest.TestCase):
         ai.assert_not_called()
         saved.assert_called_once()
 
+    def test_pm_collaboration_is_not_hands_on_coding(self):
+        rows=[{"name":n,"type":"obrigatorio","skill_id":k} for n,k in
+              [("Stakeholder management with software engineers","stakeholders"),
+               ("Backlog","backlog"),("Roadmap","roadmap"),("Scrum","scrum")]]
+        x=merge_semantic_requirements({"score":None},rows)
+        self.assertGreater(x["score"],70)
+        self.assertEqual(x["requirements"][0]["match_level"],"direta")
+
+    def test_unrelated_skill_cannot_award_perfect_score(self):
+        rows=[{"name":"Machine learning infrastructure","type":"obrigatorio","skill_id":"roadmap"},
+              {"name":"Backlog","type":"obrigatorio","skill_id":"backlog"},
+              {"name":"Roadmap","type":"obrigatorio","skill_id":"roadmap"},
+              {"name":"CRM","type":"desejavel","skill_id":"crm"}]
+        x=merge_semantic_requirements({"score":None},rows)
+        self.assertLess(x["score"],100)
+
     def test_secret_unset_means_no_ai(self):
         with patch.dict("os.environ",{"JH_AI_ENABLED":"0","OPENAI_API_KEY":"dummy"}):
             self.assertIsNone(interpret("required project management"))

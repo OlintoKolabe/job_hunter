@@ -29,6 +29,12 @@ class HybridResumeTests(unittest.TestCase):
         self.assertIsNone(h.validate_rewrites(
             {"rewrites":{"1:0":"Aumentei a receita em 300% criando plataformas financeiras."}},selected))
 
+    def test_encoded_html_jd_clause_extraction(self):
+        jd="&lt;p&gt;Role expectations:&lt;/p&gt;&lt;li&gt;Manage product backlog and roadmap&lt;/li&gt;&lt;li&gt;Preferred: Oracle&lt;/li&gt;&lt;p&gt;Why work for us? Free snacks.&lt;/p&gt;"
+        parsed=h.analyze_requirements(jd,"Product Manager")
+        self.assertTrue(any("roadmap" in clause for clause in parsed["essential"]))
+        self.assertFalse(any("snacks" in clause for clause in parsed["essential"]))
+
     def test_jd_clause_classification(self):
         jd="Required roadmap and stakeholder alignment.\nNice to have: Oracle certification.\nLead CRM campaigns."
         result=h.analyze_requirements(jd,"Product Manager")

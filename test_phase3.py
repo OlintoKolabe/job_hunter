@@ -61,12 +61,12 @@ class Phase3ContractTests(unittest.TestCase):
         from search_filters import analyze_filters
         rows=[
             {"title":"Product Analyst","location":"Brazil Remote","description":"","published":"2026-10-16"},
-            {"title":"Head of Product","location":"Brazil Remote","description":"Own product strategy, product roadmap, product discovery and product backlog for a healthcare company. Guide product requirements and product lifecycle through consistent stakeholder management.","published":"2026-10-12"}
+            {"title":"Senior Product Manager","location":"Brazil Remote","description":"Own product strategy, product roadmap, product discovery and product backlog for a healthcare company. Guide product requirements and product lifecycle through consistent stakeholder management.","published":"2026-10-12"}
         ]
         found,_,_=analyze_filters(rows,"Product Manager","BR","remote",0,"score")
         self.assertEqual(len(found),2)
         self.assertGreaterEqual(found[0]["ranking"]["score"],found[1]["ranking"]["score"])
-        self.assertEqual(found[0]["title"],"Head of Product")
+        self.assertEqual(found[0]["title"],"Senior Product Manager")
 
     def test_discovery_budget_covers_every_selected_family(self):
         from search_filters import discovery_queries,DEFAULT_ROLES

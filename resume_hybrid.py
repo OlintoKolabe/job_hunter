@@ -73,7 +73,8 @@ def quality_gate(plan,candidate,jd):
     # No less coverage of the actual role family than the old baseline.
     return (proposed[0]>=min(2,len(needs)) and proposed[2]>=3
             and proposed[1]>=min(2,baseline[1])
-            and proposed[0]>=min(baseline[0],len(needs)))
+            and proposed[0]>=min(baseline[0],len(needs))
+            and sum(len(e["facts"]) for e in candidate)>=min(9,sum(len(e["facts"]) for e in plan["experience"])))
 
 def selected_evidence(proposal,plan):
     """Merge only verified source facts into the complete chronology.

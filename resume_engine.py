@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from docx import Document
 from docx.shared import Pt
 
-ENGINE_VERSION = "block5-deterministic-v2"
+ENGINE_VERSION = "block5-deterministic-v3"
 CONTACT = {"name":"Olinto Manso Pereira","email":"olinto_manso@hotmail.com",
            "phone":"+55 64 98116-4936","location":"Caldas Novas, GO, Brasil",
            "linkedin":"https://www.linkedin.com/in/olintomanso"}
@@ -134,7 +134,7 @@ def build_plan(jd, title):
         scored.append((idx,item,ordered,strength))
     prioritized=sorted(scored,key=lambda x:(-x[3],-chronology_index(x[1])[0],-chronology_index(x[1])[1]))
     # Evidence is selected per role, not copied into two different sections.
-    major={idx for idx,_,_,score in prioritized[:5] if score>0}
+    major={idx for idx,_,_,score in prioritized[:4] if score>=5}
     experiences=[];older=[]
     for idx,item,facts,score in scored:
         if idx in major:

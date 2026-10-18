@@ -252,7 +252,7 @@ def merge_semantic_requirements(base, extracted):
             "qa automation experience"))
         and not any(term in fold(r["name"]) for term in ("or equivalent","ou equivalente","or similar experience"))
         for r in rows)
-    fit=0 if mandatory_technical_gap else (round(100*met/total) if sufficiently_parsed and total else None)
+    fit=0 if mandatory_technical_gap else (round(100*met/total) if sufficiently_parsed and total and met>0 else None)
     matched=sum(r["match_points"]>0 for r in rows)
     return {**base,"score":fit,"fit":fit,"requirements":rows,
         "evaluated_requirements":len(rows),

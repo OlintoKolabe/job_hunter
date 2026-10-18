@@ -26,6 +26,7 @@ from catalog_engine import source_tasks,scan
 from catalog_bootstrap import maybe_start
 from jd_enrichment import hydrate_jobs
 from resume_engine import build_plan, render_docx, audit
+from resume_hybrid import apply_hybrid
 
 app = FastAPI(docs_url=None, redoc_url=None)
 DIST = Path(__file__).resolve().parent / "dist"
@@ -477,6 +478,13 @@ def generate_resume(payload: ResumeGenerate, request: Request):
         raise HTTPException(404,"Descrição da vaga não está armazenada; avalie a vaga primeiro.")
     title=key.rstrip("/").split("/")[-1].replace("-"," ").title()
     plan=build_plan(row[0],title)
+    # Serialize identical requests before looking up cache or reserving AI spend.
+    # Scoped to this transaction; no new tables or schema changes needed.
+    with psycopg.connect(DATABASE,connect_timeout=8) as cv_conn:
+        with cv_conn.cursor() as cv_cur:
+            cv_cur.execute("SELECT pg_advisory_xact_lock(hashtext(%s))",
+                           ("cv:"+key+":"+plan["jd_sha256"],))
+            plan,cv_usage=apply_hybrid(cv_cur,key,row[0],plan)
     data=render_docx(plan)
     report=audit(plan,data)
     from urllib.parse import quote
@@ -488,7 +496,7 @@ def generate_resume(payload: ResumeGenerate, request: Request):
     filename="Olinto Manso Pereira - "+safe_name(role)+" - "+safe_name(company)+".docx"
     encoded_filename=quote(filename)
     headers={"X-Resume-Engine":report["engine"],"X-Document-SHA256":report["document_sha256"],
-             "X-JD-SHA256":report["jd_sha256"],"X-AI-Calls":"0","X-AI-Cost-USD":"0"}
+             "X-JD-SHA256":report["jd_sha256"],"X-AI-Calls":str(cv_usage["ai_calls"]),"X-AI-Cost-USD":str(cv_usage["cost_usd"]),"X-CV-Mode":cv_usage["mode"]}
     return StreamingResponse(io.BytesIO(data),
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         headers={**headers,"Content-Disposition":f"attachment; filename*=UTF-8''{encoded_filename}"})

@@ -124,8 +124,8 @@ def hydrate_jobs(cursor,jobs,roles,url_key,limit=PER_BATCH_LIMIT):
                     finally:
                         with psycopg.connect(os.environ['DATABASE_URL'],connect_timeout=7) as budget_conn:
                             with budget_conn.cursor() as budget_cur:
-                                settle(budget_cur,usage_id,actual,extracted is not None)
-                    if extracted:
+                                settle(budget_cur,usage_id,actual,bool(extracted and extracted.get("requirements")))
+                    if extracted and extracted.get('requirements'):
                         evaluation=merge_semantic_requirements(evaluation,extracted['requirements'])
                         evaluation['ai_interpreted']=True
                         model='hybrid'

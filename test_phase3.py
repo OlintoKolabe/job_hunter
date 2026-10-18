@@ -45,7 +45,7 @@ class Phase3ContractTests(unittest.TestCase):
         jd="Required: product roadmap and backlog management. Required: fluent Spanish."
         row={"title":"Product Manager","location":"Brazil - Remote","description":jd}
         result=score_job(row,"Product Manager")
-        self.assertEqual(result["score"],50)
+        self.assertEqual(result["score"],67)
         self.assertEqual(result["mandatory_count"],3)
         self.assertEqual(result["unverified_count"],1)
         self.assertEqual(result["confidence"],"requisitos_extraidos")

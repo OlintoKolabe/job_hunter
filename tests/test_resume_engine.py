@@ -28,6 +28,18 @@ class ResumeEngineTests(unittest.TestCase):
         self.assertIn(8,detail)
         self.assertTrue(any("Governança corporativa" in f for f in detail[8]))
         self.assertTrue(audit(p,render_docx(p))["factual_bullets_verified"])
+    def test_performance_media_docx_surfaces_marketing_career(self):
+        jd=("Lead digital performance campaigns, paid media, media budgets, "
+            "Google Analytics, CRM, growth, audience targeting and A/B testing.")
+        plan=build_plan(jd,"Coordenador de Mídia De Performance Digital")
+        detailed={e["source_index"] for e in plan["experience"]}
+        self.assertIn(9,detailed)
+        self.assertIn("liderança de marketing",plan["summary"])
+        data=render_docx(plan)
+        self.assertTrue(audit(plan,data)["factual_bullets_verified"])
+        paragraphs=[p.text for p in Document(io.BytesIO(data)).paragraphs]
+        self.assertTrue(any("Gestão de marketing, campanhas omnichannel, CRM" in p for p in paragraphs))
+
     def test_marketing_manager_highlights_earlier_marketing_leadership(self):
         p=build_plan("Marketing strategy CRM campaigns branding and marketing budget","Marketing Manager")
         detailed={e["source_index"] for e in p["experience"]}

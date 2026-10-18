@@ -129,6 +129,11 @@ def build_plan(jd, title):
     # Job title is high-signal; descriptions often mention unrelated tools and domains.
     needs=categories(jd+" "+title,TOPICS)
     title_needs=categories(title,TOPICS)
+    # Portuguese role titles may not contain the literal word "marketing".
+    # Treat performance-media roles as growth, not as generic product roles.
+    if re.search(r"(?i)\\b(m[ií]dia|performance|tr[aá]fego|aquisi[cç][aã]o)\\b", title):
+        title_needs.add("growth")
+        needs.add("growth")
     tokens=words(jd)
     scored=[]
     for idx,item in sorted(enumerate(EXPERIENCE),key=lambda x:chronology_index(x[1]),reverse=True):
@@ -138,6 +143,18 @@ def build_plan(jd, title):
     prioritized=sorted(scored,key=lambda x:(-x[3],-chronology_index(x[1])[0],-chronology_index(x[1])[1]))
     # Evidence is selected per role, not copied into two different sections.
     major={idx for idx,_,_,score in prioritized[:6] if score>=5}
+    # Reserve one evidence slot for a directly matching prior career specialty.
+    # A performance-media candidate must not bury all of their documented
+    # marketing leadership while six recent generalist roles occupy the page.
+    if "growth" in title_needs:
+        specialist=next((idx for idx,item,_,score in prioritized
+                         if "marketing" in (item["role"]+" "+item["company"]).casefold()
+                         and score>=5),None)
+        if specialist is not None and specialist not in major:
+            if len(major)>=6:
+                weakest=next((idx for idx,_,_,_ in reversed(prioritized) if idx in major),None)
+                if weakest is not None:major.remove(weakest)
+            major.add(specialist)
     experiences=[];older=[]
     for idx,item,facts,score in scored:
         if idx in major:
@@ -160,7 +177,15 @@ def build_plan(jd, title):
     top_topics=sorted(needs,key=lambda topic:-sum(relevance(f,{topic},tokens) for _,e,_,_ in scored for f in e["facts"]))[:3]
     if not top_topics:top_topics=["product","project"]
     focus=", ".join(label[t] for t in top_topics)
-    summary="Experiência profissional em "+focus+", com atuação documentada em tecnologia e negócios. Histórico de atividades em equipes e projetos de diferentes setores."
+    # Document-grounded specialization comes first, without inventing metrics.
+    if "growth" in title_needs and any("marketing" in e["role"].casefold() for e in experiences):
+        summary=("Trajetória em liderança de marketing, campanhas e gestão comercial, "
+                 "com atuação documentada em CRM, análise de indicadores e desenvolvimento "
+                 "de negócios. Experiência adicional em projetos e produtos digitais.")
+    else:
+        summary=("Experiência profissional em "+focus+
+                 ", com atuação documentada em tecnologia e negócios. "
+                 "Histórico de atividades em equipes e projetos de diferentes setores.")
     # Only a profile-level statement here, never repeated verbatim from the roles.
     return {"title":title[:120],"summary":summary,"focus_topics":top_topics,
             "experience":experiences,"additional_experience":older,

@@ -149,6 +149,37 @@ class Block41Tests(unittest.TestCase):
         self.assertEqual(result["score"],0)
         self.assertEqual(result["confidence"],"essential_gap")
 
+    def test_application_recommendation_is_distinct_from_professional_fit(self):
+        from block4_score import recommend_application
+        ranking={"score":67,"confidence":"semantic_evidence","requirements":[
+            {"type":"obrigatorio","match_points":1,"match_level":"direta"},
+            {"type":"obrigatorio","match_points":0.45,"match_level":"transferivel"},
+            {"type":"obrigatorio","match_points":1,"match_level":"direta"},
+            {"type":"desejavel","match_points":0,"match_level":"nao_comprovada"}]}
+        result=recommend_application({"detected_mode":"remote","location":"Brazil Remote"},ranking)
+        self.assertEqual(result["decision"],"recomendada")
+        self.assertNotEqual(result["score"],ranking["score"])
+    def test_application_recommendation_geo_knockout(self):
+        from block4_score import recommend_application
+        ranking={"score":90,"requirements":[{"type":"obrigatorio","match_points":1}]}
+        result=recommend_application({"detected_mode":"hybrid","location":"São Paulo, Brazil"},ranking)
+        self.assertEqual(result["score"],0)
+        self.assertEqual(result["decision"],"nao_recomendada")
+    def test_application_recommendation_core_knockout(self):
+        from block4_score import recommend_application
+        ranking={"score":0,"confidence":"essential_gap","requirements":[{"type":"obrigatorio","match_points":0}]}
+        self.assertEqual(recommend_application({},ranking)["decision"],"nao_recomendada")
+    def test_recommendation_unknown_fit_stays_unknown(self):
+        from block4_score import recommend_application
+        x=recommend_application({},{"score":None,"requirements":[]})
+        self.assertIsNone(x["score"])
+        self.assertEqual(x["decision"],"avaliar")
+    def test_optional_gap_does_not_knock_out_recommendation(self):
+        from block4_score import recommend_application
+        rows=[{"type":"obrigatorio","match_points":1,"match_level":"direta"} for _ in range(5)]
+        rows.append({"type":"desejavel","match_points":0,"match_level":"nao_comprovada"})
+        result=recommend_application({"detected_mode":"remote"}, {"score":97,"requirements":rows})
+        self.assertEqual(result["decision"],"recomendada")
     def test_secret_unset_means_no_ai(self):
         with patch.dict("os.environ",{"JH_AI_ENABLED":"0","OPENAI_API_KEY":"dummy"}):
             self.assertIsNone(interpret("required project management"))

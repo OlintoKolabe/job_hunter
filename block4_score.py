@@ -47,39 +47,73 @@ SPECIALIZED_GAPS={
  "card_acquiring":("iso 8583","card acquiring","scheme settlement"),
 }
 
+# A statement is matched against a documented skill, never against a title alone.
+SKILLS={
+ "roadmap":(("roadmap","product strategy","estrategia de produto"),"product","Hexagon / Neocoder: roadmaps e estratégia de produto"),
+ "backlog":(("backlog","user stor","historias de usuario","product owner"),"product","Hexagon / Dotz: backlog, histórias e PO"),
+ "scrum":(("scrum","kanban","agile delivery","metodologias ageis"),"projects","Neocoder: Scrum e Kanban"),
+ "project":(("project management","manage projects","gestao de projetos","pmo","project delivery"),"projects","Neocoder: gestão de projetos e PMO"),
+ "stakeholders":(("stakeholder management","stakeholders","gestao de stakeholders"),"product","Hexagon e Neocoder: gestão de stakeholders"),
+ "growth":(("growth experiment","a/b testing","experimentacao","conversion optimization"),"growth","Kolabe / LiberPay: experimentação e growth"),
+ "marketing":(("marketing strategy","marketing campaigns","estrategia de marketing","digital marketing"),"marketing","Lagoa / Grupo Privé: liderança de marketing"),
+ "crm":(("crm","lifecycle marketing","retention marketing"),"marketing","Dotz / Lagoa: CRM e fidelização"),
+ "analytics":(("google analytics","google ads","kpis","okrs","metricas"),"growth","Kolabe: analytics, KPIs e Google Ads"),
+ "process":(("business process","process improvement","process mapping","analise de processos"),"business","Neocoder / Top Saúde: processos e indicadores"),
+ "figma":(("figma","prototyping","prototipacao"),"product","Kolabe / Dotz: Figma e prototipação"),
+ "jira":(("jira","confluence","azure devops"),"product","Neocoder / Hexagon: Jira, Confluence e Azure DevOps"),
+}
+# Explicitly non-proven qualifications: absence is UNKNOWN, not a claim of inability.
+UNPROVEN={
+ "spanish":("fluent spanish","spanish fluency","fluency in spanish","espanhol fluente"),
+ "engineering":("write production code","hands-on coding required","must code"),
+ "payments":("iso 8583","card acquiring","scheme settlement"),
+}
+MANDATORY=("required","must have","mandatory","essential","obrigatorio","obrigatoria","necessario","necessaria","requisito")
+DESIRABLE=("nice to have","preferred","desirable","plus","desejavel","diferencial")
+def requirement_lines(jd):
+    # Limit to requirement-like paragraphs/list entries rather than unrelated narrative.
+    raw=re.sub(r"<[^>]+>","\\n",jd or "")
+    rows=re.split(r"[\\n\\r•]+|(?<=[.;])\\s+",raw)
+    return [fold(x).strip() for x in rows if len(fold(x).strip())>=8][:120]
+
 def score_job(job,roles):
+    jd_raw=job.get("description") or job.get("jobDescription") or job.get("content") or ""
+    jd=clean_jd(jd_raw)
     title=fold(job.get("title",""))
-    jd=clean_jd(job.get("description") or job.get("jobDescription") or job.get("content"))
-    joined=title+" "+jd
-    requested=requested_families(search_terms(roles))
-    evidence=signals(job,roles)
-    family_hits=[]
-    for family in requested:
-        matched_title=any(p in title for p in FAMILY_TERMS[family])
-        matched_jd=any(e["family"]==family for e in evidence["family_evidence"])
-        if matched_title or matched_jd:
-            family_hits.append(family)
-    proof=[{"family":f,"source":list(PROFILE[f])[:2]} for f in family_hits]
-    # A title alone establishes relevance, not a full 40-point professional fit.
-    fit=min(40,(30 if family_hits else 0)+(10 if jd and evidence["family_evidence"] else 0))
-    manage=15 if any(re.search(r"(?<![a-z])"+re.escape(t)+r"(?![a-z])",title) for t in LEADERSHIP) else 0
-    remote=20 if detect_work_mode(job,evidence)=="remote" else 0
-    salary=10 if any(k in job and bool(job[k]) for k in ("salary","salaryRange","compensation")) else 0
-    matching_axes=[(name,weight) for name,weight,terms in AXES if any(term in joined for term in terms)]
-    axis,axis_points=max(matching_axes,key=lambda x:x[1]) if matching_axes else ("generalista",10)
-    # An irrelevant domain mention in the JD does not produce professional proof.
-    if not family_hits:axis_points=0
-    gaps=[]
-    for label,phrases in SPECIALIZED_GAPS.items():
-        if any(p in jd for p in phrases):
-            gaps.append(label)
-    score=max(0,min(97,fit+manage+remote+salary+axis_points))
-    confidence="completa" if jd and len(jd)>=150 else "provisoria"
-    return {"score":score,"score_max":97,"confidence":confidence,
-            "fit":fit,"management":manage,"remote":remote,"salary_bonus":salary,
-            "axis":axis,"axis_bonus":axis_points,"profile_evidence":proof,
-            "review_requirements":gaps,
-            "reason":("Exige verificação: "+", ".join(gaps)) if gaps else
-                      ("JD parcial ou ausente; nota provisória" if confidence=="provisoria"
-                       else "Prioridade baseada no cargo, JD e evidências do perfil"),
-            "method":"cacador-v2-prioridade"}
+    requirements=[]
+    used=set()
+    for line in requirement_lines(str(jd_raw)):
+        is_mandatory=any(x in line for x in MANDATORY)
+        is_desirable=any(x in line for x in DESIRABLE)
+        if not (is_mandatory or is_desirable):continue
+        kind="obrigatorio" if is_mandatory else "desejavel"
+        for skill,(phrases,family,proof) in SKILLS.items():
+            if skill not in used and any(p in line for p in phrases):
+                requirements.append({"name":skill,"type":kind,"status":"comprovado","evidence":proof})
+                used.add(skill)
+        for skill,phrases in UNPROVEN.items():
+            if skill not in used and any(p in line for p in phrases):
+                requirements.append({"name":skill,"type":kind,"status":"nao_comprovado","evidence":None})
+                used.add(skill)
+    mandatory=[r for r in requirements if r["type"]=="obrigatorio"]
+    desirable=[r for r in requirements if r["type"]=="desejavel"]
+    # No requirements extracted means no professional-fit claim can be substantiated.
+    available=len(requirements)>0
+    # Mandatory requirements dominate; desirables only adjust scored candidates.
+    wtotal=3*len(mandatory)+len(desirable)
+    wmet=sum((3 if r["type"]=="obrigatorio" else 1) for r in requirements if r["status"]=="comprovado")
+    fit=round(100*wmet/wtotal) if wtotal else None
+    uncertainty=sum(r["status"]=="nao_comprovado" for r in requirements)
+    priority={
+        "remote":detect_work_mode(job,signals(job,roles))=="remote",
+        "salary_informed":any(bool(job.get(k)) for k in ("salary","salaryRange","compensation")),
+        "sector":next((name for name,_,phrases in AXES if any(p in title+" "+jd for p in phrases)),None),
+    }
+    return {"score":fit,"score_max":100,"confidence":"requisitos_extraidos" if available else "sem_base",
+            "fit":fit,"requirements":requirements,"mandatory_count":len(mandatory),
+            "desirable_count":len(desirable),"unverified_count":uncertainty,
+            "priority":priority,
+            "profile_evidence":[{"family":r["name"],"source":[r["evidence"]]} for r in requirements if r["evidence"]],
+            "reason":("Aderência calculada apenas sobre requisitos identificados; revise requisitos não comprovados"
+                      if available else "JD sem requisitos identificáveis: sem nota de aderência"),
+            "method":"block4-evidencias-v1"}

@@ -98,12 +98,16 @@ def requirement_lines(jd):
 def hard_role_mismatch(job):
     """Unambiguous hands-on engineering/QA job titles lie outside the documented PM/business career."""
     title=fold(str(job.get("title") or ""))
-    return any(term in title for term in (
+    # Do not reject product/business roles merely because the title mentions engineers.
+    if any(term in title for term in ("product manager","product owner","gerente de produto","business analyst","analista de negocios")):
+        return False
+    technical_titles=(
         "software engineer","software developer","frontend developer","front end developer",
         "backend developer","back end developer","fullstack developer","full stack developer",
         "qa engineer","qa analyst","quality assurance engineer","test automation engineer",
         "engenheiro de software","desenvolvedor de software","analista de testes automatizados",
-    ))
+    )
+    return any(re.search(r"(?<![a-z])"+re.escape(term)+r"(?![a-z])",title) for term in technical_titles)
 
 def score_job(job,roles):
     jd_raw=job.get("description") or job.get("jobDescription") or job.get("content") or ""

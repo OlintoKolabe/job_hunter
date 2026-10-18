@@ -188,10 +188,8 @@ def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:
     visible,pending,history_excluded=exclude_history_matches(items,review,known_urls,known_pairs)
     visible=[j for j in visible if not any(b in normalized(j["company"]) for b in ("kraken","payward"))]
     pending=[j for j in pending if not any(b in normalized(j["company"]) for b in ("kraken","payward"))]
-    with psycopg.connect(DATABASE,connect_timeout=7) as score_conn:
-        with score_conn.cursor() as score_cur:
-            # Scoring runs from the UI enrichment request after results are visible.
-            coverage={"cached":0,"fetched":0,"missing":0,"not_attempted":len(visible)}
+    # Initial results must not wait for scoring or open another database connection.
+    coverage={"cached":0,"fetched":0,"missing":0,"not_attempted":len(visible)}
     visible=[{**j,"ranking":None,"jd_status":"pendente"} for j in visible]
     pending=[{**j,"ranking":None,"jd_status":"avaliacao_manual"} for j in pending]
     # Pending eligibility is not automatically enriched or scored.
@@ -351,10 +349,8 @@ def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False
     visible,pending,history_excluded=exclude_history_matches(items,review,known_urls,known_pairs)
     visible=[j for j in visible if not any(b in normalized(j["company"]) for b in ("kraken","payward"))]
     pending=[j for j in pending if not any(b in normalized(j["company"]) for b in ("kraken","payward"))]
-    with psycopg.connect(DATABASE,connect_timeout=7) as score_conn:
-        with score_conn.cursor() as score_cur:
-            # Scoring runs from the UI enrichment request after results are visible.
-            coverage={"cached":0,"fetched":0,"missing":0,"not_attempted":len(visible)}
+    # Initial results must not wait for scoring or open another database connection.
+    coverage={"cached":0,"fetched":0,"missing":0,"not_attempted":len(visible)}
     visible=[{**j,"ranking":None,"jd_status":"pendente"} for j in visible]
     pending=[{**j,"ranking":None,"jd_status":"avaliacao_manual"} for j in pending]
     # Pending eligibility is not automatically enriched or scored.

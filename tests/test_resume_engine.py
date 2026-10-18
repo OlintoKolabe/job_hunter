@@ -88,6 +88,37 @@ class ResumeEngineTests(unittest.TestCase):
         positions=[text.find(e["role"]+" — "+e["company"]) for e in order]
         self.assertTrue(all(position>=0 for position in positions))
         self.assertEqual(positions,sorted(positions))
+
+    def test_internal_docx_homologation_matrix(self):
+        """Run the actual engine and reopen DOCX for each distinct JD category."""
+        from resume_engine import categories, TOPICS, FACT_TOPICS
+        from docx import Document
+        matrix = [
+            ("Business Analyst", "Business Analyst: map stakeholder needs, document user stories, prioritize backlog, support Scrum and Azure DevOps.", "analysis"),
+            ("Product Owner", "Product Owner: own roadmap, discovery, backlog, user research and alignment with stakeholders.", "product"),
+            ("Growth Manager", "Growth Manager: CRM, retention, acquisition, marketing campaigns, churn, leads, Google Ads.", "growth"),
+            ("Project Manager", "Project Manager: portfolio governance, delivery, resources, budget, and processes.", "project"),
+            ("Marketing Manager", "Marketing Manager: coordinate marketing strategy, branding, paid campaigns, CRM and sales.", "growth"),
+            ("Data Product Manager", "Data Product Manager: roadmap, KPIs, indicators, analytics and product discovery.", "data"),
+        ]
+        seen=set()
+        for title,jd,required in matrix:
+            with self.subTest(title=title):
+                plan=build_plan(jd,title)
+                content=render_docx(plan)
+                report=audit(plan,content)
+                doc=Document(io.BytesIO(content))
+                body=" ".join(p.text for p in doc.paragraphs)
+                facts=[f for e in plan["experience"] for f in e["facts"]]
+                covered=set().union(*(categories(f,FACT_TOPICS) for f in facts))
+                self.assertTrue(report["factual_bullets_verified"])
+                self.assertIn(required,covered, f"No supported evidence of {required}: {title}")
+                self.assertIn("Resumo profissional",body)
+                self.assertIn("Experiência profissional",body)
+                self.assertGreaterEqual(len(facts),3)
+                self.assertNotIn(report["jd_sha256"],seen)
+                seen.add(report["jd_sha256"])
+
     def test_empty_jd_rejected(self):
         with self.assertRaises(ValueError):build_plan("  ","A")
 if __name__=="__main__":unittest.main()

@@ -11,6 +11,8 @@ from urllib.parse import urlsplit,quote
 from collectors import fetch_json
 from jd_signals import signals
 from block4_score import score_job
+from jd_retrieval import extract_public_jd
+from score_repository import get_cached,save,PROFILE_VERSION,RUBRIC_VERSION
 from search_filters import detect_work_mode
 
 TTL_DAYS=7
@@ -58,20 +60,22 @@ def hydrate_jobs(cursor,jobs,roles,url_key,limit=PER_BATCH_LIMIT):
             updates[key]=(cached_item[0],"cache")
         elif existing and len(existing)>=300:
             updates[key]=(existing,"listing")
-        elif remote_detail(j):
+        else:
             pending.append((key,j))
     def fetch(pair):
         key,job=pair
         try:
-            endpoint,headers=remote_detail(job)
+            detail=remote_detail(job)
+            if not detail:return key,extract_public_jd(str(job.get('url') or ''))
+            endpoint,headers=detail
             result=fetch_json(endpoint,headers) if headers else fetch_json(endpoint)
             value=(result.get("jobPage") or result.get("page") or result) if isinstance(result,dict) else {}
             if not isinstance(value,dict):return key,None
             content=value.get("content") or value.get("description") or value.get("jobDescription") or ""
             if not content and isinstance(value.get("job"),dict):content=value["job"].get("description") or ""
-            if not isinstance(content,str) or not content.strip():return key,None
+            if not isinstance(content,str) or not content.strip():return key,extract_public_jd(str(job.get('url') or ''))
             return key,content[:MAX_JD_CHARS]
-        except Exception:return key,None
+        except Exception:return key,extract_public_jd(str(job.get('url') or ''))
     fetched=0
     with ThreadPoolExecutor(max_workers=4) as pool:
         for future in as_completed([pool.submit(fetch,p) for p in pending[:limit]]):
@@ -92,7 +96,15 @@ def hydrate_jobs(cursor,jobs,roles,url_key,limit=PER_BATCH_LIMIT):
         if origin=="cache":count["cached"]+=1
         if not description:count["missing"]+=1
         complete={**j,"description":description}
-        evaluation=score_job(complete,roles)
+        jd_hash=hashlib.sha256(description.encode()).hexdigest() if description else ''
+        evaluation=None
+        # Cache is optional until the Block 4.1 migration has been approved and applied.
+        if description:
+            try:evaluation=get_cached(cursor,key,jd_hash,roles)
+            except Exception:cursor.connection.rollback();raise
+        if evaluation is None:
+            evaluation=score_job(complete,roles)
+            if description:save(cursor,key,jd_hash,roles,evaluation,'deterministic')
         output.append({**j,"ranking":evaluation,"jd_evidence":signals(complete,roles),
                        "jd_status":origin if description else ("pendente" if (key,j) in pending[limit:] else "indisponivel")})
     return output,count

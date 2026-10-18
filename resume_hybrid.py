@@ -11,11 +11,11 @@ from score_repository import reserve,settle,key_for
 from resume_engine import ENGINE_VERSION,EXPERIENCE
 MODEL="gpt-4.1-nano"  # Fixed audited price, independent of vacancy scoring model
 
-RUBRIC="cv-evidence-hybrid-v2"
+RUBRIC="cv-evidence-hybrid-v3"
 COST_INPUT_PER_M=0.10
 COST_OUTPUT_PER_M=0.40
 INPUT_CHAR_LIMIT=12500
-OUTPUT_TOKEN_CAP=620
+OUTPUT_TOKEN_CAP=900
 MAX_COST_USD=0.002
 
 def clean(text):
@@ -37,7 +37,7 @@ def evidence_for_prompt(plan):
 def selected_evidence(proposal,plan):
     if not isinstance(proposal,dict):return None
     ids=proposal.get("evidence_ids")
-    if not isinstance(ids,list) or not 5<=len(ids)<=14 or len(ids)!=len(set(ids)):return None
+    if not isinstance(ids,list) or not 3<=len(ids)<=16 or len(ids)!=len(set(ids)):return None
     available={f"{idx}:{n}":(idx,fact) for idx,e in enumerate(EXPERIENCE) for n,fact in enumerate(e["facts"])}
     if any(i not in available for i in ids):return None
     # Across at least three roles; no invented text can reach the document.
@@ -45,7 +45,7 @@ def selected_evidence(proposal,plan):
     for i in ids:
         idx,fact=available[i]
         groups.setdefault(idx,[]).append(fact)
-    if len(groups)<3 or len(groups)>6 or any(len(v)>3 for v in groups.values()):return None
+    if len(groups)<2 or len(groups)>8 or any(len(v)>4 for v in groups.values()):return None
     expanded=[]
     for e in plan["experience"]:
         idx=e["source_index"]
@@ -56,8 +56,8 @@ def validate_text(proposal,plan):
     if not isinstance(proposal,dict):return None
     summary=proposal.get("summary")
     refs=proposal.get("source_ids")
-    if not isinstance(summary,str) or not (60<=len(summary)<=600):return None
-    if not isinstance(refs,list) or not refs or len(refs)>6:return None
+    if not isinstance(summary,str) or not (40<=len(summary)<=650):return None
+    if not isinstance(refs,list) or not refs or len(refs)>8:return None
     allowed={str(e["source_index"]) for e in plan["experience"]}
     if any(str(k) not in allowed for k in refs):return None
     # Ban any claims about metrics, numbers, qualifications or industries
@@ -79,10 +79,10 @@ def validate_text(proposal,plan):
 def request_micro_summary(plan,jd,opener=urllib.request.urlopen):
     evidence=evidence_for_prompt(plan)
     # Compact lines retain the entire career including older marketing roles.
-    evidence_text="\\n".join(f'{e["id"]} | {e["empresa"]} | {e["fato"]}' for e in evidence)
+    evidence_text="\n".join(f'{e["id"]} | {e["empresa"]} | {e["fato"]}' for e in evidence)
     prompt=("Monte currículo de candidatura em português usando APENAS fatos fornecidos. "
-        "Escolha de 5 a 14 IDs de fatos que melhor demonstrem responsabilidades do JD. "
-        "Use entre 3 e 6 empregos, no máximo 3 fatos por emprego; priorize requisitos centrais, "
+        "Escolha de 3 a 16 IDs de fatos que melhor demonstrem responsabilidades do JD. "
+        "Use entre 2 e 8 empregos, no máximo 4 fatos por emprego; priorize requisitos centrais, "
         "não adicione competências nem resultados. Não precisa usar todas as experiências. "
         "Escreva SOMENTE o resumo profissional, entre 55 e 85 palavras, sem resultados, "
         "números ou qualificações inventadas. Evite promessas de entrega ou especialização não comprovada. "
@@ -124,8 +124,8 @@ def apply_hybrid(cur,normalized_url,jd,plan):
             return plan,{"mode":"cached_fallback","ai_calls":0,"cost_usd":0.0}
         accepted=validate_text(cached[0],plan)
         selected=selected_evidence(cached[0],plan)
-        if accepted and selected:
-            plan={**plan,"summary":accepted,"experience":selected}
+        if accepted or selected:
+            plan={**plan,"summary":accepted or plan["summary"],"experience":selected or plan["experience"]}
             return plan,{"mode":"cached_hybrid","ai_calls":0,"cost_usd":0.0}
     # Conservative upper bound based on tightly bounded message and max output.
     # A priced response is recorded using actual usage; budget never bypassed.
@@ -140,8 +140,8 @@ def apply_hybrid(cur,normalized_url,jd,plan):
         actual=price(usage)
         accepted=validate_text(candidate,plan)
         selected=selected_evidence(candidate,plan)
-        if accepted and selected and actual<=MAX_COST_USD:
-            plan={**plan,"summary":accepted,"experience":selected}
+        if actual<=MAX_COST_USD and (accepted or selected):
+            plan={**plan,"summary":accepted or plan["summary"],"experience":selected or plan["experience"]}
             success=True
         # Cache success AND invalid output to prevent recurring charges for identical input.
         if actual<=MAX_COST_USD:

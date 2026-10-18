@@ -113,17 +113,20 @@ def hydrate_jobs(cursor,jobs,roles,url_key,limit=PER_BATCH_LIMIT):
                     with budget_conn.cursor() as budget_cur:
                         usage_id=reserve(budget_cur,key)
                 if usage_id is not None:
-                    extracted=None
+                    extracted=None; actual=0.002
                     try:
                         extracted=interpret(description)
+                        if extracted:
+                            usage=extracted.get('usage',{})
+                            actual=min(0.002,(usage.get('prompt_tokens',0)*0.20+usage.get('completion_tokens',0)*1.20)/1000000)
                     except Exception:
                         pass
                     finally:
                         with psycopg.connect(os.environ['DATABASE_URL'],connect_timeout=7) as budget_conn:
                             with budget_conn.cursor() as budget_cur:
-                                settle(budget_cur,usage_id,0.002,extracted is not None)
+                                settle(budget_cur,usage_id,actual,extracted is not None)
                     if extracted:
-                        evaluation={**evaluation,'semantic_requirements':extracted,'ai_interpreted':True}
+                        evaluation={**evaluation,'semantic_requirements':extracted['requirements'],'ai_interpreted':True}
                         model='hybrid'
             if description:save(cursor,key,jd_hash,roles,evaluation,model)
         output.append({**j,"ranking":evaluation,"jd_evidence":signals(complete,roles),

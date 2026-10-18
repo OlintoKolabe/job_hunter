@@ -5,7 +5,7 @@ import os
 from datetime import datetime,timezone
 from psycopg.types.json import Jsonb
 PROFILE_VERSION="profile-oct-2026"
-RUBRIC_VERSION="block4.1-v1"
+RUBRIC_VERSION="block4.1-v2-minimum-evidence"
 MONTHLY_CAP_USD=5.0
 MAX_REQUEST_USD=0.002
 def key_for(roles):return hashlib.sha256(roles.encode()).hexdigest()

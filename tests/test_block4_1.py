@@ -56,6 +56,26 @@ class Block41Tests(unittest.TestCase):
             with patch("urllib.request.urlopen",return_value=BytesIO(json.dumps(response).encode())):
                 result=interpret(jd)
         self.assertEqual([item["name"] for item in result["requirements"]],["roadmap"])
+    def test_ai_unexpected_skill_id_type_is_safe(self):
+        import json
+        from io import BytesIO
+        jd="Required roadmap expertise and backlog planning."
+        payload={"choices":[{"message":{"content":json.dumps({"requirements":[
+            {"name":"roadmap","type":"obrigatorio","skill_id":["roadmap"]},
+            {"name":"backlog","type":"obrigatorio","skill_id":"backlog"}]})}}],"usage":{}}
+        with patch.dict("os.environ",{"JH_AI_ENABLED":"1","OPENAI_API_KEY":"test-only"}):
+            with patch("urllib.request.urlopen",return_value=BytesIO(json.dumps(payload).encode())):
+                result=interpret(jd)
+        self.assertIsNone(result["requirements"][0]["skill_id"])
+        self.assertEqual(result["requirements"][1]["skill_id"],"backlog")
+    def test_ai_empty_output_fails_explicitly(self):
+        import json
+        from io import BytesIO
+        payload={"choices":[{"message":{"content":""}}]}
+        with patch.dict("os.environ",{"JH_AI_ENABLED":"1","OPENAI_API_KEY":"test-only"}):
+            with patch("urllib.request.urlopen",return_value=BytesIO(json.dumps(payload).encode())):
+                with self.assertRaises(ValueError):
+                    interpret("Required roadmap")
     def test_unknown_semantic_skills_are_not_awarded_points(self):
         rows=[{"name":str(i),"type":"obrigatorio","skill_id":"imaginary_skill"} for i in range(4)]
         self.assertIsNone(merge_semantic_requirements({"score":None},rows)["score"])

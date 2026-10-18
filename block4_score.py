@@ -62,6 +62,18 @@ SKILLS={
  "figma":(("figma","prototyping","prototipacao"),"product","Kolabe / Dotz: Figma e prototipação"),
  "jira":(("jira","confluence","azure devops"),"product","Neocoder / Hexagon: Jira, Confluence e Azure DevOps"),
 }
+# Evidence-backed synonyms; only skills documented in the October LinkedIn profile.
+SKILLS.update({
+ "portfolio":(("portfolio management","project portfolio","gestao de portfolio","gestao de portifolio"),"projects","Neocoder: Head de projetos e processos, gestão de portfólio"),
+ "leadership":(("cross-functional teams","cross functional teams","multidisciplinary teams","times multidisciplinares","team leadership","people management"),"projects","Neocoder e Lagoa: liderança de equipes e projetos"),
+ "finance":(("budget management","financial planning","p&l","budgeting","gestao orcamentaria","gestao de orcamento"),"business","Top Saúde e Lagoa: gestão financeira e orçamentos"),
+ "strategy":(("strategic planning","business development","commercial strategy","business strategy","planejamento estrategico","desenvolvimento de negocios"),"business","Lagoa: desenvolvimento corporativo e estratégia"),
+ "experience":(("user experience","ux research","user research","product discovery","prototyping","prototipacao"),"product","Kolabe e Dotz: discovery, UX e protótipos"),
+ "delivery":(("agile methodologies","sprint planning","product delivery","cross-functional delivery","agile frameworks"),"projects","Hexagon e Neocoder: entrega ágil, sprints e Scrum/Kanban"),
+ "acquisition":(("user acquisition","customer acquisition","retention","churn","activation","growth strategy","conversion optimization"),"growth","Kolabe e LiberPay: aquisição, retenção e crescimento"),
+ "launch":(("go-to-market","go to market","product launch","product lifecycle","nps","product-market fit"),"product","Neocoder / Kolabe: ciclo de produto, PMF e lançamentos"),
+ "segmentation":(("customer segmentation","loyalty programs","fidelizacao","customer journey"),"marketing","Dotz: CRM, segmentação, fidelização e jornada"),
+})
 # Explicitly non-proven qualifications: absence is UNKNOWN, not a claim of inability.
 UNPROVEN={
  "spanish":("fluent spanish","spanish fluency","fluency in spanish","espanhol fluente"),

@@ -115,6 +115,34 @@ def validate_text(proposal,plan):
     if any(p in summary.casefold() and p not in shown for p in risky):return None
     return summary.strip()
 
+def analyze_requirements(jd,title):
+    """Extract explicit, independently inspectable JD clauses before selection."""
+    raw=html.unescape(re.sub(r"<(?:br|/p|/li)[^>]*>", "\\n", str(jd or ""),flags=re.I))
+    raw=re.sub(r"<[^>]+>"," ",raw)
+    clauses=[clean(x) for x in re.split(r"[\\n•;]+|(?<=[.!?])\\s+(?=[A-ZÁÉÍÓÚ])",raw)]
+    clauses=[c[:500] for c in clauses if len(c)>=18]
+    essentials=[];desirables=[]
+    for c in clauses[:100]:
+        is_optional=bool(re.search(r"\\b(desej[aá]vel|diferencial|nice to have|preferred|bonus|plus)\\b",c,re.I))
+        (desirables if is_optional else essentials).append(c)
+    return {"title":clean(title),"essential":essentials,"desirable":desirables,
+            "jd_sha256":hashlib.sha256(jd.encode()).hexdigest()}
+
+def traceable_relevance(plan,jd,experience):
+    """Audit requirements against printed facts; uncovered requirements stay uncovered."""
+    req=analyze_requirements(jd,plan["title"])
+    facts=[f for row in experience for f in row["facts"]]
+    all_evidence=[f for e in EXPERIENCE for f in e["facts"]]
+    details=[]
+    for clause in req["essential"]:
+        target=categories(clause,TOPICS)
+        matches=[f for f in facts if target and categories(f,FACT_TOPICS)&target]
+        details.append({"requirement":clause,"supported":bool(matches),
+                        "evidence":matches[:3]})
+    return {"jd_sha256":req["jd_sha256"],"essential_count":len(details),
+            "supported_count":sum(int(d["supported"]) for d in details),
+            "requirements":details,"factual_bullets_verified":all(f in all_evidence for f in facts)}
+
 def request_micro_summary(plan,jd,opener=urllib.request.urlopen):
     evidence=evidence_for_prompt(plan)
     # Retain the full JD when its size fits; never blindly discard its latter requirements.

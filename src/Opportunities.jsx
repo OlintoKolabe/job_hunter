@@ -91,7 +91,7 @@ export function OpportunitiesPanel(){
    if(v.ranking?.score!==null&&v.ranking?.score!==undefined)return 'scored';
    if(scoringFailed.includes(v.url))return 'failed';
    if(scoringNow.includes(v.url))return 'calculating';
-   if(busy && !scoringAttempted.includes(v.url) && (v.jd_status==='pendente' || (v.ranking?.score==null && ['greenhouse','inhire'].some(src=>v.source?.toLowerCase().includes(src)))))return 'waiting';
+   if(v.confirmed && busy && !scoringAttempted.includes(v.url) && (v.jd_status==='pendente' || (v.ranking?.score==null && ['greenhouse','inhire'].some(src=>v.source?.toLowerCase().includes(src)))))return 'waiting';
    return 'unscored';
  };
  const scoreDisplay=v=>{

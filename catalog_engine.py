@@ -73,6 +73,35 @@ def extra_pull(source,slug):
             if val and TITLE_RE.search(val["title"]):jobs.append(val)
         return jobs,"ok"
     if source=="quickin":
+        # Official public career API; it needs no access token.
+        # Keep the existing HTML parser as a fallback for unsupported account IDs.
+        try:
+            endpoint="https://api.quickin.io/public/"+urllib.parse.quote(slug,safe="")+"/jobs?sort=-created_at"
+            data=json.loads(read(endpoint,size=3500000)[0])
+            records=data if isinstance(data,list) else (
+                data.get("jobs") or data.get("data") or data.get("results") or []
+                if isinstance(data,dict) else [])
+            if isinstance(records,dict):
+                records=records.get("jobs") or records.get("data") or []
+            if not isinstance(records,list):
+                raise ValueError("Quickin invalid jobs response")
+            for row in records:
+                if not isinstance(row,dict) or row.get("publicate","published")!="published":continue
+                title=row.get("title")
+                if not title:continue
+                company=row.get("company_id")
+                name=company.get("name") if isinstance(company,dict) else slug
+                job_id=row.get("_id")
+                url=row.get("career_url") or (
+                    "https://jobs.quickin.io/"+urllib.parse.quote(slug,safe="")+"/apply?job_id="+urllib.parse.quote(str(job_id),safe="")
+                    if job_id else "")
+                location=", ".join(str(row[x]) for x in ("city","region","country") if row.get(x))
+                description=(row.get("description") or "")+" "+(row.get("requirements") or "")
+                value=item(name,title,url,location,source,row.get("created_at"),description)
+                if value:jobs.append(value)
+            return jobs,"ok"
+        except (ValueError,TypeError,KeyError,urllib.error.URLError,TimeoutError,json.JSONDecodeError):
+            jobs=[]
         base="https://jobs.quickin.io/"+urllib.parse.quote(slug)+"/jobs"
         seen=set()
         for page in range(1,7):

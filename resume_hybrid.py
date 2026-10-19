@@ -73,7 +73,7 @@ def quality_gate(plan,candidate,jd):
     # The AI is allowed to pick DIFFERENT evidence from the whole career.
     # Never force the earlier category-selected facts back into the output.
     # A factual, bounded CV can legitimately cover fewer broad categories.
-    return (proposed[2]>=3 and sum(len(e["facts"]) for e in candidate)>=6)
+    return (proposed[2]>=3 and sum(len(e["facts"]) for e in candidate)>=min(9,sum(len(e["facts"]) for e in plan["experience"])))
 
 def selected_evidence(proposal,plan):
     """Merge only verified source facts into the complete chronology.

@@ -19,6 +19,13 @@ class ResumeEngineTests(unittest.TestCase):
             self.assertIn("Build=abcdef123456",tag)
             self.assertIn("JD="+plan["jd_sha256"][:16],tag)
             self.assertTrue(audit(plan,render_docx(plan))["factual_bullets_verified"])
+    def test_tailored_cv_omits_irrelevant_dentistry_degree_without_inventing_degree(self):
+        for role in ("Product Manager","Business Analyst","Marketing Manager"):
+            plan=build_plan("Roadmap CRM business analysis and stakeholder planning",role)
+            text=" ".join(p.text for p in Document(io.BytesIO(render_docx(plan))).paragraphs)
+            self.assertNotIn("Graduação em Odontologia",text)
+            self.assertIn("MBA em Marketing",text)
+
     def test_ai_workflow_requirement_uses_documented_tools_not_invented_expertise(self):
         jd="Senior Product Manager: product discovery, roadmap, project delivery, stakeholders; proactively apply AI-driven tools in product workflows."
         p=build_plan(jd,"Senior Product Manager")

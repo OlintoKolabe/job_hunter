@@ -267,6 +267,11 @@ def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:
             visible,restored=restore_persisted_scores(score_cur,visible,roles,url_key)
     coverage["cached"]=restored
     coverage["not_attempted"]=len(visible)-restored
+    if sort in ("score", "recommendation"):
+        visible.sort(key=lambda j: (
+            isinstance(j.get("ranking"), dict) and isinstance(j["ranking"].get("score"), (int, float)),
+            float(j["ranking"]["score"]) if isinstance(j.get("ranking"), dict) and isinstance(j["ranking"].get("score"), (int, float)) else -1
+        ), reverse=True)
     pending=[{**j,"ranking":None,"jd_status":"avaliacao_manual"} for j in pending]
     # Pending eligibility is not automatically enriched or scored.
     fresh_count=len(visible)
@@ -437,6 +442,11 @@ def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False
             visible,restored=restore_persisted_scores(score_cur,visible,roles,url_key)
     coverage["cached"]=restored
     coverage["not_attempted"]=len(visible)-restored
+    if sort in ("score", "recommendation"):
+        visible.sort(key=lambda j: (
+            isinstance(j.get("ranking"), dict) and isinstance(j["ranking"].get("score"), (int, float)),
+            float(j["ranking"]["score"]) if isinstance(j.get("ranking"), dict) and isinstance(j["ranking"].get("score"), (int, float)) else -1
+        ), reverse=True)
     pending=[{**j,"ranking":None,"jd_status":"avaliacao_manual"} for j in pending]
     # Pending eligibility is not automatically enriched or scored.
     fresh_count=len(visible)

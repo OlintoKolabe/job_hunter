@@ -181,6 +181,14 @@ def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:
         sources=[{"source":source,"state":"validado","received":len(items)}]
     else:
         items,sources=collect(discovery_queries(roles),country,source) if source in ("all","jobgether","workable") else ([],[])
+        if source=="all":
+            for feed in ("himalayas","remotive","remoteok"):
+                try:
+                    added=fetch_public_remote(feed,roles,country)
+                    items.extend(added)
+                    sources.append({"source":feed,"state":"validado","received":len(added)})
+                except Exception as exc:
+                    sources.append({"source":feed,"state":"error","received":0,"error":type(exc).__name__})
     raw_count=len(items)
     try: items,review,filter_stats=analyze_filters(items,roles,country,mode,days,sort)
     except ValueError as e: raise HTTPException(400,str(e))

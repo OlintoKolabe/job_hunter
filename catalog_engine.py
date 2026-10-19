@@ -163,8 +163,10 @@ def run_task(source,slug):
 def scan(tasks,workers=6):
     out=[];jobs=[]
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        future=[pool.submit(run_task,source,slug) for source,slug in tasks]
+        future={pool.submit(run_task,source,slug):(source,slug) for source,slug in tasks}
         for f in as_completed(future):
+            source,slug=future[f]
             d,j=f.result()
-            out.append(d);jobs.extend(j)
+            out.append(d)
+            jobs.extend({**job,"board_slug":slug,"board_source":source} for job in j)
     return out,jobs

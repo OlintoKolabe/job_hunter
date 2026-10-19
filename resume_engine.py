@@ -377,7 +377,16 @@ def render_docx(plan):
     doc=Document();normal=doc.styles["Normal"];normal.font.name="Calibri";normal.font.size=Pt(10)
     section=doc.sections[0]
     from docx.shared import Inches
-    section.top_margin=Inches(.62);section.bottom_margin=Inches(.62)
+    section.top_margin=Inches(.48);section.bottom_margin=Inches(.48)
+    section.left_margin=Inches(.7);section.right_margin=Inches(.7)
+    from docx.enum.text import WD_LINE_SPACING
+    normal.paragraph_format.space_after=Pt(2)
+    normal.paragraph_format.line_spacing=1.0
+    for name in ("Title","Heading 1","Heading 2","List Bullet"):
+        style=doc.styles[name]
+        style.paragraph_format.space_before=Pt(3)
+        style.paragraph_format.space_after=Pt(2)
+    doc.styles["Heading 2"].font.size=Pt(10)
     # Provenance is embedded in DOCX metadata, invisible to recruiters/ATS.
     provenance = (
         f"JobHunterCV={CV_DOCUMENT_VERSION};"

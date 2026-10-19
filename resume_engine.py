@@ -128,6 +128,36 @@ EXPERIENCE[13]["facts"].extend([
     "Publicidade em rádio, televisão, mídia impressa, mídia externa e campanhas promocionais.",
 ])
 
+
+# LinkedIn profile audit (October 2026): append verified evidence; never change old IDs.
+EXPERIENCE[0]["facts"].extend([
+    "Concepção de plataforma DTx com treinamento cognitivo gamificado baseado em neurociência e terapia cognitivo-comportamental.",
+])
+EXPERIENCE[3]["facts"].extend([
+    "Estruturação de processos administrativos, comerciais e de marketing com equipe multidisciplinar.",
+])
+EXPERIENCE[6]["facts"].extend([
+    "Definição de cronogramas de tecnologia e negócios e negociação de prioridades com stakeholders.",
+    "Startup financiada pelo programa Centelha, classificada entre as 15 melhores de mil propostas.",
+])
+EXPERIENCE[7]["facts"].extend([
+    "Criação de jornadas, interfaces e protótipos no Figma para validação e desenvolvimento de soluções.",
+])
+EXPERIENCE[8]["facts"].extend([
+    "Reestruturação de operações para eficiência e maximização de receitas.",
+])
+EXPERIENCE[11]["facts"].extend([
+    "Criação da marca Privé Diversão, unificando a estratégia de branding de três parques aquáticos.",
+    "Participação no comitê executivo operacional de hospitalidade e entretenimento.",
+])
+EXPERIENCE[12]["facts"].extend([
+    "Criação e execução de eventos corporativos com o departamento de eventos.",
+    "Campanhas e eventos de lançamento de produtos de hospitalidade e entretenimento.",
+])
+EXPERIENCE.append({"role":"Professor de MBA","company":"Estácio",
+    "dates":"jun 2016 – out 2016",
+    "facts":["Atuação como professor de MBA em pós-graduação de Recursos Humanos."]})
+
 EDUCATION = ["MBA em Marketing — Universidade de São Paulo (2015–2016)",
              "MBA em Administração e Gestão — Fundação Getulio Vargas (2001–2003)",
              "Professional Scrum Product Owner I (PSPO I)"]

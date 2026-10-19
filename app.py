@@ -26,7 +26,7 @@ from catalog_engine import source_tasks,scan
 from catalog_bootstrap import maybe_start
 from jd_enrichment import hydrate_jobs
 from resume_engine import build_plan, render_docx, audit, evaluate_rendered_resume
-from resume_hybrid import apply_hybrid
+from resume_hybrid import apply_hybrid, traceable_relevance
 
 app = FastAPI(docs_url=None, redoc_url=None)
 DIST = Path(__file__).resolve().parent / "dist"
@@ -499,7 +499,11 @@ def generate_resume(payload: ResumeGenerate, request: Request):
     if cv_usage["mode"] in ("hybrid","cached_hybrid"):
         baseline_data=render_docx(baseline_plan)
         baseline_quality=evaluate_rendered_resume(baseline_plan,baseline_data,row[0])
-        if not quality["factual_ok"] or quality["technical_score"] < baseline_quality["technical_score"]:
+        proposed_evidence=traceable_relevance(plan,row[0],plan["experience"])
+        baseline_evidence=traceable_relevance(baseline_plan,row[0],baseline_plan["experience"])
+        if (not quality["factual_ok"] or
+            quality["technical_score"] < baseline_quality["technical_score"] or
+            proposed_evidence["supported_count"] < baseline_evidence["supported_count"]):
             cv_usage["mode"]="quality_fallback"
             plan={**baseline_plan,"cv_mode":"quality_fallback",
                   "cv_build":plan["cv_build"]}

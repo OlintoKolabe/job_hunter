@@ -74,8 +74,15 @@ def pull(source,slug,location='brazil'):
             loc=j.get("location") or ""
             if j.get("secondaryLocations"):
                 loc=str(loc)+" / "+", ".join(str(x.get("location") or x.get("name") or "") if isinstance(x,dict) else str(x) for x in j["secondaryLocations"])
-            value=item(slug,j.get("title"),j.get("jobUrl") or j.get("applyUrl"),loc,source,j.get("publishedAt"))
-            if value:jobs.append(value)
+            description=j.get("descriptionPlain") or j.get("descriptionHtml") or j.get("description") or ""
+            if not isinstance(description,str):description=""
+            value=item(slug,j.get("title"),j.get("jobUrl") or j.get("applyUrl"),loc,source,j.get("publishedAt"),description)
+            if value:
+                # Keep official Ashby eligibility signals for the shared filter engine.
+                for field in ("workplaceType","workArrangement","remoteType","country","countryCode","region"):
+                    if isinstance(j.get(field),str):value[field]=j[field]
+                if isinstance(j.get("isRemote"),bool):value["remote"]=j["isRemote"]
+                jobs.append(value)
     elif source=="Greenhouse":
         endpoint="https://boards-api.greenhouse.io/v1/boards/"+urllib.parse.quote(slug)+"/jobs"
         try:

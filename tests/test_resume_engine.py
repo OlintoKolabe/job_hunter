@@ -6,6 +6,26 @@ from resume_engine import build_plan,render_docx,audit,EXPERIENCE,CONTACT
 JD="We need a business analyst who manages stakeholder needs, roadmaps and backlog in Azure DevOps, works with product owners and defines user stories. Previous hands-on Oracle programming experience is a plus."
 
 class ResumeEngineTests(unittest.TestCase):
+    def test_specific_jd_promotes_verified_hospitality_evidence(self):
+        from resume_engine import jd_specific_relevance,jd_requirement_signals,TOPICS
+        jd="Customer Growth Manager: expand existing hotel customer accounts, increase revenue, manage CRM, sales pipeline and hospitality industry relationships."
+        requirements=jd_requirement_signals(jd)
+        hospitality="Gestão de funil de vendas, CRM e campanhas omnichannel para fidelização de clientes."
+        unrelated="Criação de jornadas, protótipos e interfaces no Figma."
+        self.assertGreater(jd_specific_relevance(hospitality,requirements,{"growth"},{"growth"}),
+                           jd_specific_relevance(unrelated,requirements,{"growth"},{"growth"}))
+        plan=build_plan(jd,"Customer Growth Manager")
+        self.assertTrue(any(e["source_index"]==9 for e in plan["experience"]))
+        self.assertTrue(audit(plan,render_docx(plan))["factual_bullets_verified"])
+
+    def test_jd_specific_ranking_does_not_invent_missing_tools(self):
+        jd="Sales Operations Analyst: Sales CRM pipeline analysis, Power BI dashboards and Salesforce administration"
+        plan=build_plan(jd,"Sales Operations Analyst")
+        doc=render_docx(plan)
+        content=" ".join(p.text for p in Document(io.BytesIO(doc)).paragraphs)
+        self.assertTrue(audit(plan,doc)["factual_bullets_verified"])
+        self.assertNotIn("Salesforce administration",content)
+
     def test_document_provenance_survives_download_and_fallback(self):
         from resume_engine import CV_DOCUMENT_VERSION
         for mode in ("hybrid","cached_hybrid","fallback","cached_fallback","deterministic"):

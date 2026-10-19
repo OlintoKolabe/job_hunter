@@ -350,6 +350,21 @@ def build_plan(jd, title):
             gain,replacement,incumbent=max(candidates,key=lambda x:x[0])
             entry["facts"][entry["facts"].index(incumbent)]=replacement
 
+    # Do not bury a directly required and verified product roadmap achievement.
+    if "product" in title_needs and "roadmap" in tokens:
+        selected=[f for row in experiences for f in row["facts"]]
+        if not any("roadmap" in f.casefold() for f in selected):
+            for entry in experiences:
+                options=[f for f in EXPERIENCE[entry["source_index"]]["facts"] if "roadmap" in f.casefold()]
+                if not options:continue
+                candidate=max(options,key=specific)
+                if len(entry["facts"])<3:
+                    entry["facts"].append(candidate)
+                else:
+                    replace=min((f for f in entry["facts"] if not re.search(r"(?:R\\$\\s*\\d|\\d+%|triplicad)",f,re.I)),key=specific,default=None)
+                    if replace is not None:entry["facts"][entry["facts"].index(replace)]=candidate
+                break
+
     # Preserve the baseline's selected evidence, but show its most JD-specific
     # accomplishments first within each employer, without changing chronology.
     for entry in experiences:

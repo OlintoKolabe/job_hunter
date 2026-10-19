@@ -6,6 +6,20 @@ from resume_engine import build_plan,render_docx,audit,EXPERIENCE,CONTACT
 JD="We need a business analyst who manages stakeholder needs, roadmaps and backlog in Azure DevOps, works with product owners and defines user stories. Previous hands-on Oracle programming experience is a plus."
 
 class ResumeEngineTests(unittest.TestCase):
+    def test_business_analyst_prioritizes_stakeholder_translation(self):
+        jd="Business Analyst: gather stakeholder requirements, translate business needs into product deliverables, backlog and user stories."
+        plan=build_plan(jd,"Business Analyst")
+        bullets=[fact for row in plan["experience"] for fact in row["facts"]]
+        self.assertTrue(any("traduzir objetivos de negócio" in fact for fact in bullets))
+        self.assertTrue(audit(plan,render_docx(plan))["factual_bullets_verified"])
+
+    def test_product_roles_protect_documented_roadmap_achievements(self):
+        jd="Senior Product Manager: roadmap strategy, discovery, product B2B payments, stakeholders, project delivery."
+        plan=build_plan(jd,"Senior Product Manager")
+        bullets=[fact for row in plan["experience"] for fact in row["facts"]]
+        self.assertTrue(any("roadmaps de produto" in fact for fact in bullets))
+        self.assertTrue(audit(plan,render_docx(plan))["factual_bullets_verified"])
+
     def test_specific_jd_promotes_verified_hospitality_evidence(self):
         from resume_engine import jd_specific_relevance,jd_requirement_signals,TOPICS
         jd="Customer Growth Manager: expand existing hotel customer accounts, increase revenue, manage CRM, sales pipeline and hospitality industry relationships."

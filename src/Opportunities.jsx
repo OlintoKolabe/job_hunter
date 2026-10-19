@@ -49,6 +49,11 @@ export function OpportunitiesPanel(){
      }
    }
    await enrichAvailable();
+   if(['himalayas','remotive','remoteok'].includes(source)){
+     setCompleted(true);
+     setMessage('Consulta à fonte '+source+' concluída; vagas apresentadas após filtros e exclusões do Histórico.');
+     return;
+   }
    let offset=0;
    let skipped=0;
    for(let n=0;n<180;n++){

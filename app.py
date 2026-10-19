@@ -620,5 +620,5 @@ def home(path: str):
     if DIST.is_dir() and target.is_file() and target.is_relative_to(DIST.resolve()):
         return FileResponse(target)
     if (DIST/"index.html").exists():
-        return FileResponse(DIST/"index.html")
+        return FileResponse(DIST/"index.html",headers={"Cache-Control":"no-store, max-age=0, must-revalidate","Pragma":"no-cache"})
     return JSONResponse({"detail":"Build React não encontrado"},status_code=503)

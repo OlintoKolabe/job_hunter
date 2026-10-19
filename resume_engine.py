@@ -370,7 +370,12 @@ def render_docx(plan):
     for idx in chronology:
         e=detailed.get(idx) or compact[idx]
         if idx not in detailed:
-            doc.add_paragraph(e["role"]+" — "+e["company"]+" | "+e["dates"])
+            heading=doc.add_heading(e["role"]+" — "+e["company"],2)
+            heading.paragraph_format.keep_with_next=True
+            dates=doc.add_paragraph(e["dates"])
+            dates.paragraph_format.keep_with_next=True
+            # Compact experience must still have a factual description.
+            doc.add_paragraph(EXPERIENCE[idx]["facts"][0],style="List Bullet")
             continue
         heading=doc.add_heading(e["role"]+" — "+e["company"],2)
         heading.paragraph_format.keep_with_next=True

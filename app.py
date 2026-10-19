@@ -425,7 +425,7 @@ def mark_job_disposition(payload: JobDisposition, request: Request):
                 return {"saved":True,"already_recorded":True,"state":existing[1]}
             cur.execute("""INSERT INTO jh_history
                 (url,normalized_url,empresa,cargo,pair_key,estado,data,fonte,motivo)
-                VALUES (%s,%s,%s,%s,%s,%s,CURRENT_DATE,%s,%s)""",
+                VALUES (%s,%s,%s,%s,%s,%s,TO_CHAR(CURRENT_DATE,'YYYY-MM-DD'),%s,%s)""",
                 (url,uk,company,title,pk,payload.state,
                  (payload.source or "Caçador")[:120],"Decisão manual na busca"))
     return {"saved":True,"already_recorded":False,"state":payload.state}

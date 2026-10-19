@@ -120,9 +120,9 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{}}){
  const currentMatches=searchedQuery!==''&&searchedQuery===query();
  const sourceKey=v=>String(v||'').toLowerCase().replace(/[^a-z0-9]/g,'');
  const visibleReviews=(currentMatches?reviews:[]).filter(v=>(source==='all'||sourceKey(v.source)===sourceKey(source)||source==='greenhouse'&&sourceKey(v.source)==='greenhouseeu'));
- const unknownModeCount=reviews.filter(v=>(v.needs_verification||[]).includes('modalidade')).length;
- const unknownCountryCount=reviews.filter(v=>(v.needs_verification||[]).includes('pais')).length;
- const combined=new Map();(currentMatches?results:[]).forEach(v=>combined.set(v.url,{...v,confirmed:true}));visibleReviews.forEach(v=>{if(!combined.has(v.url))combined.set(v.url,{...v,confirmed:false})});
+ const unknownModeCount=visibleReviews.filter(v=>(v.needs_verification||[]).includes('modalidade')).length;
+ const unknownCountryCount=visibleReviews.filter(v=>(v.needs_verification||[]).includes('pais')).length;
+ const combined=new Map();(currentMatches?results:[]).filter(v=>!v.needs_verification?.length).forEach(v=>combined.set(v.url,{...v,confirmed:true}));
  const scoreStatus=v=>{
    if(v.ranking?.score!==null&&v.ranking?.score!==undefined)return 'scored';
    if(scoringFailed.includes(v.url))return 'failed';

@@ -1,5 +1,6 @@
 """Search filters with conservative inclusion: unknown location/mode/date are not matches."""
 from datetime import datetime,timezone,timedelta
+import hashlib
 import re,unicodedata
 from urllib.parse import urlsplit
 
@@ -220,15 +221,15 @@ def analyze_filters(jobs,roles=DEFAULT_ROLES,country="BR",mode="remote",days=30,
     if country not in COUNTRY_NAMES:raise ValueError("País desconhecido")
     if mode not in ("remote","hybrid","onsite","all"):raise ValueError("Regime inválido")
     if days not in (0,1,3,7,15,30,60,90):raise ValueError("Período inválido")
-    if sort not in ("score","newest","oldest"):raise ValueError("Ordem inválida")
+    if sort not in ("score","recommendation","newest","oldest"):raise ValueError("Ordem inválida")
     confirmed=[];review=[];reasons={}
     for j in jobs:
         bucket,reason=classify(j,terms,country,mode,days)
         reasons[bucket+(":"+reason if reason else "")]=reasons.get(bucket+(":"+reason if reason else ""),0)+1
-        if bucket=="confirmed":confirmed.append({**j,"detected_mode":detect_work_mode(j,signals(j,roles)),"jd_evidence":signals(j,roles),"ranking":score_job(j,roles),"description":""})
-        elif bucket=="review":review.append({**j,"detected_mode":detect_work_mode(j,signals(j,roles)),"jd_evidence":signals(j,roles),"ranking":score_job(j,roles),"description":"","needs_verification":reason.split(",")})
+        if bucket=="confirmed":confirmed.append({**j,"detected_mode":detect_work_mode(j,signals(j,roles)),"jd_evidence":signals(j,roles),"ranking":score_job(j,roles),"_listing_jd_hash":hashlib.sha256(str(j.get("description") or "").encode()).hexdigest() if len(str(j.get("description") or ""))>=300 else None,"description":""})
+        elif bucket=="review":review.append({**j,"detected_mode":detect_work_mode(j,signals(j,roles)),"jd_evidence":signals(j,roles),"ranking":score_job(j,roles),"_listing_jd_hash":hashlib.sha256(str(j.get("description") or "").encode()).hexdigest() if len(str(j.get("description") or ""))>=300 else None,"description":"","needs_verification":reason.split(",")})
     order=lambda j:parse_date(j.get("published")) or datetime.min.replace(tzinfo=timezone.utc)
-    if sort=="score":
+    if sort in ("score","recommendation"):
         key=lambda j:(j["ranking"]["score"] is not None,j["ranking"]["score"] if j["ranking"]["score"] is not None else -1,-j["ranking"]["unverified_count"],order(j))
         confirmed.sort(key=key,reverse=True)
         review.sort(key=key,reverse=True)

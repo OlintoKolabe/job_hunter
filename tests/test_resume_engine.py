@@ -19,6 +19,18 @@ class ResumeEngineTests(unittest.TestCase):
             self.assertIn("Build=abcdef123456",tag)
             self.assertIn("JD="+plan["jd_sha256"][:16],tag)
             self.assertTrue(audit(plan,render_docx(plan))["factual_bullets_verified"])
+    def test_ai_workflow_requirement_uses_documented_tools_not_invented_expertise(self):
+        jd="Senior Product Manager: product discovery, roadmap, project delivery, stakeholders; proactively apply AI-driven tools in product workflows."
+        p=build_plan(jd,"Senior Product Manager")
+        chosen=[f for e in p["experience"] for f in e["facts"]]
+        self.assertTrue(any("Codex" in f and "Claude Code" in f for f in chosen))
+        rendered=" ".join(x.text for x in Document(io.BytesIO(render_docx(p))).paragraphs)
+        self.assertNotIn("engenheiro de inteligência artificial",rendered.lower())
+
+    def test_business_analysis_does_not_promote_generic_marketing_role(self):
+        p=build_plan("Analyze business requirements, stakeholder needs, backlog and user stories; develop functional specifications.","Business Analyst")
+        self.assertNotIn("Aviva",{e["company"] for e in p["experience"]})
+
     def test_encoded_job_html_does_not_rank_benefit_boilerplate(self):
         from resume_engine import relevant_jd_text
         html_jd="&lt;div&gt;Company introduction.&lt;/div&gt;&lt;p&gt;Role expectations: Deliver roadmaps, product discovery and stakeholder alignment.&lt;/p&gt;&lt;p&gt;Why work for us? Unlimited fruit and snacks.&lt;/p&gt;"

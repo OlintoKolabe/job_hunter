@@ -388,6 +388,48 @@ def jd_enrich(request: Request, payload: JDRequest):
             result,coverage=hydrate_jobs(cur,rows,payload.roles,url_key,limit=10)
     return {"items":result,"jd_coverage":coverage}
 
+class JobDisposition(BaseModel):
+    url: str
+    title: str
+    company: str
+    state: str
+    source: str = ""
+
+@app.post("/api/jobs/disposition")
+def mark_job_disposition(payload: JobDisposition, request: Request):
+    """Persist an explicit decision in the same history used by search exclusion.
+    Idempotent by URL or company+role: one vacancy contributes one history entry.
+    """
+    require_auth(request)
+    if payload.state not in ("Candidatado", "Descartado"):
+        raise HTTPException(400, "Estado deve ser Candidatado ou Descartado")
+    url=payload.url.strip()[:2000]
+    company=payload.company.strip()[:300]
+    title=payload.title.strip()[:300]
+    uk=url_key(url)
+    if not uk or not title:
+        raise HTTPException(400, "Vaga sem URL ou cargo válido")
+    pk=pair_key(company,title) if company else ""
+    with psycopg.connect(DATABASE,connect_timeout=8) as conn:
+        with conn.cursor() as cur:
+            # Serialize decisions on the same vacancy to avoid duplicate history rows.
+            cur.execute("SELECT pg_advisory_xact_lock(hashtext(%s))",("job-disposition:"+uk,))
+            cur.execute("""SELECT id,estado FROM jh_history
+                WHERE normalized_url=%s OR (pair_key=%s AND %s<>'' )
+                ORDER BY CASE WHEN normalized_url=%s THEN 0 ELSE 1 END,id LIMIT 1""",(uk,pk,pk,uk))
+            existing=cur.fetchone()
+            if existing:
+                # Preserve the previous explicit decision: avoid silent overwrites.
+                if existing[1]!=payload.state:
+                    raise HTTPException(409,"Vaga já está no histórico como "+str(existing[1]))
+                return {"saved":True,"already_recorded":True,"state":existing[1]}
+            cur.execute("""INSERT INTO jh_history
+                (url,normalized_url,empresa,cargo,pair_key,estado,data,fonte,motivo)
+                VALUES (%s,%s,%s,%s,%s,%s,TO_CHAR(CURRENT_DATE,'YYYY-MM-DD'),%s,%s)""",
+                (url,uk,company,title,pk,payload.state,
+                 (payload.source or "Caçador")[:120],"Decisão manual na busca"))
+    return {"saved":True,"already_recorded":False,"state":payload.state}
+
 @app.get("/api/history")
 def history(request: Request, q: str="", state: str="", limit:int=50, offset:int=0):
     require_auth(request)

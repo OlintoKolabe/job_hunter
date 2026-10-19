@@ -87,18 +87,21 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{}}){
  }
  const [decisionNow,setDecisionNow]=useState([]),[hiddenDecisions,setHiddenDecisions]=useState([]);
  async function markDecision(job,state){
+   if(decisionNow.includes(job.url))return;
    setDecisionNow(prev=>[...prev,job.url]);setError('');
    try{
      const response=await fetch('/api/jobs/disposition',{method:'POST',headers:{'Content-Type':'application/json'},
-       body:JSON.stringify({url:job.url,title:job.title,company:job.company,state,source:job.source||'Caçador'})});
-     const data=await response.json();
-     if(!response.ok)throw Error(data.detail||'Falha ao salvar decisão');
+       signal:AbortSignal.timeout(15000),
+       body:JSON.stringify({url:job.url,title:job.title,company:job.company||'',state,source:job.source||'Caçador'})});
+     const data=await response.json().catch(()=>({}));
+     if(!response.ok)throw Error(typeof data.detail==='string'?data.detail:('Não foi possível salvar a decisão (HTTP '+response.status+').'));
+     if(data.saved!==true||data.state!==state)throw Error('O servidor não confirmou a decisão. A vaga permaneceu na lista.');
      onDecisionSaved();
      setHiddenDecisions(prev=>[...new Set([...prev,job.url])]);
      setResults(prev=>prev.filter(x=>x.url!==job.url));
      setReviews(prev=>prev.filter(x=>x.url!==job.url));
      setMessage('Vaga marcada como '+state+'. Salva no Histórico e excluída das próximas buscas.');
-   }catch(e){setError(e.message)}
+   }catch(e){setError('Não foi possível marcar “'+job.title+'” como '+state+': '+(e.name==='TimeoutError'?'servidor demorou a responder; confira o Histórico antes de tentar novamente.':e.message))}
    finally{setDecisionNow(prev=>prev.filter(x=>x!==job.url))}
  }
  const [cvNow,setCvNow]=useState([]);

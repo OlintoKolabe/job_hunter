@@ -49,6 +49,12 @@ export function OpportunitiesPanel(){
      }
    }
    await enrichAvailable();
+   // JSearch is one bounded API query, not a catalog of ATS boards.
+   if(source==='jsearch'){
+     setCompleted(true);
+     setMessage('Busca JSearch concluída: anúncios externos consultados por API (não oficial Indeed).');
+     return;
+   }
    let offset=0;
    let skipped=0;
    for(let n=0;n<180;n++){

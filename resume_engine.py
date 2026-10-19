@@ -234,10 +234,10 @@ def jd_specific_relevance(fact,jd_signals,title_topics,needed):
               "projetos","processos","portfolio","portfólio","orçamento","receita",
               "retencao","retenção","hotels","hotelaria","vendas","financeiro","stakeholders",
               "product","produto","painéis","kpi","okrs","figma","codex","lovable","mineração"}
-    overlap=sum(min(3,len(tokens&words(line)&concrete)) for line in jd_signals[:35])
-    overlap=min(14,overlap)
+    jd_tokens=set().union(*(words(line) for line in jd_signals[:25]))
+    overlap=min(14,len(tokens&jd_tokens&concrete))
     title_bonus=4*len(categories(fact,FACT_TOPICS)&title_topics)
-    return 3*overlap+title_bonus+relevance(fact,needed,set().union(*(words(x) for x in jd_signals[:35])))
+    return 3*overlap+title_bonus+relevance(fact,needed,jd_tokens)
 
 def build_plan(jd, title):
     if not jd or not jd.strip():raise ValueError("JD vazio")
@@ -252,13 +252,18 @@ def build_plan(jd, title):
     tokens=words(relevant_jd_text(jd))
     jd_signals=jd_requirement_signals(jd)
     scored=[]
+    jd_evidence_cache={}
+    def specific(f):
+        if f not in jd_evidence_cache:
+            jd_evidence_cache[f]=jd_specific_relevance(f,jd_signals,title_needs,needs)
+        return jd_evidence_cache[f]
     for idx,item in sorted(enumerate(EXPERIENCE),key=lambda x:chronology_index(x[1]),reverse=True):
         def evidence_priority(f):
             directly_relevant=bool(categories(f,FACT_TOPICS)&title_needs)
             quantified=bool(re.search(r"(?:R\\$\\s*\\d|\\d[.,]\\d+%|\\d+%|triplicad)",f,re.I))
-            return jd_specific_relevance(f,jd_signals,title_needs,needs)+(3 if directly_relevant and quantified else 0)
+            return 7*len(categories(f,FACT_TOPICS)&title_needs)+relevance(f,needs,tokens)+(3 if directly_relevant and quantified else 0)
         ordered=sorted(item["facts"],key=lambda f:(-evidence_priority(f),item["facts"].index(f)))
-        strength=sum(max(0,evidence_priority(f)-1) for f in ordered[:3])
+        strength=sum(max(0,relevance(f,needs,tokens)-1) for f in ordered[:3]) + sum(5 for f in ordered[:3] if categories(f,FACT_TOPICS)&title_needs)
         scored.append((idx,item,ordered,strength))
     prioritized=sorted(scored,key=lambda x:(-x[3],-chronology_index(x[1])[0],-chronology_index(x[1])[1]))
     # Evidence is selected per role, not copied into two different sections.
@@ -281,7 +286,7 @@ def build_plan(jd, title):
     for idx,item,facts,score in scored:
         if idx in major:
             cap=3 if score>=8 else 2
-            chosen=[f for f in facts if evidence_priority(f)>0][:cap]
+            chosen=[f for f in facts if relevance(f,needs,tokens)>0][:cap]
             if not chosen:chosen=facts[:1]
             if "growth" in title_needs and "marketing" in item["role"].casefold():
                 quantified=[f for f in facts if re.search(r"(?:R\\$\\s*\\d|\\d[.,]\\d+%|\\d+%|triplicad)",f,re.I) and categories(f,FACT_TOPICS)&title_needs]
@@ -321,6 +326,11 @@ def build_plan(jd, title):
         row=next(e for e in experiences if e["source_index"]==role_idx)
         if replace is not None:row["facts"].remove(replace)
         row["facts"].append(new_fact)
+
+    # Preserve the baseline's selected evidence, but show its most JD-specific
+    # accomplishments first within each employer, without changing chronology.
+    for entry in experiences:
+        entry["facts"].sort(key=lambda f:-specific(f))
 
     label={"analysis":"análise de negócios e levantamento de necessidades","agility":"práticas ágeis e gestão de backlog",
            "project":"gestão de projetos e processos","product":"desenvolvimento de produtos digitais",
@@ -363,11 +373,6 @@ def build_plan(jd, title):
         summary=("Experiência profissional em "+focus+
                  ", com atuação documentada em tecnologia e negócios. "
                  "Histórico de atividades em equipes e projetos de diferentes setores.")
-    # The strongest evidence informs the final positioning without adding new claims.
-    strongest=[f for row in experiences for f in row["facts"]]
-    strongest.sort(key=lambda f:-jd_specific_relevance(f,jd_signals,title_needs,needs))
-    if strongest and jd_specific_relevance(strongest[0],jd_signals,title_needs,needs)>10:
-        summary=summary.rstrip(".")+"; com atuação particularmente alinhada às prioridades desta posição."
     # Only a profile-level statement here, never repeated verbatim from the roles.
     tailored_education=[degree for degree in EDUCATION
                         if "Odontologia" not in degree or not title_needs]

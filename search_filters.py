@@ -174,8 +174,8 @@ def geo_verdict(job,country,evidence=None):
     jd_text=clean_jd(job.get("description") or job.get("jobDescription") or job.get("content"))
     restricted=any(contains_phrase(jd_text,p) for p in FOREIGN_ONLY_MARKERS)
     restricted=restricted or bool(re.search(
-        r"\\b(?:must|required to|need to)\\s+(?:be\\s+)?(?:located|based|reside|live)\\s+in\\s+"
-        r"(?:the\\s+)?(?:united states|usa|u\\.s\\.|canada|europe|uk|united kingdom)\\b",jd_text))
+        r"\b(?:must|required to|need to)\s+(?:be\s+)?(?:located|based|reside|live)\s+in\s+"
+        r"(?:the\s+)?(?:united states|usa|u\.s\.|canada|europe|uk|united kingdom)\b",jd_text))
     if any(contains_phrase(loc,p) for p in FOREIGN_ONLY_MARKERS) or "foreign_only" in jd_geo or restricted:
         if country in ("BR","LATAM"):return "excluded"
     if country=="BR" and any(contains_phrase(loc+" "+jd_text,p) for p in BRAZIL_EXCLUSIONS):

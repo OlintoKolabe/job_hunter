@@ -33,6 +33,32 @@ class BoardHTML(HTMLParser):
             self.links.append((self.href," ".join(self.buffer).strip()))
             self.href=None;self.buffer=[]
 
+class QuickinJobHTML(HTMLParser):
+    """Extract displayed vacancy text, excluding scripts and styles."""
+    def __init__(self):
+        super().__init__();self.parts=[];self.skip=0
+    def handle_starttag(self,tag,attrs):
+        if tag in ("script","style","noscript"):self.skip+=1
+    def handle_endtag(self,tag):
+        if tag in ("script","style","noscript") and self.skip:self.skip-=1
+    def handle_data(self,data):
+        if not self.skip and data.strip():self.parts.append(data.strip())
+
+def quickin_detail(url):
+    """Populate only evidence visible on the published posting."""
+    raw,_=read(url,size=500000)
+    page=QuickinJobHTML();page.feed(raw.decode("utf-8","replace"))
+    body=" ".join(page.parts)[:18000]
+    # Quickin job headings show city and modality together (e.g. SP Remote).
+    prefix=body[:420]
+    city=r"(?:S[aã]o Paulo|SP|Rio de Janeiro|RJ|Belo Horizonte|Bras[ií]lia|Curitiba|Goi[aâ]nia|Brasil|Brazil)"
+    mode=r"(?:Remote|Remoto|Remota|Hybrid|H[ií]brido|On-site|Onsite|Presencial)"
+    match=re.search(r"(?<!\\w)"+city+r"(?:\\s*[,/\\-]\\s*|\\s+)"+mode+r"(?!\\w)",prefix,re.I)
+    location=match.group(0) if match else ""
+    if location and re.match(r"^(?:SP|RJ)\\b",location,re.I):
+        location=("São Paulo" if location[:2].upper()=="SP" else "Rio de Janeiro")+location[2:]
+    return location,body
+
 def extra_pull(source,slug):
     jobs=[]
     if source=="greenhouse_eu":
@@ -121,7 +147,17 @@ def extra_pull(source,slug):
                 if url in seen:continue
                 seen.add(url);new+=1
                 v=item(slug,title,url,"",source)
-                if v:jobs.append(v)
+                if v:
+                    # The board link alone has no location or work mode.
+                    # Only inspect roles relevant to search, never invent eligibility.
+                    if TITLE_RE.search(v["title"]):
+                        try:
+                            location,description=quickin_detail(url)
+                            v["location"]=location
+                            v["description"]=description
+                        except (urllib.error.URLError,ValueError,TimeoutError):
+                            pass
+                    jobs.append(v)
             if new==0:break
         return jobs,"ok"
     if source=="solides":

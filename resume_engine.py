@@ -214,6 +214,31 @@ def relevance(fact, required, jd_words):
     matched=categories(fact,FACT_TOPICS)&required
     specificity=min(3,len(words(fact)&jd_words))
     return 4*len(matched)+specificity
+def jd_requirement_signals(jd):
+    """Extract concrete vacancy phrases, ignoring generic employer marketing text."""
+    text=relevant_jd_text(jd)
+    lines=[re.sub(r"\\s+"," ",line).strip(" •-:") for line in text.splitlines()]
+    lines=[line for line in lines if 22<=len(line)<=440]
+    markers=("require","responsib","accountabil","experien","skills","requisit","obrigat","desej","must","what you","you will","você vai","competên","atuação","fluente","proficiên")
+    head=" ".join(lines[:4]).lower()
+    focused=[line for line in lines if any(k in line.lower() for k in markers)]
+    if len(focused)<3:focused=lines
+    return focused[:60]
+
+def jd_specific_relevance(fact,jd_signals,title_topics,needed):
+    """Reward shared concrete terms and professional evidence, not broad category alone."""
+    tokens=words(fact)
+    if not tokens:return 0
+    concrete={"crm","google","ads","analytics","azure","devops","jira","confluence","scrum",
+              "kanban","roadmap","backlog","growth","clientes","customer","marketing",
+              "projetos","processos","portfolio","portfólio","orçamento","receita",
+              "retencao","retenção","hotels","hotelaria","vendas","financeiro","stakeholders",
+              "product","produto","painéis","kpi","okrs","figma","codex","lovable","mineração"}
+    overlap=sum(min(3,len(tokens&words(line)&concrete)) for line in jd_signals[:35])
+    overlap=min(14,overlap)
+    title_bonus=4*len(categories(fact,FACT_TOPICS)&title_topics)
+    return 3*overlap+title_bonus+relevance(fact,needed,set().union(*(words(x) for x in jd_signals[:35])))
+
 def build_plan(jd, title):
     if not jd or not jd.strip():raise ValueError("JD vazio")
     # Job title is high-signal; descriptions often mention unrelated tools and domains.
@@ -225,14 +250,15 @@ def build_plan(jd, title):
         title_needs.add("growth")
         needs.add("growth")
     tokens=words(relevant_jd_text(jd))
+    jd_signals=jd_requirement_signals(jd)
     scored=[]
     for idx,item in sorted(enumerate(EXPERIENCE),key=lambda x:chronology_index(x[1]),reverse=True):
         def evidence_priority(f):
             directly_relevant=bool(categories(f,FACT_TOPICS)&title_needs)
             quantified=bool(re.search(r"(?:R\\$\\s*\\d|\\d[.,]\\d+%|\\d+%|triplicad)",f,re.I))
-            return 7*len(categories(f,FACT_TOPICS)&title_needs)+relevance(f,needs,tokens)+(3 if directly_relevant and quantified else 0)
+            return jd_specific_relevance(f,jd_signals,title_needs,needs)+(3 if directly_relevant and quantified else 0)
         ordered=sorted(item["facts"],key=lambda f:(-evidence_priority(f),item["facts"].index(f)))
-        strength=sum(max(0,relevance(f,needs,tokens)-1) for f in ordered[:3]) + sum(5 for f in ordered[:3] if categories(f,FACT_TOPICS)&title_needs)
+        strength=sum(max(0,evidence_priority(f)-1) for f in ordered[:3])
         scored.append((idx,item,ordered,strength))
     prioritized=sorted(scored,key=lambda x:(-x[3],-chronology_index(x[1])[0],-chronology_index(x[1])[1]))
     # Evidence is selected per role, not copied into two different sections.
@@ -255,7 +281,7 @@ def build_plan(jd, title):
     for idx,item,facts,score in scored:
         if idx in major:
             cap=3 if score>=8 else 2
-            chosen=[f for f in facts if relevance(f,needs,tokens)>0][:cap]
+            chosen=[f for f in facts if evidence_priority(f)>0][:cap]
             if not chosen:chosen=facts[:1]
             if "growth" in title_needs and "marketing" in item["role"].casefold():
                 quantified=[f for f in facts if re.search(r"(?:R\\$\\s*\\d|\\d[.,]\\d+%|\\d+%|triplicad)",f,re.I) and categories(f,FACT_TOPICS)&title_needs]
@@ -337,6 +363,11 @@ def build_plan(jd, title):
         summary=("Experiência profissional em "+focus+
                  ", com atuação documentada em tecnologia e negócios. "
                  "Histórico de atividades em equipes e projetos de diferentes setores.")
+    # The strongest evidence informs the final positioning without adding new claims.
+    strongest=[f for row in experiences for f in row["facts"]]
+    strongest.sort(key=lambda f:-jd_specific_relevance(f,jd_signals,title_needs,needs))
+    if strongest and jd_specific_relevance(strongest[0],jd_signals,title_needs,needs)>10:
+        summary=summary.rstrip(".")+"; com atuação particularmente alinhada às prioridades desta posição."
     # Only a profile-level statement here, never repeated verbatim from the roles.
     tailored_education=[degree for degree in EDUCATION
                         if "Odontologia" not in degree or not title_needs]

@@ -222,8 +222,8 @@ class Phase3ContractTests(unittest.TestCase):
         from search_filters import analyze_filters
         confirmed,review,counts=analyze_filters([{"title":"Gerente de Produto","url":"https://example.com/job","location":"Brasil","published":""}],"Product Manager","BR","remote",30)
         self.assertEqual(len(confirmed),0)
-        self.assertEqual(len(review),1)
-        self.assertEqual(review[0]["needs_verification"],["modalidade","data"])
+        self.assertEqual(len(review),0)
+        self.assertEqual(counts.get("excluded:data"),1)
 
     def test_known_wrong_mode_excluded(self):
         from search_filters import analyze_filters
@@ -322,7 +322,7 @@ class Phase3ContractTests(unittest.TestCase):
         self.assertEqual(len(confirmed),1)
         recent,review,_=analyze_filters(rows,country="BR",mode="remote",days=30)
         self.assertFalse(recent)
-        self.assertEqual(len(review),1)
+        self.assertEqual(len(review),0)
 
     def test_collectors_preserve_titles_before_relevance(self):
         from collectors import pull

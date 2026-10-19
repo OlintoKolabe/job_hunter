@@ -95,10 +95,17 @@ def extra_pull(source,slug):
                 url=row.get("career_url") or (
                     "https://jobs.quickin.io/"+urllib.parse.quote(slug,safe="")+"/apply?job_id="+urllib.parse.quote(str(job_id),safe="")
                     if job_id else "")
-                location=", ".join(str(row[x]) for x in ("city","region","country") if row.get(x))
-                description=(row.get("description") or "")+" "+(row.get("requirements") or "")
-                value=item(name,title,url,location,source,row.get("created_at"),description)
-                if value:jobs.append(value)
+                def text_field(value):
+                    return value if isinstance(value,str) else ""
+                location=", ".join(text_field(row.get(x)) for x in ("city","region","country") if text_field(row.get(x)))
+                mode=next((text_field(row.get(x)) for x in ("workplaceType","workplace_type","workMode","modality","job_type") if text_field(row.get(x))),"")
+                description=" ".join(text_field(row.get(x)) for x in ("description","requirements"))
+                value=item(name,title,url,location,source,row.get("created_at") or row.get("published_at"),description)
+                if value:
+                    if mode:value["workplaceType"]=mode
+                    if isinstance(row.get("remote"),bool):value["remote"]=row["remote"]
+                    if isinstance(row.get("isRemote"),bool):value["remote"]=row["isRemote"]
+                    jobs.append(value)
             return jobs,"ok"
         except (ValueError,TypeError,KeyError,urllib.error.URLError,TimeoutError,json.JSONDecodeError):
             jobs=[]

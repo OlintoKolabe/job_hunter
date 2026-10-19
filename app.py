@@ -511,10 +511,12 @@ def mark_job_disposition(payload: JobDisposition, request: Request):
                 ORDER BY CASE WHEN normalized_url=%s THEN 0 ELSE 1 END,id LIMIT 1""",(uk,pk,pk,uk))
             existing=cur.fetchone()
             if existing:
-                # Preserve the previous explicit decision: avoid silent overwrites.
                 if existing[1]!=payload.state:
-                    raise HTTPException(409,"Vaga já está no histórico como "+str(existing[1]))
-                return {"saved":True,"already_recorded":True,"state":existing[1]}
+                    # An explicit click changes the recorded status rather than silently failing.
+                    cur.execute("""UPDATE jh_history SET estado=%s, motivo=%s
+                        WHERE id=%s""",(payload.state,"Decisão alterada manualmente na busca",existing[0]))
+                    return {"saved":True,"already_recorded":True,"updated":True,"state":payload.state}
+                return {"saved":True,"already_recorded":True,"updated":False,"state":existing[1]}
             cur.execute("""INSERT INTO jh_history
                 (url,normalized_url,empresa,cargo,pair_key,estado,data,fonte,motivo)
                 VALUES (%s,%s,%s,%s,%s,%s,TO_CHAR(CURRENT_DATE,'YYYY-MM-DD'),%s,%s)""",

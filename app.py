@@ -407,16 +407,16 @@ def mark_job_disposition(payload: JobDisposition, request: Request):
     company=payload.company.strip()[:300]
     title=payload.title.strip()[:300]
     uk=url_key(url)
-    if not uk or not company or not title:
-        raise HTTPException(400, "Vaga sem URL, empresa ou cargo válido")
-    pk=pair_key(company,title)
+    if not uk or not title:
+        raise HTTPException(400, "Vaga sem URL ou cargo válido")
+    pk=pair_key(company,title) if company else ""
     with psycopg.connect(DATABASE,connect_timeout=8) as conn:
         with conn.cursor() as cur:
             # Serialize decisions on the same vacancy to avoid duplicate history rows.
             cur.execute("SELECT pg_advisory_xact_lock(hashtext(%s))",("job-disposition:"+uk,))
             cur.execute("""SELECT id,estado FROM jh_history
-                WHERE normalized_url=%s OR pair_key=%s
-                ORDER BY CASE WHEN normalized_url=%s THEN 0 ELSE 1 END,id LIMIT 1""",(uk,pk,uk))
+                WHERE normalized_url=%s OR (pair_key=%s AND %s<>'' )
+                ORDER BY CASE WHEN normalized_url=%s THEN 0 ELSE 1 END,id LIMIT 1""",(uk,pk,pk,uk))
             existing=cur.fetchone()
             if existing:
                 # Preserve the previous explicit decision: avoid silent overwrites.

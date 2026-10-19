@@ -169,6 +169,53 @@ def exclude_history_matches(items,review,known_urls,known_pairs):
     pending=[job for job in review if not is_known(job)]
     return confirmed,pending,(len(items)+len(review)-len(confirmed)-len(pending))
 
+def restore_persisted_scores(cursor, jobs, roles, url_key):
+    """Restore only version-matched scores for the current, verified JD content.
+
+    No remote fetch or AI invocation: the initial search stays responsive.
+    Unverified jobs must never enter this path.
+    """
+    from score_repository import PROFILE_VERSION, RUBRIC_VERSION, key_for
+    if not jobs:
+        return jobs, 0
+    keys = [url_key(j.get("url", "")) for j in jobs]
+    cursor.execute("""SELECT s.normalized_url, s.jd_hash, s.result, s.model,
+                             d.content_hash, d.fetched_at
+        FROM jh_score_cache s
+        LEFT JOIN jh_jd_cache d ON d.normalized_url=s.normalized_url
+        WHERE s.normalized_url = ANY(%s)
+          AND s.profile_version=%s AND s.rubric_version=%s AND s.roles_hash=%s
+        ORDER BY s.created_at DESC""",
+        (keys, PROFILE_VERSION, RUBRIC_VERSION, key_for(roles)))
+    require_hybrid = os.getenv("JH_AI_ENABLED") == "1" and bool(os.getenv("OPENAI_API_KEY"))
+    from datetime import datetime, timezone, timedelta
+    now = datetime.now(timezone.utc)
+    by_url = {}
+    for key, jd_hash, result, model, cache_hash, fetched_at in cursor.fetchall():
+        if key in by_url or not isinstance(result, dict):
+            continue
+        if require_hybrid and model not in ("hybrid", "ai_error", "hard_exclusion"):
+            continue
+        if result.get("score") is None and not (require_hybrid and model == "hybrid"):
+            continue
+        by_url[key] = (jd_hash, result, cache_hash, fetched_at)
+    restored = 0
+    output = []
+    for job, key in zip(jobs, keys):
+        candidate = by_url.get(key)
+        original_description = str(job.get("description") or "")
+        expected = hashlib.sha256(original_description.encode()).hexdigest() if len(original_description) >= 300 else None
+        if candidate:
+            jd_hash, result, cache_hash, fetched_at = candidate
+            fresh = fetched_at is not None and fetched_at >= now - timedelta(days=7)
+            if (expected and expected == jd_hash) or (not expected and fresh and cache_hash == jd_hash):
+                output.append({**job, "ranking": result, "jd_status": "cache"})
+                restored += 1
+                continue
+        output.append({**job, "ranking": None, "jd_status": "pendente"})
+    return output, restored
+
+
 @app.post("/api/search-jobs")
 def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:str="remote",days:int=30,sort:str="newest",source:str="all"):
     require_auth(request)
@@ -215,7 +262,11 @@ def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:
     pending=flagged[len(visible):]
     # Initial results must not wait for scoring or open another database connection.
     coverage={"cached":0,"fetched":0,"missing":0,"not_attempted":len(visible)}
-    visible=[{**j,"ranking":None,"jd_status":"pendente"} for j in visible]
+    with psycopg.connect(DATABASE,connect_timeout=7) as score_conn:
+        with score_conn.cursor() as score_cur:
+            visible,restored=restore_persisted_scores(score_cur,visible,roles,url_key)
+    coverage["cached"]=restored
+    coverage["not_attempted"]=len(visible)-restored
     pending=[{**j,"ranking":None,"jd_status":"avaliacao_manual"} for j in pending]
     # Pending eligibility is not automatically enriched or scored.
     fresh_count=len(visible)
@@ -381,7 +432,11 @@ def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False
     pending=flagged[len(visible):]
     # Initial results must not wait for scoring or open another database connection.
     coverage={"cached":0,"fetched":0,"missing":0,"not_attempted":len(visible)}
-    visible=[{**j,"ranking":None,"jd_status":"pendente"} for j in visible]
+    with psycopg.connect(DATABASE,connect_timeout=7) as score_conn:
+        with score_conn.cursor() as score_cur:
+            visible,restored=restore_persisted_scores(score_cur,visible,roles,url_key)
+    coverage["cached"]=restored
+    coverage["not_attempted"]=len(visible)-restored
     pending=[{**j,"ranking":None,"jd_status":"avaliacao_manual"} for j in pending]
     # Pending eligibility is not automatically enriched or scored.
     fresh_count=len(visible)

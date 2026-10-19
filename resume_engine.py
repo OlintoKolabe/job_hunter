@@ -337,7 +337,10 @@ def build_plan(jd, title):
                  ", com atuação documentada em tecnologia e negócios. "
                  "Histórico de atividades em equipes e projetos de diferentes setores.")
     # Only a profile-level statement here, never repeated verbatim from the roles.
+    tailored_education=[degree for degree in EDUCATION
+                        if "Odontologia" not in degree or not title_needs]
     return {"title":title[:120],"summary":summary,"focus_topics":top_topics,
+            "education":tailored_education,
             "experience":experiences,"additional_experience":older,
             "jd_sha256":hashlib.sha256(jd.encode()).hexdigest(),"engine":ENGINE_VERSION}
 
@@ -373,7 +376,7 @@ def render_docx(plan):
         dates=doc.add_paragraph(e["dates"]);dates.paragraph_format.keep_with_next=True
         for fact in e["facts"]:doc.add_paragraph(fact,style="List Bullet")
     doc.add_heading("Formação e certificações",1)
-    for degree in EDUCATION:doc.add_paragraph(degree,style="List Bullet")
+    for degree in plan.get("education",EDUCATION):doc.add_paragraph(degree,style="List Bullet")
     doc.add_paragraph("Idiomas: Português (nativo); Inglês (profissional); Italiano (intermediário).")
     out=io.BytesIO();doc.save(out);return out.getvalue()
 

@@ -123,17 +123,25 @@ def detect_work_mode(job,evidence=None):
         if o:return "onsite"
         if r:return "remote"
         return None
+    # Explicitly conflicting signals are not proof of remote eligibility.
+    jd=evidence.get("work_evidence") or []
+    if "onsite_only" in jd:return "onsite"
+    structured=[]
     for key in ("workplaceType","workArrangement","remoteType","workMode","workplace"):
         value=job.get(key)
         if isinstance(value,str):
-            result=detect(normalize(value))
-            if result:return result
+            detected=detect(normalize(value))
+            if detected:structured.append(detected)
+    if len(set(structured))>1:return None
+    if structured:
+        if job.get("remote") is True and structured[0]!="remote":return None
+        return structured[0]
+    result=detect(normalize(job.get("location")))
+    if result:
+        if job.get("remote") is True and result!="remote":return None
+        return result
     # False does not establish onsite: it can also mean hybrid or unspecified.
     if job.get("remote") is True:return "remote"
-    result=detect(normalize(job.get("location")))
-    if result:return result
-    jd=evidence.get("work_evidence") or []
-    if "onsite_only" in jd:return "onsite"
     if "remote" in jd:return "remote"
     return None
 

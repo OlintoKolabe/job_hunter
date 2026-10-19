@@ -201,12 +201,14 @@ def classify(job,terms,country,mode,days):
     if geo=="excluded":return "excluded","pais"
     country_ok=geo=="eligible"
     published=parse_date(job.get("published"))
-    date_ok=not days or (published is not None and datetime.now(timezone.utc)-timedelta(days=days)<=published<=datetime.now(timezone.utc)+timedelta(days=1))
-    if days and published and not date_ok:return "excluded","data"
+    # A requested publication window requires an actual, verifiable date.
+    # Undated listings are available only under "Qualquer período".
+    now=datetime.now(timezone.utc)
+    if days and (published is None or not now-timedelta(days=days)<=published<=now):
+        return "excluded","data"
     unknown=[]
     if not mode_ok:unknown.append("modalidade")
     if not country_ok:unknown.append("pais")
-    if days and not published:unknown.append("data")
     if unknown:return "review",",".join(unknown)
     return "confirmed",""
 

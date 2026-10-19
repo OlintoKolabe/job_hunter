@@ -50,7 +50,7 @@ def select_prompt_evidence(plan,jd,max_chars=11500):
     output=[];length=0;per_role={}
     for fact in ranked:
         idx=int(fact["id"].split(":")[0])
-        if per_role.get(idx,0)>=5:continue
+        # Include all documented career evidence whenever the prompt budget permits.
         line=f'{fact["id"]} | {fact["empresa"]} | {fact["fato"]}'
         if length+len(line)>max_chars:continue
         output.append(fact)

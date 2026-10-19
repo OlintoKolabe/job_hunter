@@ -133,6 +133,8 @@ def detect_work_mode(job,evidence=None):
             detected=detect(normalize(value))
             if detected:structured.append(detected)
     if len(set(structured))>1:return None
+    # A strict onsite statement overrides a generic remote flag.
+    if structured and "remote" in structured and "onsite_only" in jd:return "onsite"
     if structured:
         if job.get("remote") is True and structured[0]!="remote":return None
         return structured[0]
@@ -167,9 +169,16 @@ def geo_verdict(job,country,evidence=None):
         elif isinstance(value,list):parts.extend(str(v) for v in value if isinstance(v,str))
     loc=fold(" ".join(parts))
     jd_geo=evidence.get("geography_evidence") or []
-    if any(contains_phrase(loc,p) for p in FOREIGN_ONLY_MARKERS) or "foreign_only" in jd_geo:
+    # Job descriptions may narrow a multi-country/location heading.
+    from jd_signals import clean_jd
+    jd_text=clean_jd(job.get("description") or job.get("jobDescription") or job.get("content"))
+    restricted=any(contains_phrase(jd_text,p) for p in FOREIGN_ONLY_MARKERS)
+    restricted=restricted or bool(re.search(
+        r"\\b(?:must|required to|need to)\\s+(?:be\\s+)?(?:located|based|reside|live)\\s+in\\s+"
+        r"(?:the\\s+)?(?:united states|usa|u\\.s\\.|canada|europe|uk|united kingdom)\\b",jd_text))
+    if any(contains_phrase(loc,p) for p in FOREIGN_ONLY_MARKERS) or "foreign_only" in jd_geo or restricted:
         if country in ("BR","LATAM"):return "excluded"
-    if country=="BR" and any(contains_phrase(loc,p) for p in BRAZIL_EXCLUSIONS):
+    if country=="BR" and any(contains_phrase(loc+" "+jd_text,p) for p in BRAZIL_EXCLUSIONS):
         return "excluded"
     # A bare "US"/"USA" is an explicit US job location, not unknown Brazil eligibility.
     us_only=any(contains_phrase(loc,p) for p in ("us","usa","united states","u.s.","united states of america"))

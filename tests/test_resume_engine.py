@@ -223,6 +223,7 @@ class BackendResumeRouteContractTests(unittest.TestCase):
         from fastapi import HTTPException
         from fastapi.responses import StreamingResponse
         from resume_engine import evaluate_rendered_resume
+        from resume_hybrid import traceable_relevance
         node=next(n for n in ast.parse((Path(__file__).parents[1]/"app.py").read_text()).body
                   if isinstance(n,ast.FunctionDef) and n.name=="generate_resume")
         node.decorator_list=[]
@@ -248,6 +249,7 @@ class BackendResumeRouteContractTests(unittest.TestCase):
             "build_plan":build_plan,"apply_hybrid":fake_hybrid,
             "render_docx":render_docx,"audit":audit,
             "evaluate_rendered_resume":evaluate_rendered_resume,
+            "traceable_relevance":traceable_relevance,
             "os":os,"io":io,"StreamingResponse":StreamingResponse}
         exec(compile(unit,"app.py","exec"),ns)
         payload=types.SimpleNamespace(url="https://example.org/vaga1",
@@ -261,5 +263,14 @@ class BackendResumeRouteContractTests(unittest.TestCase):
         self.assertEqual(response.headers["x-cv-mode"],"deterministic")
         self.assertTrue(any("pg_advisory_xact_lock" in query for query in calls))
         self.assertTrue(response.headers["x-document-sha256"])
+        def weakened_hybrid(cur,url,jd_text,plan):
+            trimmed=[{**entry,"facts":entry["facts"][:1]} for entry in plan["experience"]]
+            return {**plan,"experience":trimmed},{"mode":"hybrid","ai_calls":1,"cost_usd":0.0003}
+        ns["apply_hybrid"]=weakened_hybrid
+        weaker=ns["generate_resume"](payload,None)
+        self.assertEqual(weaker.headers["x-cv-mode"],"quality_fallback")
+        async def gather_weaker():return b"".join([part async for part in weaker.body_iterator])
+        weaker_doc=Document(io.BytesIO(asyncio.run(gather_weaker())))
+        self.assertIn("AI=quality_fallback",weaker_doc.core_properties.keywords)
 
 if __name__=="__main__":unittest.main()

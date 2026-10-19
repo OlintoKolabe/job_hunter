@@ -13,4 +13,9 @@ def flag_new_jobs(conn, jobs, normalize_url):
             ON CONFLICT(normalized_url) DO NOTHING
             RETURNING normalized_url""",(keys,))
         first={r[0] for r in cur.fetchall()}
+        # Earlier evaluations existed before first-discovery tracking.
+        cur.execute("""SELECT DISTINCT normalized_url FROM jh_score_cache
+            WHERE normalized_url=ANY(%s::text[]) AND result->>'score' IS NOT NULL""",(keys,))
+        already_scored={r[0] for r in cur.fetchall()}
+        first.difference_update(already_scored)
     return [{**job,"is_new":normalize_url(job.get("url","")) in first} for job in jobs]

@@ -195,4 +195,52 @@ class ResumeEngineTests(unittest.TestCase):
 
     def test_empty_jd_rejected(self):
         with self.assertRaises(ValueError):build_plan("  ","A")
+
+class BackendResumeRouteContractTests(unittest.TestCase):
+    """Execute the actual backend endpoint body with isolated DB/AI boundaries."""
+    def test_route_returns_a_reopened_provenance_docx(self):
+        import ast,asyncio,os,types
+        from pathlib import Path
+        from fastapi import HTTPException
+        from fastapi.responses import StreamingResponse
+        from resume_engine import evaluate_rendered_resume
+        node=next(n for n in ast.parse((Path(__file__).parents[1]/"app.py").read_text()).body
+                  if isinstance(n,ast.FunctionDef) and n.name=="generate_resume")
+        node.decorator_list=[]
+        for arg in node.args.args:arg.annotation=None
+        node.returns=None
+        unit=ast.fix_missing_locations(ast.Module(body=[node],type_ignores=[]))
+        jd="Product Manager roadmap product discovery stakeholders user research scrum"
+        calls=[]
+        class FakeCursor:
+            def __enter__(self):return self
+            def __exit__(self,*exc):return False
+            def execute(self,sql,args=None):calls.append(sql)
+            def fetchone(self):return (jd,)
+        class FakeConnection:
+            def __enter__(self):return self
+            def __exit__(self,*exc):return False
+            def cursor(self):return FakeCursor()
+        fake_db=types.SimpleNamespace(connect=lambda *args,**kwargs:FakeConnection())
+        def fake_hybrid(cur,url,jd_text,plan):
+            return plan,{"mode":"deterministic","ai_calls":0,"cost_usd":0.0}
+        ns={"require_auth":lambda _:None,"url_key":lambda value:value.replace("https://",""),
+            "psycopg":fake_db,"DATABASE":"fixture","HTTPException":HTTPException,
+            "build_plan":build_plan,"apply_hybrid":fake_hybrid,
+            "render_docx":render_docx,"audit":audit,
+            "evaluate_rendered_resume":evaluate_rendered_resume,
+            "os":os,"io":io,"StreamingResponse":StreamingResponse}
+        exec(compile(unit,"app.py","exec"),ns)
+        payload=types.SimpleNamespace(url="https://example.org/vaga1",
+                                      title="Product Manager",company="Empresa")
+        response=ns["generate_resume"](payload,None)
+        self.assertIsInstance(response,StreamingResponse)
+        async def gather():return b"".join([part async for part in response.body_iterator])
+        data=asyncio.run(gather())
+        parsed=Document(io.BytesIO(data))
+        self.assertIn("AI=deterministic",parsed.core_properties.keywords)
+        self.assertEqual(response.headers["x-cv-mode"],"deterministic")
+        self.assertTrue(any("pg_advisory_xact_lock" in query for query in calls))
+        self.assertTrue(response.headers["x-document-sha256"])
+
 if __name__=="__main__":unittest.main()

@@ -11,7 +11,7 @@ class FirstSeenTests(unittest.TestCase):
               {"url":"https://example.com/jobs/456","title":"PO"}]
         flagged=flag_new_jobs(connection,jobs,lambda url:url.replace("https://",""))
         self.assertEqual([j["is_new"] for j in flagged],[True,False])
-        self.assertIn("ON CONFLICT(normalized_url) DO NOTHING",cur.execute.call_args.args[0])
+        self.assertIn("ON CONFLICT(normalized_url) DO NOTHING",cur.execute.call_args_list[0].args[0])
 
     def test_scored_vacancy_is_not_new(self):
         connection=MagicMock()

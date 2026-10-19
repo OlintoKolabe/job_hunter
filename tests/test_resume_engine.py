@@ -19,6 +19,21 @@ class ResumeEngineTests(unittest.TestCase):
             self.assertIn("Build=abcdef123456",tag)
             self.assertIn("JD="+plan["jd_sha256"][:16],tag)
             self.assertTrue(audit(plan,render_docx(plan))["factual_bullets_verified"])
+    def test_dentistry_never_appears_even_when_jd_requests_it(self):
+        from resume_engine import EDUCATION
+        self.assertFalse(any("odontolog" in degree.casefold() for degree in EDUCATION))
+        for title,jd in [
+            ("Dentista","Formação em Odontologia e atendimento odontológico"),
+            ("Product Manager","Roadmap product discovery stakeholders"),
+            ("Analyst","CRM growth operations")
+        ]:
+            plan=build_plan(jd,title)
+            self.assertFalse(any("odontolog" in degree.casefold() for degree in plan["education"]))
+            doc=Document(io.BytesIO(render_docx(plan)))
+            body=" ".join(p.text for p in doc.paragraphs)
+            self.assertNotIn("Graduação em Odontologia",body)
+            self.assertTrue(audit(plan,render_docx(plan))["factual_bullets_verified"])
+
     def test_tailored_cv_omits_irrelevant_dentistry_degree_without_inventing_degree(self):
         for role in ("Product Manager","Business Analyst","Marketing Manager"):
             plan=build_plan("Roadmap CRM business analysis and stakeholder planning",role)

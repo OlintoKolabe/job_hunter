@@ -26,7 +26,7 @@ export function HistoryPanel(){
  }
  useEffect(()=>{reload()},[q,state,page,period,start,end,oneDay,chosen.join(',')]);
  async function upload(e){let f=e.target.files?.[0];if(!f)return;setNotice('Importando...');try{let r=await fetch('/api/history-import',{method:'POST',headers:{'Content-Type':'text/csv'},body:await f.arrayBuffer()});let d=await r.json();if(!r.ok)throw Error(d.detail||'Erro na importação');setNotice('Importadas: '+d.inserted+' · Duplicadas: '+d.duplicates+' · Inválidas: '+d.invalid);await reload()}catch(e){setNotice(e.message)}e.target.value=''}
- const displayDay=d=>d?d.split('-').reverse().join('/'):'—';
+ const displayDay=d=>d?d.split('-').reverse().join('/'):'Sem data';
  const choosePeriod=p=>{setPage(0);setPeriod(p)};
  return <section className="history-pane">
   <div className="infra-title"><h3>Seu histórico · {stats.total.toLocaleString('pt-BR')} vagas</h3><label className="import-btn">Importar CSV<input type="file" hidden accept=".csv,text/csv" onChange={upload}/></label></div>
@@ -42,7 +42,7 @@ export function HistoryPanel(){
   {notice&&<p role="status" className="notice">{notice}</p>}
   <h4>Resumo do período</h4>
   <div className="history-stats"><span>Candidatado: <b>{daily.candidatado}</b></span><span>Descartado: <b>{daily.descartado}</b></span><span>Total de decisões: <b>{daily.candidatado+daily.descartado}</b></span></div>
-  <div className="table-wrap"><table><thead><tr><th>Dia</th><th>Candidatado</th><th>Descartado</th><th>Total</th><th>Ver vagas</th></tr></thead><tbody>{daily.days.map(d=><tr key={d.day}><td>{displayDay(d.day)}</td><td>{d.candidatado}</td><td>{d.descartado}</td><td>{d.candidatado+d.descartado}</td><td><button type="button" onClick={()=>{setOneDay(d.day);setPage(0);setPeriod('single');setState('')}}>Ver dia</button></td></tr>)}{!daily.days.length&&<tr><td colSpan="5">Nenhuma decisão encontrada neste período.</td></tr>}</tbody></table></div>
+  <div className="table-wrap"><table><thead><tr><th>Dia</th><th>Candidatado</th><th>Descartado</th><th>Total</th><th>Ver vagas</th></tr></thead><tbody>{daily.days.map(d=><tr key={d.day}><td>{displayDay(d.day)}</td><td>{d.candidatado}</td><td>{d.descartado}</td><td>{d.candidatado+d.descartado}</td><td>{d.day?<button type="button" onClick={()=>{setOneDay(d.day);setPage(0);setPeriod('single');setState('')}}>Ver dia</button>:'Sem data para filtrar'}</td></tr>)}{!daily.days.length&&<tr><td colSpan="5">Nenhuma decisão encontrada neste período.</td></tr>}</tbody></table></div>
   <h4>Vagas do período</h4>
   <div className="filters"><input placeholder="Pesquisar empresa ou cargo" value={q} onChange={e=>{setPage(0);setQ(e.target.value)}}/><select value={state} onChange={e=>{setPage(0);setState(e.target.value)}}><option value="">Todos os estados</option><option value="Candidatado">Candidatado</option><option value="Descartado">Descartado</option><option value="triada">Triada</option><option value="encerrada">Encerrada</option></select></div>
   <div className="table-wrap"><table><thead><tr><th>Data</th><th>Empresa</th><th>Cargo</th><th>Estado</th><th>Vaga</th></tr></thead><tbody>{data.items.map(v=><tr key={v.id}><td>{/^\\d{4}-/.test(v.data)?displayDay(v.data):v.data||'—'}</td><td>{v.empresa}</td><td>{v.cargo}</td><td>{v.estado}</td><td>{/^https?:\\/\\//i.test(v.url)?<a href={v.url} target="_blank" rel="noopener noreferrer">Abrir</a>:'—'}</td></tr>)}</tbody></table></div>

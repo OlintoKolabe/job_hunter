@@ -23,6 +23,7 @@ from psycopg.types.json import Jsonb
 from public_remote_feeds import fetch as fetch_public_remote
 from collectors import collect
 from search_filters import analyze_filters,apply_filters,search_terms,discovery_queries,DEFAULT_ROLES,COUNTRIES
+from first_seen import flag_new_jobs
 from catalog_engine import source_tasks,scan
 from catalog_bootstrap import maybe_start
 from jd_enrichment import hydrate_jobs
@@ -207,6 +208,11 @@ def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:
     visible,pending,history_excluded=exclude_history_matches(items,review,known_urls,known_pairs)
     visible=[j for j in visible if not any(b in normalized(j["company"]) for b in ("kraken","payward"))]
     pending=[j for j in pending if not any(b in normalized(j["company"]) for b in ("kraken","payward"))]
+    # First seen is persisted independently of the terminal application history.
+    with psycopg.connect(DATABASE,connect_timeout=8) as seen_conn:
+        flagged=flag_new_jobs(seen_conn,visible+pending,url_key)
+    visible=flagged[:len(visible)]
+    pending=flagged[len(visible):]
     # Initial results must not wait for scoring or open another database connection.
     coverage={"cached":0,"fetched":0,"missing":0,"not_attempted":len(visible)}
     visible=[{**j,"ranking":None,"jd_status":"pendente"} for j in visible]
@@ -368,6 +374,11 @@ def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False
     visible,pending,history_excluded=exclude_history_matches(items,review,known_urls,known_pairs)
     visible=[j for j in visible if not any(b in normalized(j["company"]) for b in ("kraken","payward"))]
     pending=[j for j in pending if not any(b in normalized(j["company"]) for b in ("kraken","payward"))]
+    # First seen is persisted independently of the terminal application history.
+    with psycopg.connect(DATABASE,connect_timeout=8) as seen_conn:
+        flagged=flag_new_jobs(seen_conn,visible+pending,url_key)
+    visible=flagged[:len(visible)]
+    pending=flagged[len(visible):]
     # Initial results must not wait for scoring or open another database connection.
     coverage={"cached":0,"fetched":0,"missing":0,"not_attempted":len(visible)}
     visible=[{**j,"ranking":None,"jd_status":"pendente"} for j in visible]

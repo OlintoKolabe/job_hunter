@@ -7,6 +7,47 @@ JD="Product Manager responsável por roadmap, backlog, pesquisa de usuários e s
 class HybridResumeTests(unittest.TestCase):
     def setUp(self):
         self.plan=build_plan(JD,"Product Manager")
+    def test_ai_can_replace_deterministic_role_selection(self):
+        from resume_engine import EXPERIENCE
+        jd="Marketing campaigns CRM leads acquisition and branding"
+        plan=build_plan(jd,"Marketing Manager")
+        chosen=h.selected_evidence({"evidence_ids":["9:0","9:1","11:0","12:0","13:0","3:3"]},plan)
+        self.assertIsNotNone(chosen)
+        self.assertIn(9,{e["source_index"] for e in chosen})
+        self.assertNotIn(4,{e["source_index"] for e in chosen})
+        self.assertTrue(audit({**plan,"experience":chosen},render_docx({**plan,"experience":chosen}))["factual_bullets_verified"])
+
+    def test_rewrites_keep_provenance(self):
+        proposal={"rewrites":{"1:0":"Criação e gestão de roadmaps de produto, priorizando impacto."}}
+        selected=h.selected_evidence({"evidence_ids":["1:0","1:1","2:0","2:1","4:0","6:0"]},self.plan)
+        prepared=h.apply_validated_rewrites({**self.plan,"experience":selected},proposal)
+        self.assertIsNotNone(prepared)
+        doc=render_docx(prepared)
+        self.assertTrue(audit(prepared,doc)["factual_bullets_verified"])
+    def test_rewrites_reject_fabricated_achievements(self):
+        selected=h.selected_evidence({"evidence_ids":["1:0","1:1","2:0","2:1","4:0","6:0"]},self.plan)
+        self.assertIsNone(h.validate_rewrites(
+            {"rewrites":{"1:0":"Aumentei a receita em 300% criando plataformas financeiras."}},selected))
+
+    def test_encoded_html_jd_clause_extraction(self):
+        jd="&lt;p&gt;Role expectations:&lt;/p&gt;&lt;li&gt;Manage product backlog and roadmap&lt;/li&gt;&lt;li&gt;Preferred: Oracle&lt;/li&gt;&lt;p&gt;Why work for us? Free snacks.&lt;/p&gt;"
+        parsed=h.analyze_requirements(jd,"Product Manager")
+        self.assertTrue(any("roadmap" in clause for clause in parsed["essential"]))
+        self.assertFalse(any("snacks" in clause for clause in parsed["essential"]))
+
+    def test_jd_clause_classification(self):
+        jd="Required roadmap and stakeholder alignment.\nNice to have: Oracle certification.\nLead CRM campaigns."
+        result=h.analyze_requirements(jd,"Product Manager")
+        self.assertEqual(len(result["desirable"]),1)
+        self.assertIn("Oracle",result["desirable"][0])
+
+    def test_jd_coverage_report(self):
+        jd="Coordinate marketing campaigns and CRM; Oracle programming is mandatory."
+        plan=build_plan(jd,"Marketing Manager")
+        result=h.traceable_relevance(plan,jd,plan["experience"])
+        self.assertTrue(result["factual_bullets_verified"])
+        self.assertEqual(result["jd_sha256"],plan["jd_sha256"])
+
     def test_word_aware_jd_relevance(self):
         from resume_engine import contains, categories, TOPICS
         self.assertTrue(contains("Gestão de marketing e campanhas", "marketing"))
@@ -24,6 +65,34 @@ class HybridResumeTests(unittest.TestCase):
         self.assertIsNone(h.validate_text({"summary":"Responsável por um crescimento de 900% em dois meses com lideranças globais e entregas ágeis.","source_ids":["1"]},self.plan))
     def test_summary_must_identify_sources(self):
         self.assertIsNone(h.validate_text({"summary":"Profissional com experiência em produto digital, colaboração com stakeholders e roadmaps.","source_ids":["99999"]},self.plan))
+    def test_paid_ai_to_actual_docx_with_provenance(self):
+        from docx import Document
+        jd="Marketing campaigns CRM leads acquisition branding budget performance"
+        plan=build_plan(jd,"Marketing Manager")
+        result={"summary":"Executivo de marketing com experiência em gestão de campanhas, CRM e estratégias comerciais de empresas de serviços e turismo. Atuação em planejamento de mídia, gestão de orçamento e análise de campanhas digitais.",
+                "source_ids":["9","11","12"],
+                "evidence_ids":["9:0","9:1","9:2","3:3","3:4","11:0","11:1","12:0","13:0"]}
+        cursor=MagicMock();cursor.fetchone.return_value=None
+        with patch.dict(os.environ,{"JH_CV_AI_ENABLED":"1","OPENAI_API_KEY":"test-only"}), patch.object(h,"reserve",return_value=3),patch.object(h,"settle"),patch.object(h,"request_micro_summary",return_value=(result,{"prompt_tokens":1400,"completion_tokens":300})):
+            final,usage=h.apply_hybrid(cursor,"fixture/marketing",jd,plan)
+        self.assertEqual(usage["mode"],"hybrid")
+        final["cv_mode"]=usage["mode"]
+        doc=render_docx(final)
+        self.assertTrue(audit(final,doc)["factual_bullets_verified"])
+        self.assertIn("AI=hybrid",Document(io.BytesIO(doc)).core_properties.keywords)
+
+    def test_valid_cache_replays_without_ai_request(self):
+        jd="Marketing campaigns CRM leads acquisition branding budget performance"
+        plan=build_plan(jd,"Marketing Manager")
+        candidate={"summary":"Executivo de marketing com experiência em gestão de campanhas, CRM e estratégias comerciais de empresas de serviços e turismo. Atuação em planejamento de mídia, gestão de orçamento e análise de campanhas digitais.",
+            "source_ids":["9","11","12"],"evidence_ids":["9:0","9:1","9:2","3:3","3:4","11:0","11:1","12:0","13:0"]}
+        cursor=MagicMock();cursor.fetchone.return_value=(candidate,)
+        with patch.dict(os.environ,{"JH_CV_AI_ENABLED":"1","OPENAI_API_KEY":"test-only"}),patch.object(h,"request_micro_summary",side_effect=AssertionError("paid request")):
+            final,usage=h.apply_hybrid(cursor,"fixture/marketing",jd,plan)
+        self.assertEqual(usage["mode"],"cached_hybrid")
+        self.assertEqual(usage["ai_calls"],0)
+        self.assertTrue(audit(final,render_docx(final))["factual_bullets_verified"])
+
     def test_micro_cost_bound(self):
         self.assertLessEqual(h.price({"prompt_tokens":1700,"completion_tokens":220}),0.002)
     def test_selected_evidence_only_known_facts(self):
@@ -31,20 +100,27 @@ class HybridResumeTests(unittest.TestCase):
         chosen=[sample[0]["id"],sample[1]["id"],sample[6]["id"],sample[8]["id"],sample[12]["id"]]
         candidate={"evidence_ids":chosen}
         selected=h.selected_evidence(candidate,self.plan)
+        self.assertIsNone(selected)
+        selected=h.selected_evidence({"evidence_ids":["1:0","1:1","2:0","2:1","4:0","6:0"]},self.plan)
         self.assertIsNotNone(selected)
         for e in selected:
             from resume_engine import EXPERIENCE
             self.assertTrue(all(f in EXPERIENCE[e["source_index"]]["facts"] for f in e["facts"]))
         self.assertIsNone(h.selected_evidence({"evidence_ids":chosen[:-1]+["999:10"]},self.plan))
     def test_no_repeated_factual_bullets_after_reselection(self):
-        ids=["1:0","1:1","2:0","4:0","6:0"]
+        ids=["1:0","1:1","2:0","2:1","4:0","6:0"]
         selected=h.selected_evidence({"evidence_ids":ids},self.plan)
         self.assertIsNotNone(selected)
         new_plan={**self.plan,"experience":selected}
         self.assertTrue(audit(new_plan,render_docx(new_plan))["factual_bullets_verified"])
     def test_cache_skips_ai(self):
         cursor=MagicMock()
-        candidate={"summary":"Profissional com atuação em gestão de produtos e roadmaps digitais, alinhando decisões com stakeholders e equipes técnicas.","source_ids":[str(e["source_index"]) for e in self.plan["experience"] if e["facts"]][:1],"evidence_ids":["1:0","1:1","2:0","4:0","6:0"]}
+        ids=[f"{e['source_index']}:{j}" for e in self.plan["experience"] for j,_ in
+             enumerate(__import__("resume_engine").EXPERIENCE[e["source_index"]]["facts"])
+             if j<2][:14]
+        candidate={"summary":"Profissional com atuação em gestão de produtos e roadmaps digitais, alinhando decisões com stakeholders e equipes técnicas.",
+                   "source_ids":[str(int(ids[0].split(":")[0]))],
+                   "evidence_ids":ids}
         cursor.fetchone.return_value=(candidate,)
         with patch.dict(os.environ,{"JH_CV_AI_ENABLED":"1","OPENAI_API_KEY":"dummy"}):
             with patch.object(h,"request_micro_summary",side_effect=AssertionError("should not call")):
@@ -68,17 +144,17 @@ class HybridResumeTests(unittest.TestCase):
         with patch.dict(os.environ,{"JH_CV_AI_ENABLED":"1","OPENAI_API_KEY":"dummy"}):
             with patch.object(h,"request_micro_summary",return_value=(candidate,{"prompt_tokens":1600,"completion_tokens":200})):
                 plan,usage=h.apply_hybrid(cursor,"example.com/new",JD,self.plan)
-        self.assertEqual(usage["mode"],"hybrid")
+        self.assertEqual(usage["mode"],"fallback")
         self.assertEqual(plan["summary"],self.plan["summary"])
         self.assertTrue(any(e["facts"] for e in plan["experience"] if e["source_index"]==2))
         self.assertTrue(audit(plan,render_docx(plan))["factual_bullets_verified"])
     def test_promotes_older_marketing_role_with_grounded_evidence(self):
         from resume_engine import EXPERIENCE
-        picked=h.selected_evidence({"evidence_ids":["9:0","9:1","13:0"]},self.plan)
+        picked=h.selected_evidence({"evidence_ids":["9:0","9:1","3:3","11:0","12:0","13:0"]},self.plan)
         self.assertIsNotNone(picked)
         baseline={f for e in self.plan["experience"] for f in e["facts"]}
         result={f for e in picked for f in e["facts"]}
-        self.assertTrue(baseline.issubset(result))
+        self.assertFalse(baseline.issubset(result))
         self.assertIn(EXPERIENCE[9]["facts"][0],result)
         self.assertIn(EXPERIENCE[13]["facts"][0],result)
         report=audit({**self.plan,"experience":picked},
@@ -86,15 +162,13 @@ class HybridResumeTests(unittest.TestCase):
         self.assertTrue(report["factual_bullets_verified"])
     def test_single_header_when_compact_role_promoted(self):
         from docx import Document
-        picked=h.selected_evidence({"evidence_ids":["9:0","13:0"]},self.plan)
+        picked=h.selected_evidence({"evidence_ids":["9:0","3:3","11:0","12:0","13:0","1:0"]},self.plan)
         data=render_docx({**self.plan,"experience":picked})
         txt="\\n".join(p.text for p in Document(io.BytesIO(data)).paragraphs)
         self.assertEqual(txt.count("Diretor de marketing — Lagoa Parques e Hotéis"),1)
     def test_does_not_erase_baseline_on_sparse_ai_selection(self):
         picked=h.selected_evidence({"evidence_ids":["1:0"]},self.plan)
-        self.assertIsNotNone(picked)
-        original={f for e in self.plan["experience"] for f in e["facts"]}
-        self.assertTrue(original.issubset({f for e in picked for f in e["facts"]}))
+        self.assertIsNone(picked)
     def test_summary_cannot_cite_undisplayed_occupation(self):
         # Even when a model outputs a valid index, it must be shown with facts.
         candidate={"summary":"Gestão de campanhas de marketing e relacionamento com clientes corporativos.",
@@ -104,11 +178,27 @@ class HybridResumeTests(unittest.TestCase):
         from resume_engine import EXPERIENCE
         jd="Coordenação de marketing, campanhas, CRM, retenção e liderança de equipe."
         plan=build_plan(jd,"Coordenador Marketing")
-        chosen=h.selected_evidence({"evidence_ids":["9:0","9:1","13:0"]},plan)
+        chosen=h.selected_evidence({"evidence_ids":["9:0","9:1","3:3","11:0","12:0","13:0"]},plan)
         self.assertIsNotNone(chosen)
         facts=[f for e in chosen for f in e["facts"]]
         self.assertIn(EXPERIENCE[9]["facts"][0],facts)
         self.assertTrue(audit({**plan,"experience":chosen},render_docx({**plan,"experience":chosen}))["factual_bullets_verified"])
+    def test_summary_number_cannot_hide_in_undisplayed_fact(self):
+        from resume_engine import EXPERIENCE
+        # A fact in another source occupation must not justify a summary claim.
+        proposal={"summary":"Profissional com 2023 entregas estratégicas e experiência em produtos digitais.",
+                  "source_ids":["1"],"evidence_ids":["1:0","1:1","2:0"]}
+        self.assertIsNone(h.validate_text(proposal,self.plan))
+
+    def test_quality_gate_rejects_tradeoff_among_dimensions(self):
+        from resume_engine import EXPERIENCE
+        jd="Product Manager roadmap stakeholders discovery backlog scrum"
+        baseline=build_plan(jd,"Product Manager")
+        # This ensures no improvement in one axis can excuse regression in another.
+        trimmed=[{"source_index":e["source_index"],"facts":e["facts"][:1]}
+                 for e in baseline["experience"] if e["facts"]]
+        self.assertFalse(h.quality_gate(baseline,trimmed,jd))
+
     def test_rejects_unsupported_analyst_claim_even_with_valid_sources(self):
         proposal={"summary":"Experiência em elicitação de requisitos e casos de uso, com stakeholders e Scrum.",
                   "source_ids":["1"],"evidence_ids":["1:0","1:1","2:0"]}
@@ -120,9 +210,9 @@ class HybridResumeTests(unittest.TestCase):
         p=build_plan(jd,"Product Manager")
         self.assertFalse(h.quality_gate(p,candidate,jd))
     def test_comparison_gate_approves_superset_of_proven_evidence(self):
-        candidate=h.selected_evidence({"evidence_ids":["8:0","9:0","13:0"]},self.plan)
+        candidate=h.selected_evidence({"evidence_ids":["8:0","9:0","13:0","3:3","11:0","12:0"]},self.plan)
         self.assertIsNotNone(candidate)
-        self.assertTrue(h.quality_gate(self.plan,candidate,JD))
+        self.assertFalse(h.quality_gate(self.plan,candidate,JD))
     def test_render_unchanged_provenance(self):
         data=render_docx(self.plan)
         self.assertTrue(audit(self.plan,data)["factual_bullets_verified"])

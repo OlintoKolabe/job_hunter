@@ -204,7 +204,7 @@ def restore_persisted_scores(cursor, jobs, roles, url_key):
     for job, key in zip(jobs, keys):
         candidate = by_url.get(key)
         original_description = str(job.get("description") or "")
-        expected = hashlib.sha256(original_description.encode()).hexdigest() if len(original_description) >= 300 else None
+        expected = job.get("_listing_jd_hash") or (hashlib.sha256(original_description.encode()).hexdigest() if len(original_description) >= 300 else None)
         if candidate:
             jd_hash, result, cache_hash, fetched_at = candidate
             fresh = fetched_at is not None and fetched_at >= now - timedelta(days=7)

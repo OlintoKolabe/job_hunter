@@ -463,8 +463,9 @@ class ResumeGenerate(BaseModel):
 
 @app.post("/api/resume/generate")
 def generate_resume(payload: ResumeGenerate, request: Request):
-    """Explicitly requested generation; only from pre-existing JD cache.
-    This endpoint never calls OpenAI and does not write a CV into the database.
+    """User-triggered CV generation from a persisted JD only.
+    Optional bounded AI uses the existing cache and spend reservation; DOCX
+    contents themselves are never written to the application database.
     """
     require_auth(request)
     key=url_key(payload.url)

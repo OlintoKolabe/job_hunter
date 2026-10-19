@@ -11,7 +11,8 @@ class BrazilSourceExpansionTests(unittest.TestCase):
         tasks=source_tasks()
         for slug in NEW_ASHBY:
             self.assertIn(("ashby",slug),tasks)
-        self.assertIn(("greenhouse","monks"),tasks)
+        for slug in ("monks","blip-global","platformscience"):
+            self.assertIn(("greenhouse",slug),tasks)
 
     def test_no_duplicate_case_insensitive_boards(self):
         tasks=source_tasks()

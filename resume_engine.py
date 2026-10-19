@@ -130,7 +130,6 @@ EXPERIENCE[13]["facts"].extend([
 
 EDUCATION = ["MBA em Marketing — Universidade de São Paulo (2015–2016)",
              "MBA em Administração e Gestão — Fundação Getulio Vargas (2001–2003)",
-             "Graduação em Odontologia — Universidade de São Paulo (1996–1999)",
              "Professional Scrum Product Owner I (PSPO I)"]
 STOP={"the","and","with","for","that","from","have","will","are","this","your","our",
       "para","com","que","dos","das","uma","por","como","nos","nas","mais","sobre",
@@ -338,8 +337,7 @@ def build_plan(jd, title):
                  ", com atuação documentada em tecnologia e negócios. "
                  "Histórico de atividades em equipes e projetos de diferentes setores.")
     # Only a profile-level statement here, never repeated verbatim from the roles.
-    tailored_education=[degree for degree in EDUCATION
-                        if "Odontologia" not in degree or not title_needs]
+    tailored_education=[degree for degree in EDUCATION if "odontolog" not in degree.casefold()]
     return {"title":title[:120],"summary":summary,"focus_topics":top_topics,
             "education":tailored_education,
             "experience":experiences,"additional_experience":older,
@@ -382,7 +380,8 @@ def render_docx(plan):
         dates=doc.add_paragraph(e["dates"]);dates.paragraph_format.keep_with_next=True
         for fact in e["facts"]:doc.add_paragraph(fact,style="List Bullet")
     doc.add_heading("Formação e certificações",1)
-    for degree in plan.get("education",EDUCATION):doc.add_paragraph(degree,style="List Bullet")
+    for degree in plan.get("education",EDUCATION):
+        if "odontolog" not in degree.casefold():doc.add_paragraph(degree,style="List Bullet")
     doc.add_paragraph("Idiomas: Português (nativo); Inglês (profissional); Italiano (intermediário).")
     out=io.BytesIO();doc.save(out);return out.getvalue()
 

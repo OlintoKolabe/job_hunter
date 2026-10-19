@@ -8,7 +8,7 @@ rubric, never overwriting the vacancy scores.
 import hashlib,html,json,os,re,unicodedata,urllib.request
 from psycopg.types.json import Jsonb
 from score_repository import reserve,settle,key_for
-from resume_engine import ENGINE_VERSION,EXPERIENCE,TOPICS,FACT_TOPICS,categories,relevance,words
+from resume_engine import ENGINE_VERSION,EXPERIENCE,TOPICS,FACT_TOPICS,categories,relevance,words,relevant_jd_text
 MODEL="gpt-4.1-nano"  # Fixed audited price, independent of vacancy scoring model
 
 RUBRIC="cv-evidence-hybrid-v9"

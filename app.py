@@ -589,7 +589,7 @@ def history_daily(request: Request, from_date: str="", to_date: str="", dates: s
                     COUNT(*) FILTER (WHERE lower(estado) IN ('descartado','descartada'))::int
                 FROM jh_history {clause}
                 GROUP BY dia ORDER BY dia DESC""",params)
-            rows=[{"day":d,"candidatado":a,"descartado":b} for d,a,b in cur.fetchall() if d]
+            rows=[{"day":d,"candidatado":a,"descartado":b} for d,a,b in cur.fetchall()]
     return {"days":rows,"candidatado":sum(v["candidatado"] for v in rows),
             "descartado":sum(v["descartado"] for v in rows)}
 

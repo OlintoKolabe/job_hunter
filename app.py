@@ -506,15 +506,19 @@ def mark_job_disposition(payload: JobDisposition, request: Request):
         with conn.cursor() as cur:
             # Serialize decisions on the same vacancy to avoid duplicate history rows.
             cur.execute("SELECT pg_advisory_xact_lock(hashtext(%s))",("job-disposition:"+uk,))
-            cur.execute("""SELECT id,estado FROM jh_history
+            cur.execute("""SELECT id,estado,normalized_url FROM jh_history
                 WHERE normalized_url=%s OR (pair_key=%s AND %s<>'' )
                 ORDER BY CASE WHEN normalized_url=%s THEN 0 ELSE 1 END,id LIMIT 1""",(uk,pk,pk,uk))
             existing=cur.fetchone()
             if existing:
-                # Preserve the previous explicit decision: avoid silent overwrites.
+                if existing[2]!=uk and existing[1]!=payload.state:
+                    raise HTTPException(409,"Outra vaga com o mesmo cargo e empresa já possui decisão diferente no Histórico")
                 if existing[1]!=payload.state:
-                    raise HTTPException(409,"Vaga já está no histórico como "+str(existing[1]))
-                return {"saved":True,"already_recorded":True,"state":existing[1]}
+                    # An explicit click changes the recorded status rather than silently failing.
+                    cur.execute("""UPDATE jh_history SET estado=%s, motivo=%s
+                        WHERE id=%s""",(payload.state,"Decisão alterada manualmente na busca",existing[0]))
+                    return {"saved":True,"already_recorded":True,"updated":True,"state":payload.state}
+                return {"saved":True,"already_recorded":True,"updated":False,"state":existing[1]}
             cur.execute("""INSERT INTO jh_history
                 (url,normalized_url,empresa,cargo,pair_key,estado,data,fonte,motivo)
                 VALUES (%s,%s,%s,%s,%s,%s,TO_CHAR(CURRENT_DATE,'YYYY-MM-DD'),%s,%s)""",
@@ -522,24 +526,72 @@ def mark_job_disposition(payload: JobDisposition, request: Request):
                  (payload.source or "Caçador")[:120],"Decisão manual na busca"))
     return {"saved":True,"already_recorded":False,"state":payload.state}
 
+# The imported history uses both ISO dates and Brazilian DD/MM/YYYY dates.
+# Normalize for filtering without rewriting any historical records.
+HISTORY_DAY_SQL = """CASE WHEN data ~ '^\\d{4}-\\d{2}-\\d{2}$' THEN data
+    WHEN data ~ '^\\d{2}/\\d{2}/\\d{4}$'
+    THEN substring(data from 7 for 4)||'-'||substring(data from 4 for 2)||'-'||substring(data from 1 for 2)
+    ELSE NULL END"""
+
+def history_date_filters(from_date="", to_date="", dates=""):
+    import re
+    from datetime import date as calendar_date
+    choices=[s.strip() for s in dates.split(",") if s.strip()]
+    if len(choices)>100:raise HTTPException(400,"Máximo de 100 dias selecionados")
+    for value in [from_date,to_date,*choices]:
+        if value:
+            try:
+                if not re.fullmatch(r"\\d{4}-\\d{2}-\\d{2}",value):raise ValueError()
+                calendar_date.fromisoformat(value)
+            except ValueError:raise HTTPException(400,"Data inválida; use AAAA-MM-DD")
+    if from_date and to_date and from_date>to_date:raise HTTPException(400,"Período invertido")
+    clauses=[];params=[]
+    if from_date:clauses.append(f"({HISTORY_DAY_SQL}) >= %s");params.append(from_date)
+    if to_date:clauses.append(f"({HISTORY_DAY_SQL}) <= %s");params.append(to_date)
+    if choices:
+        clauses.append(f"({HISTORY_DAY_SQL}) = ANY(%s)")
+        params.append(choices)
+    return clauses,params
+
 @app.get("/api/history")
-def history(request: Request, q: str="", state: str="", limit:int=50, offset:int=0):
+def history(request: Request, q: str="", state: str="", limit:int=50, offset:int=0,
+            from_date: str="", to_date: str="", dates: str=""):
     require_auth(request)
     limit=max(1,min(limit,100));offset=max(0,offset)
-    where=[];params=[]
+    where,params=history_date_filters(from_date,to_date,dates)
     if q:
         where.append("(empresa ILIKE %s OR cargo ILIKE %s OR url ILIKE %s)")
         params.extend(["%"+q[:100]+"%"]*3)
     if state:
-        where.append("estado=%s");params.append(state[:60])
+        if state=="Candidatado":where.append("lower(estado)='candidatado'")
+        elif state=="Descartado":where.append("lower(estado) IN ('descartado','descartada')")
+        else:where.append("lower(estado)=lower(%s)");params.append(state[:60])
     clause=" WHERE "+" AND ".join(where) if where else ""
     with psycopg.connect(DATABASE,connect_timeout=8) as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT COUNT(*) FROM jh_history"+clause,params)
             total=cur.fetchone()[0]
-            cur.execute("SELECT id,url,empresa,cargo,estado,data,fonte,motivo FROM jh_history"+clause+" ORDER BY id DESC LIMIT %s OFFSET %s",params+[limit,offset])
+            cur.execute("SELECT id,url,empresa,cargo,estado,data,fonte,motivo FROM jh_history"+clause+
+                        " ORDER BY id DESC LIMIT %s OFFSET %s",params+[limit,offset])
             rows=[dict(zip(("id","url","empresa","cargo","estado","data","fonte","motivo"),r)) for r in cur.fetchall()]
     return {"total":total,"items":rows}
+
+@app.get("/api/history-daily")
+def history_daily(request: Request, from_date: str="", to_date: str="", dates: str=""):
+    require_auth(request)
+    where,params=history_date_filters(from_date,to_date,dates)
+    where.append("lower(estado) IN ('candidatado','descartado','descartada')")
+    clause=" WHERE "+" AND ".join(where)
+    with psycopg.connect(DATABASE,connect_timeout=8) as conn:
+        with conn.cursor() as cur:
+            cur.execute(f"""SELECT ({HISTORY_DAY_SQL}) AS dia,
+                    COUNT(*) FILTER (WHERE lower(estado)='candidatado')::int,
+                    COUNT(*) FILTER (WHERE lower(estado) IN ('descartado','descartada'))::int
+                FROM jh_history {clause}
+                GROUP BY dia ORDER BY dia DESC""",params)
+            rows=[{"day":d,"candidatado":a,"descartado":b} for d,a,b in cur.fetchall()]
+    return {"days":rows,"candidatado":sum(v["candidatado"] for v in rows),
+            "descartado":sum(v["descartado"] for v in rows)}
 
 @app.get("/api/history-stats")
 def history_stats(request: Request):

@@ -189,6 +189,8 @@ TOPICS={
  "data":("indicadores","analytics","dados","metrics","métricas","kpi","reports","relatórios","dashboards","análise","analysis","business intelligence","data-driven","data analysis"),
  "people":("stakeholders","equipe","times","liderança","facilitar","facilitação","alinhamento","comunicação","customer"),
  "tools":("jira","azure devops","confluence","figma","posthog","trello","miro"),
+ "ai":("codex","claude code","lovable"),
+ "ai":("ai-driven","ai tools","genai","artificial intelligence","inteligência artificial","codex","claude code","lovable"),
 }
 # A concept is credited only if it occurs in the exact documented evidence.
 FACT_TOPICS={
@@ -266,11 +268,38 @@ def build_plan(jd, title):
         idx,item,facts,_=scored[0]
         experiences=[{"role":item["role"],"company":item["company"],"dates":item["dates"],"facts":facts[:1],"source_index":idx}]
         older=older[1:]
+    # Repair genuine topic gaps using only facts from displayed roles.
+    # Every bounded swap increases verified JD coverage without deleting other concepts.
+    for _ in range(len(needs)):
+        selected=[f for entry in experiences for f in entry["facts"]]
+        covered=set().union(*(categories(f,FACT_TOPICS) for f in selected)) if selected else set()
+        gaps=needs-covered
+        if not gaps:break
+        improvements=[]
+        for topic in gaps:
+            for entry in experiences:
+                source=EXPERIENCE[entry["source_index"]]
+                for fact in source["facts"]:
+                    if fact in selected or topic not in categories(fact,FACT_TOPICS):continue
+                    options=[None] if len(entry["facts"])<3 else list(entry["facts"])
+                    for replace in options:
+                        trial=[f for f in selected if f!=replace]+[fact]
+                        future=set().union(*(categories(f,FACT_TOPICS) for f in trial))
+                        gain=len(future&needs)-len(covered&needs)
+                        if gain>0:
+                            strength=relevance(fact,needs,tokens)
+                            improvements.append((gain,strength,entry["source_index"],fact,replace))
+        if not improvements:break
+        gain,strength,role_idx,new_fact,replace=max(improvements,key=lambda it:(it[0],it[1],-it[2]))
+        row=next(e for e in experiences if e["source_index"]==role_idx)
+        if replace is not None:row["facts"].remove(replace)
+        row["facts"].append(new_fact)
+
     label={"analysis":"análise de negócios e levantamento de necessidades","agility":"práticas ágeis e gestão de backlog",
            "project":"gestão de projetos e processos","product":"desenvolvimento de produtos digitais",
            "growth":"marketing, crescimento e relacionamento com clientes",
            "data":"gestão orientada por indicadores","people":"alinhamento com equipes e stakeholders",
-           "tools":"ferramentas de colaboração e gestão"}
+           "tools":"ferramentas de colaboração e gestão","ai":"ferramentas de IA aplicadas a fluxos de trabalho"}
     top_topics=sorted(needs,key=lambda topic:-sum(relevance(f,{topic},tokens) for _,e,_,_ in scored for f in e["facts"]))[:3]
     if not top_topics:top_topics=["product","project"]
     focus=", ".join(label[t] for t in top_topics)

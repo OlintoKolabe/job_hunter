@@ -327,6 +327,29 @@ def build_plan(jd, title):
         if replace is not None:row["facts"].remove(replace)
         row["facts"].append(new_fact)
 
+    # Conservative requirement-specific evidence swaps inside selected roles.
+    for entry in experiences:
+        source=EXPERIENCE[entry["source_index"]]
+        for _ in range(2):
+            selected=[f for role in experiences for f in role["facts"]]
+            baseline_topics=set().union(*(categories(f,FACT_TOPICS) for f in selected))
+            candidates=[]
+            for replacement in source["facts"]:
+                if replacement in selected:continue
+                for incumbent in entry["facts"]:
+                    if re.search(r"(?:R\\$\\s*\\d|\\d[.,]\\d+%|\\d+%|triplicad)",incumbent,re.I):
+                        continue
+                    if "product" in title_needs and ("roadmap" in incumbent.casefold() or "produto b2b" in incumbent.casefold()):
+                        continue
+                    gain=specific(replacement)-specific(incumbent)
+                    trial=[f for f in selected if f!=incumbent]+[replacement]
+                    topics=set().union(*(categories(f,FACT_TOPICS) for f in trial))
+                    if gain>=5 and (baseline_topics&needs)<=(topics&needs):
+                        candidates.append((gain,replacement,incumbent))
+            if not candidates:break
+            gain,replacement,incumbent=max(candidates,key=lambda x:x[0])
+            entry["facts"][entry["facts"].index(incumbent)]=replacement
+
     # Preserve the baseline's selected evidence, but show its most JD-specific
     # accomplishments first within each employer, without changing chronology.
     for entry in experiences:

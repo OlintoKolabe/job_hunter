@@ -506,15 +506,19 @@ def mark_job_disposition(payload: JobDisposition, request: Request):
         with conn.cursor() as cur:
             # Serialize decisions on the same vacancy to avoid duplicate history rows.
             cur.execute("SELECT pg_advisory_xact_lock(hashtext(%s))",("job-disposition:"+uk,))
-            cur.execute("""SELECT id,estado FROM jh_history
+            cur.execute("""SELECT id,estado,normalized_url FROM jh_history
                 WHERE normalized_url=%s OR (pair_key=%s AND %s<>'' )
                 ORDER BY CASE WHEN normalized_url=%s THEN 0 ELSE 1 END,id LIMIT 1""",(uk,pk,pk,uk))
             existing=cur.fetchone()
             if existing:
-                # Preserve the previous explicit decision: avoid silent overwrites.
+                if existing[2]!=uk and existing[1]!=payload.state:
+                    raise HTTPException(409,"Outra vaga com o mesmo cargo e empresa já possui decisão diferente no Histórico")
                 if existing[1]!=payload.state:
-                    raise HTTPException(409,"Vaga já está no histórico como "+str(existing[1]))
-                return {"saved":True,"already_recorded":True,"state":existing[1]}
+                    # An explicit click changes the recorded status rather than silently failing.
+                    cur.execute("""UPDATE jh_history SET estado=%s, motivo=%s
+                        WHERE id=%s""",(payload.state,"Decisão alterada manualmente na busca",existing[0]))
+                    return {"saved":True,"already_recorded":True,"updated":True,"state":payload.state}
+                return {"saved":True,"already_recorded":True,"updated":False,"state":existing[1]}
             cur.execute("""INSERT INTO jh_history
                 (url,normalized_url,empresa,cargo,pair_key,estado,data,fonte,motivo)
                 VALUES (%s,%s,%s,%s,%s,%s,TO_CHAR(CURRENT_DATE,'YYYY-MM-DD'),%s,%s)""",

@@ -128,9 +128,38 @@ EXPERIENCE[13]["facts"].extend([
     "Publicidade em rádio, televisão, mídia impressa, mídia externa e campanhas promocionais.",
 ])
 
+
+# LinkedIn profile audit (October 2026): append verified evidence; never change old IDs.
+EXPERIENCE[0]["facts"].extend([
+    "Concepção de plataforma DTx com treinamento cognitivo gamificado baseado em neurociência e terapia cognitivo-comportamental.",
+])
+EXPERIENCE[3]["facts"].extend([
+    "Estruturação de processos administrativos, comerciais e de marketing com equipe multidisciplinar.",
+])
+EXPERIENCE[6]["facts"].extend([
+    "Definição de cronogramas de tecnologia e negócios e negociação de prioridades com stakeholders.",
+    "Startup financiada pelo programa Centelha, classificada entre as 15 melhores de mil propostas.",
+])
+EXPERIENCE[7]["facts"].extend([
+    "Criação de jornadas, interfaces e protótipos no Figma para validação e desenvolvimento de soluções.",
+])
+EXPERIENCE[8]["facts"].extend([
+    "Reestruturação de operações para eficiência e maximização de receitas.",
+])
+EXPERIENCE[11]["facts"].extend([
+    "Criação da marca Privé Diversão, unificando a estratégia de branding de três parques aquáticos.",
+    "Participação no comitê executivo operacional de hospitalidade e entretenimento.",
+])
+EXPERIENCE[12]["facts"].extend([
+    "Criação e execução de eventos corporativos com o departamento de eventos.",
+    "Campanhas e eventos de lançamento de produtos de hospitalidade e entretenimento.",
+])
+EXPERIENCE.append({"role":"Professor de MBA","company":"Estácio",
+    "dates":"jun 2016 – out 2016",
+    "facts":["Atuação como professor de MBA em pós-graduação de Recursos Humanos."]})
+
 EDUCATION = ["MBA em Marketing — Universidade de São Paulo (2015–2016)",
              "MBA em Administração e Gestão — Fundação Getulio Vargas (2001–2003)",
-             "Graduação em Odontologia — Universidade de São Paulo (1996–1999)",
              "Professional Scrum Product Owner I (PSPO I)"]
 STOP={"the","and","with","for","that","from","have","will","are","this","your","our",
       "para","com","que","dos","das","uma","por","como","nos","nas","mais","sobre",
@@ -173,7 +202,7 @@ def chronology_index(item):
       "Centauro.life":(2026,4),"Neocoder / LiberPay":(2025,5),"Neocoder":(2025,2),
       "Hexagon Mining":(2023,8),"Stefanini Brasil / Hexagon Mining":(2023,5),
       "Dotz Inc. / Meu Varejo":(2022,8),"Top Saúde Clínicas Médicas":(2020,2),
-      "Kolabe":(2018,5),"Lagoa Parques e Hotéis":(2015,1),
+      "Kolabe":(2018,5),"Estácio":(2016,6),"Lagoa Parques e Hotéis":(2015,1),
       "Companhia de Negócios":(2014,6),"Grupo Privé":(2012,6),
       "Aviva":(2011,11),"Digital Design Comunicação":(2000,1)}
     return starts[item["company"]]
@@ -338,8 +367,7 @@ def build_plan(jd, title):
                  ", com atuação documentada em tecnologia e negócios. "
                  "Histórico de atividades em equipes e projetos de diferentes setores.")
     # Only a profile-level statement here, never repeated verbatim from the roles.
-    tailored_education=[degree for degree in EDUCATION
-                        if "Odontologia" not in degree or not title_needs]
+    tailored_education=[degree for degree in EDUCATION if "odontolog" not in degree.casefold()]
     return {"title":title[:120],"summary":summary,"focus_topics":top_topics,
             "education":tailored_education,
             "experience":experiences,"additional_experience":older,
@@ -349,7 +377,16 @@ def render_docx(plan):
     doc=Document();normal=doc.styles["Normal"];normal.font.name="Calibri";normal.font.size=Pt(10)
     section=doc.sections[0]
     from docx.shared import Inches
-    section.top_margin=Inches(.62);section.bottom_margin=Inches(.62)
+    section.top_margin=Inches(.48);section.bottom_margin=Inches(.48)
+    section.left_margin=Inches(.7);section.right_margin=Inches(.7)
+    from docx.enum.text import WD_LINE_SPACING
+    normal.paragraph_format.space_after=Pt(2)
+    normal.paragraph_format.line_spacing=1.0
+    for name in ("Title","Heading 1","Heading 2","List Bullet"):
+        style=doc.styles[name]
+        style.paragraph_format.space_before=Pt(3)
+        style.paragraph_format.space_after=Pt(2)
+    doc.styles["Heading 2"].font.size=Pt(10)
     # Provenance is embedded in DOCX metadata, invisible to recruiters/ATS.
     provenance = (
         f"JobHunterCV={CV_DOCUMENT_VERSION};"
@@ -370,14 +407,20 @@ def render_docx(plan):
     for idx in chronology:
         e=detailed.get(idx) or compact[idx]
         if idx not in detailed:
-            doc.add_paragraph(e["role"]+" — "+e["company"]+" | "+e["dates"])
+            heading=doc.add_heading(e["role"]+" — "+e["company"],2)
+            heading.paragraph_format.keep_with_next=True
+            dates=doc.add_paragraph(e["dates"])
+            dates.paragraph_format.keep_with_next=True
+            # Compact experience must still have a factual description.
+            doc.add_paragraph(EXPERIENCE[idx]["facts"][0],style="List Bullet")
             continue
         heading=doc.add_heading(e["role"]+" — "+e["company"],2)
         heading.paragraph_format.keep_with_next=True
         dates=doc.add_paragraph(e["dates"]);dates.paragraph_format.keep_with_next=True
         for fact in e["facts"]:doc.add_paragraph(fact,style="List Bullet")
     doc.add_heading("Formação e certificações",1)
-    for degree in plan.get("education",EDUCATION):doc.add_paragraph(degree,style="List Bullet")
+    for degree in plan.get("education",EDUCATION):
+        if "odontolog" not in degree.casefold():doc.add_paragraph(degree,style="List Bullet")
     doc.add_paragraph("Idiomas: Português (nativo); Inglês (profissional); Italiano (intermediário).")
     out=io.BytesIO();doc.save(out);return out.getvalue()
 

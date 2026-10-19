@@ -11,12 +11,12 @@ from score_repository import reserve,settle,key_for
 from resume_engine import ENGINE_VERSION,EXPERIENCE,TOPICS,FACT_TOPICS,categories,relevance,words,relevant_jd_text
 MODEL="gpt-4.1-nano"  # Fixed audited price, independent of vacancy scoring model
 
-RUBRIC="cv-evidence-hybrid-v9"
+RUBRIC="cv-jd-first-full-career-v1"
 COST_INPUT_PER_M=0.10
 COST_OUTPUT_PER_M=0.40
-INPUT_CHAR_LIMIT=12500
-OUTPUT_TOKEN_CAP=1050
-MAX_COST_USD=0.002
+INPUT_CHAR_LIMIT=18000
+OUTPUT_TOKEN_CAP=1600
+MAX_COST_USD=0.004
 
 def clean(text):
     return re.sub(r"\s+"," ",relevant_jd_text(text)).strip()
@@ -34,7 +34,7 @@ def evidence_for_prompt(plan):
              "fato":fact} for idx,e in enumerate(EXPERIENCE)
             for n,fact in enumerate(e["facts"])]
 
-def select_prompt_evidence(plan,jd,max_chars=5500):
+def select_prompt_evidence(plan,jd,max_chars=11500):
     """Budget- and JD-aware evidence retrieval over the entire factual career."""
     all_facts=evidence_for_prompt(plan)
     needed=categories(jd+" "+plan["title"],TOPICS)
@@ -50,7 +50,7 @@ def select_prompt_evidence(plan,jd,max_chars=5500):
     output=[];length=0;per_role={}
     for fact in ranked:
         idx=int(fact["id"].split(":")[0])
-        if per_role.get(idx,0)>=5:continue
+        # Include all documented career evidence whenever the prompt budget permits.
         line=f'{fact["id"]} | {fact["empresa"]} | {fact["fato"]}'
         if length+len(line)>max_chars:continue
         output.append(fact)
@@ -70,11 +70,10 @@ def quality_gate(plan,candidate,jd):
         return (len(covered&needs),title_hits,relevant)
     proposed=metrics(candidate)
     baseline=metrics(plan["experience"])
-    # No less coverage of the actual role family than the old baseline.
-    return (proposed[0]>=min(2,len(needs)) and proposed[2]>=3
-            and proposed[1]>=min(2,baseline[1])
-            and proposed[0]>=min(baseline[0],len(needs))
-            and sum(len(e["facts"]) for e in candidate)>=min(9,sum(len(e["facts"]) for e in plan["experience"])))
+    # The AI is allowed to pick DIFFERENT evidence from the whole career.
+    # Never force the earlier category-selected facts back into the output.
+    # A factual, bounded CV can legitimately cover fewer broad categories.
+    return (proposed[2]>=3 and sum(len(e["facts"]) for e in candidate)>=min(9,sum(len(e["facts"]) for e in plan["experience"])))
 
 def selected_evidence(proposal,plan):
     """Merge only verified source facts into the complete chronology.
@@ -260,15 +259,15 @@ def request_micro_summary(plan,jd,opener=urllib.request.urlopen):
     evidence_text="\n".join(f'{e["id"]} | {e["empresa"]} | {e["fato"]}' for e in evidence)
     jd_text=clean(jd)
     # Budget career evidence first, then preserve both start and end of a long JD.
-    jd_budget=max(900,min(4500,INPUT_CHAR_LIMIT-len(evidence_text)-3200))
+    jd_budget=max(1200,min(6500,INPUT_CHAR_LIMIT-len(evidence_text)-2300))
     if len(jd_text)>jd_budget:
         front=jd_budget*2//3
         jd_text=jd_text[:front]+" [trecho intermediário omitido] "+jd_text[-(jd_budget-front-35):]
     requirement_lines=analyze_requirements(jd,plan["title"])["essential"]
     requirement_digest="; ".join(requirement_lines[:12])[:1200]
     prompt=("Monte currículo de candidatura em português usando APENAS fatos fornecidos. "
-        "Escolha de 3 a 16 IDs de fatos que melhor demonstrem responsabilidades do JD. "
-        "Use entre 2 e 8 empregos, no máximo 4 fatos por emprego; priorize requisitos centrais, "
+        "Escolha de 6 a 18 IDs de fatos que melhor demonstrem as exigências centrais do JD, entre TODAS as experiências fornecidas. "
+        "Use entre 3 e 8 empregos, no máximo 3 fatos por emprego; priorize evidências concretas das exigências, "
         "não adicione competências nem resultados. Não precisa usar todas as experiências. "
         "Escreva SOMENTE o resumo profissional, entre 55 e 85 palavras, baseado nos fatos selecionados, sem resultados, "
         "números ou qualificações inventadas. Evite promessas de entrega ou especialização não comprovada. "

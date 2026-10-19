@@ -7,6 +7,22 @@ JD="Product Manager responsável por roadmap, backlog, pesquisa de usuários e s
 class HybridResumeTests(unittest.TestCase):
     def setUp(self):
         self.plan=build_plan(JD,"Product Manager")
+    def test_jd_first_model_sees_complete_verified_career(self):
+        from resume_engine import EXPERIENCE
+        plan=build_plan("Customer Growth Manager hospitality accounts CRM sales revenue","Customer Growth Manager")
+        available=h.select_prompt_evidence(plan,"Customer Growth Manager hospitality accounts CRM sales revenue")
+        ids={row["id"] for row in available}
+        expected={f"{i}:{j}" for i,role in enumerate(EXPERIENCE) for j,_ in enumerate(role["facts"])}
+        self.assertEqual(ids,expected)
+
+    def test_jd_first_can_replace_category_baseline_without_inventing(self):
+        plan=build_plan("Internal Events Manager marketing programs budgets stakeholders","Internal Events Manager")
+        chosen=h.selected_evidence({"evidence_ids":["9:0","9:1","11:0","11:1","12:0","12:1","13:0","13:1","3:0"]},plan)
+        self.assertIsNotNone(chosen)
+        self.assertTrue(h.quality_gate(plan,chosen,"Internal Events Manager marketing programs budgets stakeholders"))
+        tailored={**plan,"experience":chosen}
+        self.assertTrue(audit(tailored,render_docx(tailored))["factual_bullets_verified"])
+
     def test_ai_can_replace_deterministic_role_selection(self):
         from resume_engine import EXPERIENCE
         jd="Marketing campaigns CRM leads acquisition and branding"

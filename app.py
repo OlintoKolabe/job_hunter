@@ -516,7 +516,7 @@ def generate_resume(payload: ResumeGenerate, request: Request):
     encoded_filename=quote(filename)
     headers={"X-Resume-Engine":report["engine"],"X-Document-SHA256":report["document_sha256"],
              "X-JD-SHA256":report["jd_sha256"],"X-AI-Calls":str(cv_usage["ai_calls"]),"X-AI-Cost-USD":str(cv_usage["cost_usd"]),"X-CV-Mode":cv_usage["mode"],"X-CV-Build":plan["cv_build"],"X-CV-Provenance":"job-hunter-cv-provenance-v1",
-             "X-CV-Technical-Score":str(quality["technical_score"])}
+             "X-CV-Structural-Score":str(quality["technical_score"])}
     return StreamingResponse(io.BytesIO(data),
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         headers={**headers,"Content-Disposition":f"attachment; filename*=UTF-8''{encoded_filename}"})

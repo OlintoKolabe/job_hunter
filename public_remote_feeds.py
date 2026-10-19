@@ -1,5 +1,7 @@
 """Public remote-job feeds. Bounded requests and source-attributed links."""
 import datetime
+import threading
+import time
 import urllib.parse
 from collectors import fetch_json,item
 
@@ -8,7 +10,15 @@ def _date(value):
         return datetime.datetime.fromtimestamp(value/1000 if value>100000000000 else value,datetime.timezone.utc).isoformat()
     return str(value or "")
 
+_CACHE={}
+_LOCK=threading.RLock()
+
 def fetch(source,roles="",country="BR"):
+    cache_key=(source,roles.split(",")[0].strip() if source=="himalayas" else "",country if source=="himalayas" else "")
+    with _LOCK:
+        entry=_CACHE.get(cache_key)
+        if entry and time.monotonic()-entry[0]<21600:
+            return list(entry[1])
     jobs=[]
     if source=="himalayas":
         # Restrict to the searcher's country; worldwide jobs are also eligible.
@@ -41,4 +51,6 @@ def fetch(source,roles="",country="BR"):
                    "remoteok",j.get("date") or _date(j.get("epoch")),j.get("description") or "")
             if v:jobs.append(v)
     else:raise ValueError("Unknown public source")
+    with _LOCK:
+        _CACHE[cache_key]=(time.monotonic(),list(jobs))
     return jobs

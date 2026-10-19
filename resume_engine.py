@@ -201,7 +201,8 @@ FACT_TOPICS={
  "growth":("growth","marketing","leads","crm","retenção","churn","fidelização","vendas","comercial","receita","google ads","ticket médio"),
  "data":("indicadores","kpis","okrs","métricas","análises","painéis","testes a/b","analytics"),
  "people":("stakeholders","equipes","liderança","alinhamento","colaboração"),
- "tools":("jira","azure devops","confluence","figma","posthog","trello","miro")
+ "tools":("jira","azure devops","confluence","figma","posthog","trello","miro"),
+ "ai":("codex","claude code","lovable")
 }
 def contains(text, phrase):
     # Word-aware matching avoids accidental substring hits.

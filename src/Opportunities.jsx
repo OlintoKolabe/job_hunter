@@ -66,7 +66,7 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{}}){
    }
    await enrichAvailable();
    setCompleted(completedAll);
-   setMessage(completedAll&&!skipped?'Busca concluída.':'Busca parcialmente concluída: '+skipped+' lotes falharam. Confira Fontes.');
+   setMessage(completedAll&&!skipped?(source==='quickin'?'Busca concluída nos quadros Quickin cadastrados. Zero vagas encontradas não significa zero vagas na plataforma.':'Busca concluída.'):'Busca parcialmente concluída: '+skipped+' lotes falharam. Confira Fontes.');
   }catch(e){setError(e.message);setMessage('Busca parcial — os resultados encontrados continuam disponíveis.')}
   finally{setBusy(false)}
  }

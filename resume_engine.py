@@ -202,7 +202,7 @@ def chronology_index(item):
       "Centauro.life":(2026,4),"Neocoder / LiberPay":(2025,5),"Neocoder":(2025,2),
       "Hexagon Mining":(2023,8),"Stefanini Brasil / Hexagon Mining":(2023,5),
       "Dotz Inc. / Meu Varejo":(2022,8),"Top Saúde Clínicas Médicas":(2020,2),
-      "Kolabe":(2018,5),"Lagoa Parques e Hotéis":(2015,1),
+      "Kolabe":(2018,5),"Estácio":(2016,6),"Lagoa Parques e Hotéis":(2015,1),
       "Companhia de Negócios":(2014,6),"Grupo Privé":(2012,6),
       "Aviva":(2011,11),"Digital Design Comunicação":(2000,1)}
     return starts[item["company"]]

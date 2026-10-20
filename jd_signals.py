@@ -9,10 +9,10 @@ JD_PATTERNS={
  "growth":("growth experiments","growth strategy","growth initiatives","growth funnel","conversion optimization","customer acquisition","retention strategy","lifecycle marketing","funnel optimization","a/b testing","growth loops","experimentos de crescimento","aquisicao de clientes","otimizacao de conversao"),
  "business":("business requirements","business analysis","process mapping","business process","stakeholder requirements","process improvement","analise de negocios","analise de processos","levantamento de requisitos","mapeamento de processos"),
 }
-REMOTE_EVIDENCE=("fully remote","100% remote","100% remoto","work from home","home office","trabalho remoto","remote position","remote role","remote working","teletrabalho")
+REMOTE_EVIDENCE=("fully remote","100% remote","100% remoto","work from home","home office","trabalho remoto","remote position","remote role","remote working","teletrabalho","remoto para todo o brasil","trabalho de qualquer lugar do brasil","work remotely from brazil","remote within brazil","remote brazil","brasil - remoto","brazil - remote")
 ONSITE_EVIDENCE=("on site only","onsite only","must work from office","presencial obrigatorio","exclusivamente presencial")
 FOREIGN_ONLY=("us only","usa only","united states only","must reside in the us","must be based in the us","europe only","canada only")
-BRAZIL_EVIDENCE=("based in brazil","located in brazil","reside in brazil","work from brazil","brazilian residents","candidatos do brasil","residir no brasil","atuar do brasil","brazil or latam")
+BRAZIL_EVIDENCE=("based in brazil","located in brazil","reside in brazil","work from brazil","brazilian residents","candidatos do brasil","residir no brasil","atuar do brasil","brazil or latam","remote within brazil","work remotely from brazil","remoto para todo o brasil","trabalho de qualquer lugar do brasil","remote brazil","brasil - remoto","brazil - remote")
 SPANISH_REQ=("fluent spanish required","fluent in spanish","spanish fluency required","fluency in spanish","espanhol fluente obrigatorio","fluencia em espanhol obrigatoria")
 SPANISH_OPTIONAL=("spanish is a plus","spanish preferred","espanhol desejavel","espanhol sera um diferencial")
 def clean_jd(raw):

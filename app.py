@@ -246,11 +246,11 @@ def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:
             known_urls=set()
             known_pairs=set()
             if keys:
-                cur.execute("SELECT normalized_url FROM jh_history WHERE normalized_url=ANY(%s)",(keys,))
+                cur.execute("SELECT normalized_url FROM jh_history WHERE normalized_url=ANY(%s) AND lower(estado) IN ('candidatado','descartado','descartada')",(keys,))
                 known_urls={row[0] for row in cur.fetchall()}
             pairs=[pair_key(j["company"],j["title"]) for j in items+review if j["company"]]
             if pairs:
-                cur.execute("SELECT pair_key FROM jh_history WHERE pair_key=ANY(%s)",(pairs,))
+                cur.execute("SELECT pair_key FROM jh_history WHERE pair_key=ANY(%s) AND lower(estado) IN ('candidatado','descartado','descartada')",(pairs,))
                 known_pairs={row[0] for row in cur.fetchall()}
     visible,pending,history_excluded=exclude_history_matches(items,review,known_urls,known_pairs)
     visible=[j for j in visible if not any(b in normalized(j["company"]) for b in ("kraken","payward"))]
@@ -422,10 +422,10 @@ def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False
                     state=EXCLUDED.state,received=EXCLUDED.received,error=EXCLUDED.error,checked_at=now()""",
                     (entry["source"],entry["slug"],entry["state"],entry["received"],entry.get("error","")))
             if urls:
-                cur.execute("SELECT normalized_url FROM jh_history WHERE normalized_url=ANY(%s)",(urls,))
+                cur.execute("SELECT normalized_url FROM jh_history WHERE normalized_url=ANY(%s) AND lower(estado) IN ('candidatado','descartado','descartada')",(urls,))
                 known_urls={r[0] for r in cur.fetchall()}
             if pairs:
-                cur.execute("SELECT pair_key FROM jh_history WHERE pair_key=ANY(%s)",(pairs,))
+                cur.execute("SELECT pair_key FROM jh_history WHERE pair_key=ANY(%s) AND lower(estado) IN ('candidatado','descartado','descartada')",(pairs,))
                 known_pairs={r[0] for r in cur.fetchall()}
     visible,pending,history_excluded=exclude_history_matches(items,review,known_urls,known_pairs)
     visible=[j for j in visible if not any(b in normalized(j["company"]) for b in ("kraken","payward"))]

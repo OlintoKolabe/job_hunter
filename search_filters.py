@@ -210,6 +210,7 @@ def classify(job,terms,country,mode,days):
     if evidence["spanish_required"]:return "excluded","espanhol_obrigatorio"
     # Match the requested role before applying generic negative title tokens.
     # E.g. "Product Manager, Engineering" is a product leadership vacancy.
+    if NON_TARGET_TITLE.search(title) and not role_match(title,terms):return "excluded","cargo"
     if not role_match(title,terms) and not evidence["family_evidence"]:return "excluded","cargo"
     loc=fold(job.get("location",""))
     structured_geo=fold(" ".join(str(job.get(k) or "") for k in ("country","countryCode","countryName","city","state","region","eligibleLocations","remoteRegions")))

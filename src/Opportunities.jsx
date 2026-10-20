@@ -1,7 +1,9 @@
-import React,{useState,useEffect} from 'react';
+import React,{useState,useEffect,useRef} from 'react';
 const defaultRoles='Product Manager, Product Owner, Project Manager, Gerente de Projetos, Product Marketing, Marketing, Growth, Business Analyst, Analista de Negócios, PMO';
 const initialCountries=[{value:'LATAM',label:'América Latina'},{value:'BR',label:'Brasil'}];
 export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{}}){
+ const decidedUrlsRef=useRef(new Set());
+ const visibleUndecided=jobs=>jobs.filter(j=>!decidedUrlsRef.current.has(j.url));
  const [onlyNew,setOnlyNew]=useState(false),[searchedQuery,setSearchedQuery]=useState(''),[source,setSource]=useState('all'),[sources,setSources]=useState([{value:'all',label:'Todas as fontes'},{value:'inhire',label:'inHire'},{value:'quickin',label:'Quickin'},{value:'gupy',label:'Gupy'}]),[roles,setRoles]=useState(defaultRoles),[days,setDays]=useState('0'),[country,setCountry]=useState('BR'),[countries,setCountries]=useState(initialCountries),[mode,setMode]=useState('remote'),[sort,setSort]=useState('score');
  const [sourceStats,setSourceStats]=useState({}),[reviews,setReviews]=useState([]),[filterStats,setFilterStats]=useState({}),[rawScanned,setRawScanned]=useState(0),[busy,setBusy]=useState(false),[results,setResults]=useState([]),[message,setMessage]=useState(''),[error,setError]=useState(''),[checked,setChecked]=useState(0),[counts,setCounts]=useState({new:0,total:0}),[completed,setCompleted]=useState(false),[visibleCount,setVisibleCount]=useState(10),[evaluated,setEvaluated]=useState(0),[evaluationTotal,setEvaluationTotal]=useState(0),[scoringNow,setScoringNow]=useState([]),[scoringFailed,setScoringFailed]=useState([]),[scoringAttempted,setScoringAttempted]=useState([]);
  useEffect(()=>{fetch('/api/search-filters',{cache:'no-store'}).then(r=>{if(!r.ok)throw Error('HTTP '+r.status);return r.json()}).then(d=>{if(d?.countries)setCountries(d.countries);if(!Array.isArray(d?.sources)||d.sources.length<4)throw Error('Lista de fontes incompleta');setSources(d.sources);}).catch(()=>setError('Não foi possível carregar a lista completa de fontes. Atualize a página; se persistir, consulte o serviço.'))},[]);
@@ -9,13 +11,13 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{}}){
  const changeSource=value=>{setSource(value);setResults([]);setReviews([]);setChecked(0);setCompleted(false);setMessage("Fonte alterada. Clique em Buscar oportunidades para executar a nova seleção.");setError("");};
  async function search(){
   setVisibleCount(10);setEvaluated(0);setEvaluationTotal(0);setScoringNow([]);setScoringFailed([]);setScoringAttempted([]);setBusy(true);setSearchedQuery(query());setError('');setResults([]);setReviews([]);setSourceStats({});setFilterStats({});setRawScanned(0);setChecked(0);setCompleted(false);setMessage('Consultando '+(sources.find(x=>x.value===source)?.label||source)+'…');
-  const qs=query();const all=new Map();const uncertain=new Map();const totals={};const sourceTotals={};let inspected=0;const record=(d)=>{(d.details||[]).forEach(x=>{const source=x.source||'desconhecida';const n=sourceTotals[source]||{consultas:0,recebidas:0,erros:0};n.consultas++;n.recebidas+=x.received||0;if(x.status==='error'||x.state==='pendente')n.erros++;sourceTotals[source]=n});setSourceStats({...sourceTotals});(d.review_items||[]).forEach(j=>uncertain.set(j.url,j));for(const [key,n] of Object.entries(d.filter_stats||{})){totals[key]=(totals[key]||0)+n}inspected+=d.raw_count||0;setReviews([...uncertain.values()]);setFilterStats({...totals});setRawScanned(inspected)};let count=0;let completedAll=false;
+  const qs=query();const all=new Map();const uncertain=new Map();const totals={};const sourceTotals={};let inspected=0;const record=(d)=>{(d.details||[]).forEach(x=>{const source=x.source||'desconhecida';const n=sourceTotals[source]||{consultas:0,recebidas:0,erros:0};n.consultas++;n.recebidas+=x.received||0;if(x.status==='error'||x.state==='pendente')n.erros++;sourceTotals[source]=n});setSourceStats({...sourceTotals});(d.review_items||[]).forEach(j=>uncertain.set(j.url,j));for(const [key,n] of Object.entries(d.filter_stats||{})){totals[key]=(totals[key]||0)+n}inspected+=d.raw_count||0;setReviews(visibleUndecided([...uncertain.values()]));setFilterStats({...totals});setRawScanned(inspected)};let count=0;let completedAll=false;
   try{
    const requestJson=async url=>{let problem;for(let retry=0;retry<2;retry++){try{const r=await fetch(url,{method:'POST',signal:AbortSignal.timeout(30000)});const ct=r.headers.get('content-type')||'';if(!ct.includes('application/json'))throw Error('Servidor retornou HTML ('+r.status+'); lote não processado');const d=await r.json();if(!r.ok)throw Error(typeof d.detail==='string'?d.detail:('Erro HTTP '+r.status+' ao consultar vagas'));return d}catch(err){problem=err}}throw problem};
    const d=await requestJson('/api/search-jobs?'+qs);
 
    (d.items||[]).forEach(j=>all.set(j.url,j));record(d);count+=d.total||0;
-   setResults([...all.values()]);setCounts({new:all.size,total:count});
+   setResults(visibleUndecided([...all.values()]));setCounts({new:all.size,total:count});
    // Score incomplete JDs as each batch arrives rather than waiting for the entire catalog.
    const scoredOrAttempted=new Set();
    let resolved=0;
@@ -38,7 +40,7 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{}}){
            if(all.has(j.url))all.set(j.url,{...all.get(j.url),...j});
            if(uncertain.has(j.url))uncertain.set(j.url,{...uncertain.get(j.url),...j});
          }
-         setResults([...all.values()]);setReviews([...uncertain.values()]);
+         setResults(visibleUndecided([...all.values()]));setReviews(visibleUndecided([...uncertain.values()]));
        }catch(err){
          setScoringFailed(prev=>[...prev,...chunk.map(j=>j.url)]);
        }finally{
@@ -60,7 +62,7 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{}}){
     let batch;try{batch=await requestJson('/api/catalog/scan?offset='+offset+'&limit=4&'+qs)}catch(err){skipped++;offset+=4;setMessage('Alguns quadros falharam; continuando os demais. Falhas: '+skipped);continue}
     (batch.items||[]).filter(j=>source==='all'||j.source?.toLowerCase()===source||(source==='greenhouse'&&j.source?.toLowerCase()==='greenhouse_eu')).forEach(j=>{const old=all.get(j.url);all.set(j.url,old&&(old.ranking?.score!=null||scoredOrAttempted.has(j.url))?old:j)});record(batch);
     offset=batch.next_offset;if(!Number.isFinite(offset))throw Error('Paginação inválida');
-    count+=batch.found||0;setResults([...all.values()]);await enrichAvailable();setChecked(x=>x+(batch.details||[]).length);setCounts({new:all.size,total:count});
+    count+=batch.found||0;setResults(visibleUndecided([...all.values()]));await enrichAvailable();setChecked(x=>x+(batch.details||[]).length);setCounts({new:all.size,total:count});
     if(batch.complete){completedAll=true;break}
     if(!(batch.details||[]).length)break;
    }
@@ -96,6 +98,7 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{}}){
      const data=await response.json().catch(()=>({}));
      if(!response.ok)throw Error(typeof data.detail==='string'?data.detail:('Não foi possível salvar a decisão (HTTP '+response.status+').'));
      if(data.saved!==true||data.state!==state)throw Error('O servidor não confirmou a decisão. A vaga permaneceu na lista.');
+     decidedUrlsRef.current.add(job.url);
      onDecisionSaved();
      setHiddenDecisions(prev=>[...new Set([...prev,job.url])]);
      setResults(prev=>prev.filter(x=>x.url!==job.url));

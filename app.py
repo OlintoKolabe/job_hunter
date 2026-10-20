@@ -91,6 +91,20 @@ def url_key(value):
     host=x.netloc.casefold().removeprefix("www.").removeprefix("br.")
     return (host+x.path.rstrip("/")+(("?"+x.query) if x.query else "")).strip().lower()
 
+def terminal_url_key(value):
+    """Compare the actual vacancy URL while ignoring common tracking-only query params."""
+    from urllib.parse import parse_qsl, urlencode
+    key=url_key(value)
+    if "?" not in key:return key
+    base,query=key.split("?",1)
+    trackers={"fbclid","gclid","msclkid","ref","referrer","source","utm_source","utm_medium","utm_campaign","utm_content","utm_term"}
+    clean=[(k,v) for k,v in parse_qsl(query,keep_blank_values=True)
+           if k.lower() not in trackers and not k.lower().startswith("utm_")]
+    return base+("?" + urlencode(sorted(clean)) if clean else "")
+
+def terminal_url_bases(jobs):
+    return list({url_key(j["url"]).split("?",1)[0] for j in jobs if j.get("url")})
+
 def pair_key(empresa,cargo):
     return " ".join(normalized(empresa).split())+"|"+ " ".join(normalized(cargo).split())
 
@@ -162,7 +176,7 @@ def exclude_history_matches(items,review,known_urls,known_pairs):
     The sets are always queried fresh during every search/catalog batch.
     """
     def is_known(job):
-        return url_key(job["url"]) in known_urls or (
+        return terminal_url_key(job["url"]) in known_urls or (
             bool(job.get("company")) and pair_key(job["company"],job["title"]) in known_pairs
         )
     confirmed=[job for job in items if not is_known(job)]
@@ -246,8 +260,8 @@ def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:
             known_urls=set()
             known_pairs=set()
             if keys:
-                cur.execute("SELECT normalized_url FROM jh_history WHERE normalized_url=ANY(%s) AND lower(estado) IN ('candidatado','descartado','descartada')",(keys,))
-                known_urls={row[0] for row in cur.fetchall()}
+                cur.execute("SELECT normalized_url FROM jh_history WHERE split_part(normalized_url,'?',1)=ANY(%s) AND lower(estado) IN ('candidatado','descartado','descartada')",(terminal_url_bases(items+review),))
+                known_urls={terminal_url_key(row[0]) for row in cur.fetchall()}
             pairs=[pair_key(j["company"],j["title"]) for j in items+review if j["company"]]
             if pairs:
                 cur.execute("SELECT pair_key FROM jh_history WHERE pair_key=ANY(%s) AND lower(estado) IN ('candidatado','descartado','descartada')",(pairs,))
@@ -422,8 +436,8 @@ def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False
                     state=EXCLUDED.state,received=EXCLUDED.received,error=EXCLUDED.error,checked_at=now()""",
                     (entry["source"],entry["slug"],entry["state"],entry["received"],entry.get("error","")))
             if urls:
-                cur.execute("SELECT normalized_url FROM jh_history WHERE normalized_url=ANY(%s) AND lower(estado) IN ('candidatado','descartado','descartada')",(urls,))
-                known_urls={r[0] for r in cur.fetchall()}
+                cur.execute("SELECT normalized_url FROM jh_history WHERE split_part(normalized_url,'?',1)=ANY(%s) AND lower(estado) IN ('candidatado','descartado','descartada')",(terminal_url_bases(items+review),))
+                known_urls={terminal_url_key(r[0]) for r in cur.fetchall()}
             if pairs:
                 cur.execute("SELECT pair_key FROM jh_history WHERE pair_key=ANY(%s) AND lower(estado) IN ('candidatado','descartado','descartada')",(pairs,))
                 known_pairs={r[0] for r in cur.fetchall()}

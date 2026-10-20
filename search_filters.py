@@ -77,9 +77,11 @@ def role_match(title,terms):
     title=fold(title)
     terms=[fold(t) for t in terms]
     if not terms:return True
-    if NON_TARGET_TITLE.search(title):return False
     families=requested_families(terms)
+    # A recognizable selected role remains relevant even when a title also
+    # contains words such as engineering, design or research.
     if any(alias in title for fam in families for alias in ROLE_FAMILIES[fam]):return True
+    if NON_TARGET_TITLE.search(title):return False
     # Any custom free-text role the user typed still matches literally.
     return any(len(t)>=3 and t in title for t in terms)
 # Small bilingual discovery set per selected family, not the entire synonym lexicon.
@@ -206,7 +208,8 @@ def classify(job,terms,country,mode,days):
     from jd_signals import signals
     evidence=signals(job,", ".join(terms))
     if evidence["spanish_required"]:return "excluded","espanhol_obrigatorio"
-    if NON_TARGET_TITLE.search(title):return "excluded","cargo"
+    # Match the requested role before applying generic negative title tokens.
+    # E.g. "Product Manager, Engineering" is a product leadership vacancy.
     if not role_match(title,terms) and not evidence["family_evidence"]:return "excluded","cargo"
     loc=fold(job.get("location",""))
     structured_geo=fold(" ".join(str(job.get(k) or "") for k in ("country","countryCode","countryName","city","state","region","eligibleLocations","remoteRegions")))

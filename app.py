@@ -176,7 +176,11 @@ def exclude_history_matches(items,review,known_urls,known_pairs):
     The sets are always queried fresh during every search/catalog batch.
     """
     def is_known(job):
-        return terminal_url_key(job["url"]) in known_urls or (
+        # A different URL can represent a different requisition even when
+        # company and role are identical. Only fall back to the pair key when
+        # a listing has no URL at all.
+        key=terminal_url_key(job.get("url",""))
+        return (key in known_urls) if key else (
             bool(job.get("company")) and pair_key(job["company"],job["title"]) in known_pairs
         )
     confirmed=[job for job in items if not is_known(job)]

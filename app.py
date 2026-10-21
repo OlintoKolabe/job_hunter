@@ -524,19 +524,24 @@ def mark_job_disposition(payload: JobDisposition, request: Request):
                 WHERE normalized_url=%s OR (pair_key=%s AND %s<>'' )
                 ORDER BY CASE WHEN normalized_url=%s THEN 0 ELSE 1 END,id LIMIT 1""",(uk,pk,pk,uk))
             existing=cur.fetchone()
-            if existing:
-                if existing[2]!=uk and existing[1]!=payload.state:
-                    raise HTTPException(409,"Outra vaga com o mesmo cargo e empresa já possui decisão diferente no Histórico")
-                if existing[1]!=payload.state:
-                    # An explicit click changes the recorded status rather than silently failing.
-                    cur.execute("""UPDATE jh_history SET estado=%s, motivo=%s
-                        WHERE id=%s""",(payload.state,"Decisão alterada manualmente na busca",existing[0]))
-                    return {"saved":True,"already_recorded":True,"updated":True,"state":payload.state}
-                return {"saved":True,"already_recorded":True,"updated":False,"state":existing[1]}
+            # A company/title match is not necessarily the same job posting.
+            # Preserve both independently when their normalized URLs differ.
+            same_url=bool(existing and existing[2]==uk)
+            if same_url:
+                old_state=str(existing[1] or "")
+                if old_state.casefold()==payload.state.casefold():
+                    return {"saved":True,"already_recorded":True,"updated":False,"state":payload.state}
+                cur.execute("""UPDATE jh_history SET estado=%s, data=TO_CHAR(CURRENT_DATE,'YYYY-MM-DD'),
+                    motivo=%s WHERE id=%s""",
+                    (payload.state,"Decisão alterada manualmente na busca",existing[0]))
+                return {"saved":True,"already_recorded":True,"updated":True,"state":payload.state}
+            # ux_jh_history_pair is unique; a distinct URL with a reused role
+            # must not steal or overwrite the older entry's pair key.
+            insert_pk="" if existing else pk
             cur.execute("""INSERT INTO jh_history
                 (url,normalized_url,empresa,cargo,pair_key,estado,data,fonte,motivo)
                 VALUES (%s,%s,%s,%s,%s,%s,TO_CHAR(CURRENT_DATE,'YYYY-MM-DD'),%s,%s)""",
-                (url,uk,company,title,pk,payload.state,
+                (url,uk,company,title,insert_pk,payload.state,
                  (payload.source or "Caçador")[:120],"Decisão manual na busca"))
     return {"saved":True,"already_recorded":False,"state":payload.state}
 

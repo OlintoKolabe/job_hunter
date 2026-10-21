@@ -18,10 +18,16 @@ class TerminalDecisionTests(unittest.TestCase):
         job={"url":"https://jobs.quickin.io/acme/jobs/abc?utm_source=feed","company":"Acme","title":"Product Owner"}
         visible,pending,n=exclude_history_matches([],[job],{terminal_url_key(job["url"])},set())
         self.assertEqual((len(visible),len(pending),n),(0,0,1))
-    def test_pair_blocks_same_company_role_with_new_url(self):
-        job={"url":"https://jobs.quickin.io/acme/jobs/updated","company":"Acme","title":"Product Owner"}
+    def test_same_company_role_different_url_must_remain_visible(self):
+        job={"url":"https://jobs.quickin.io/acme/jobs/new-requisition","company":"Acme","title":"Product Owner"}
         visible,pending,n=exclude_history_matches([job],[],set(),{pair_key("Acme","Product Owner")})
-        self.assertEqual((len(visible),n),(0,1))
+        self.assertEqual((len(visible),len(pending),n),(1,0,0))
+
+    def test_exact_url_still_blocked_even_if_pair_matches(self):
+        job={"url":"https://jobs.quickin.io/acme/jobs/old-requisition","company":"Acme","title":"Product Owner"}
+        visible,pending,n=exclude_history_matches([job],[],{terminal_url_key(job["url"])},{pair_key("Acme","Product Owner")})
+        self.assertEqual((len(visible),len(pending),n),(0,0,1))
+
     def test_url_bases(self):
         jobs=[{"url":"https://example.org/job/1?utm_source=x"},{"url":"https://example.org/job/1?utm_source=y"}]
         self.assertEqual(terminal_url_bases(jobs),["example.org/job/1"])

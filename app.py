@@ -461,6 +461,8 @@ def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False
                 cur.execute("SELECT pair_key FROM jh_history WHERE pair_key=ANY(%s) AND lower(estado) IN ('candidatado','descartado','descartada')",(pairs,))
                 known_pairs={r[0] for r in cur.fetchall()}
     visible,pending,history_excluded=exclude_history_matches(items,review,known_urls,known_pairs)
+    _,rejected,_=exclude_history_matches([],rejected,known_urls,known_pairs)
+    rejected=[j for j in rejected if not any(b in normalized(j["company"]) for b in ("kraken","payward"))]
     visible=[j for j in visible if not any(b in normalized(j["company"]) for b in ("kraken","payward"))]
     pending=[j for j in pending if not any(b in normalized(j["company"]) for b in ("kraken","payward"))]
     # First seen is persisted independently of the terminal application history.

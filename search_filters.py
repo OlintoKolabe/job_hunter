@@ -210,9 +210,12 @@ def classify(job,terms,country,mode,days):
     if evidence["spanish_required"]:return "excluded","espanhol_obrigatorio"
     # Match the requested role before applying generic negative title tokens.
     # E.g. "Product Manager, Engineering" is a product leadership vacancy.
-    if NON_TARGET_TITLE.search(title) and not role_match(title,terms):return "excluded","cargo"
-    jd_role_candidate=not role_match(title,terms) and bool(evidence["family_evidence"])
-    if not role_match(title,terms) and not jd_role_candidate:return "excluded","cargo"
+    title_matches=role_match(title,terms)
+    # Generic technical-title words are not definitive when the JD includes
+    # repeated evidence of a selected business/product/project family.
+    technical_with_jd=bool(NON_TARGET_TITLE.search(title)) and not title_matches and bool(evidence["family_evidence"])
+    if NON_TARGET_TITLE.search(title) and not title_matches and not technical_with_jd:return "excluded","cargo"
+    if not title_matches and not evidence["family_evidence"]:return "excluded","cargo"
     loc=fold(job.get("location",""))
     structured_geo=fold(" ".join(str(job.get(k) or "") for k in ("country","countryCode","countryName","city","state","region","eligibleLocations","remoteRegions")))
     loc=(loc+" "+structured_geo).strip()
@@ -230,7 +233,7 @@ def classify(job,terms,country,mode,days):
     if days and (published is None or not now-timedelta(days=days)<=published<=now):
         return "excluded","data"
     unknown=[]
-    if jd_role_candidate:unknown.append("cargo_a_confirmar")
+    if technical_with_jd:unknown.append("cargo_a_confirmar")
     if not mode_ok:unknown.append("modalidade")
     if not country_ok:unknown.append("pais")
     if unknown:return "review",",".join(unknown)

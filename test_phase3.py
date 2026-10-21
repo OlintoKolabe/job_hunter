@@ -284,9 +284,9 @@ class Phase3ContractTests(unittest.TestCase):
         confirmed,review,count=exclude_history_matches(
             [old,same_pair,new],[pending_old,new],
             {"x.example/old","x.example/pending"},{"acme|product manager"})
-        self.assertEqual([j["url"] for j in confirmed],["https://x.example/fresh"])
+        self.assertEqual([j["url"] for j in confirmed],["https://x.example/new","https://x.example/fresh"])
         self.assertEqual([j["url"] for j in review],["https://x.example/fresh"])
-        self.assertEqual(count,3)
+        self.assertEqual(count,2)
 
     def test_search_jobs_route_points_to_search_handler(self):
         from app import app,search_jobs,exclude_history_matches

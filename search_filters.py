@@ -211,7 +211,8 @@ def classify(job,terms,country,mode,days):
     # Match the requested role before applying generic negative title tokens.
     # E.g. "Product Manager, Engineering" is a product leadership vacancy.
     if NON_TARGET_TITLE.search(title) and not role_match(title,terms):return "excluded","cargo"
-    if not role_match(title,terms) and not evidence["family_evidence"]:return "excluded","cargo"
+    jd_role_candidate=not role_match(title,terms) and bool(evidence["family_evidence"])
+    if not role_match(title,terms) and not jd_role_candidate:return "excluded","cargo"
     loc=fold(job.get("location",""))
     structured_geo=fold(" ".join(str(job.get(k) or "") for k in ("country","countryCode","countryName","city","state","region","eligibleLocations","remoteRegions")))
     loc=(loc+" "+structured_geo).strip()
@@ -229,6 +230,7 @@ def classify(job,terms,country,mode,days):
     if days and (published is None or not now-timedelta(days=days)<=published<=now):
         return "excluded","data"
     unknown=[]
+    if jd_role_candidate:unknown.append("cargo_a_confirmar")
     if not mode_ok:unknown.append("modalidade")
     if not country_ok:unknown.append("pais")
     if unknown:return "review",",".join(unknown)

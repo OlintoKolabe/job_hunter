@@ -12,4 +12,14 @@ class OpportunityUIContracts(unittest.TestCase):
         self.assertEqual(s.count("onClick={()=>markDecision(v,'Candidatado')}"),0)
         self.assertEqual(s.count("onClick={()=>markDecision(v,'Descartado')}"),0)
 
+    def test_geography_priority_precedes_scores_and_dates(self):
+        s=Path("src/Opportunities.jsx").read_text()
+        self.assertIn("const geoPriority=v=>",s)
+        self.assertIn("if(geoDiff)return geoDiff;",s)
+        self.assertLess(s.index("if(geoDiff)return geoDiff;"),s.index("return sort==='recommendation'"))
+        self.assertIn("if(explicitBrazil)return 0;",s)
+        self.assertIn("if(latam)return 1;",s)
+        self.assertIn("if(v.needs_verification?.includes('pais'))return 3;",s)
+        self.assertIn(".sort((a,b)=>geoPriority(a)-geoPriority(b)).map(v=>",s)
+
 if __name__=="__main__":unittest.main()

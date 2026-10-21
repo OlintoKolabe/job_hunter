@@ -375,7 +375,7 @@ async def catalog_import(request: Request):
 @app.get("/api/search-filters")
 def available_filters(request: Request):
     require_auth(request)
-    return {"roles":DEFAULT_ROLES,"countries":[{"value":k,"label":v} for k,v in COUNTRIES],"sources":[{"value":"inhire","label":"inHire"},{"value":"quickin","label":"Quickin"},{"value":"gupy","label":"Gupy"},{"value":"greenhouse","label":"Greenhouse"},{"value":"ashby","label":"Ashby"},{"value":"lever","label":"Lever"},{"value":"bamboohr","label":"BambooHR"},{"value":"dynamite","label":"Dynamite Jobs"},{"value":"linkedin_guest","label":"LinkedIn"},{"value":"jobgether","label":"Jobgether"},{"value":"workable","label":"Workable"},{"value":"himalayas","label":"Himalayas (remoto)"},{"value":"remotive","label":"Remotive (remoto)"},{"value":"remoteok","label":"Remote OK (remoto)"}]+([{"value":"indeed","label":"Indeed"}] if indeed_enabled() else [])}
+    return {"roles":DEFAULT_ROLES,"countries":[{"value":k,"label":v} for k,v in COUNTRIES],"sources":[{"value":"all","label":"Todas as fontes"},{"value":"inhire","label":"inHire"},{"value":"quickin","label":"Quickin"},{"value":"gupy","label":"Gupy"},{"value":"greenhouse","label":"Greenhouse"},{"value":"ashby","label":"Ashby"},{"value":"lever","label":"Lever"},{"value":"bamboohr","label":"BambooHR"},{"value":"dynamite","label":"Dynamite Jobs"},{"value":"linkedin_guest","label":"LinkedIn"},{"value":"jobgether","label":"Jobgether"},{"value":"workable","label":"Workable"},{"value":"himalayas","label":"Himalayas (remoto)"},{"value":"remotive","label":"Remotive (remoto)"},{"value":"remoteok","label":"Remote OK (remoto)"}]+([{"value":"indeed","label":"Indeed"}] if indeed_enabled() else [])}
 
 @app.get("/api/catalog")
 def catalog(request: Request):

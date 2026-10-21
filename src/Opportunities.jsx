@@ -165,8 +165,25 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{}}){
    if(v.jd_status==='pendente')return 'A descrição ainda aguarda avaliação.';
    return (v.ai_status==='interpreted'||v.ai_status==='cache')?'A IA analisou a descrição, mas os requisitos e as evidências identificados ainda não sustentam uma nota confiável.':v.ranking?.confidence==='cobertura_insuficiente'?'Os requisitos identificados não permitem calcular uma nota confiável.':'Não há evidências suficientes para calcular uma nota confiável.';
  };
+ const geoPriority=v=>{
+   const raw=String(v.location||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+   const explicitBrazil=/(^|[^a-z])(brazil|brasil|brazilian|sao paulo|rio de janeiro|belo horizonte|brasilia|curitiba|goiania|porto alegre|recife|campinas|florianopolis)([^a-z]|$)/.test(raw)||/(^|[\s,(/])br([\s,)/]|$)/.test(raw);
+   const latam=/(latam|latin america|america latina|south america|america do sul)/.test(raw);
+   const global=/(worldwide|anywhere|global|work from anywhere)/.test(raw);
+   // Country-restricted or non-Brazil postings must never jump ahead of Brazil.
+   if(explicitBrazil)return 0;
+   if(latam)return 1;
+   if(global)return 2;
+   if(!v.needs_verification?.includes('pais') && v.confirmed)return 2;
+   if(v.needs_verification?.includes('pais'))return 3;
+   return 4;
+ };
  const ordered=[...combined.values()].filter(v=>!hiddenDecisions.includes(v.url)&&(!onlyNew||(v.is_new&&v.ranking?.score==null))).sort((a,b)=>{
    const date=v=>{const x=Date.parse(v.published||'');return Number.isFinite(x)?x:0};
+   if(country==='BR'||country==='LATAM'){
+     const geoDiff=geoPriority(a)-geoPriority(b);
+     if(geoDiff)return geoDiff;
+   }
    return sort==='recommendation'?((b.ranking?.application_recommendation?.score??-1)-(a.ranking?.application_recommendation?.score??-1)||date(b)-date(a)):sort==='score'?((b.ranking?.score??-1)-(a.ranking?.score??-1)||((b.ranking?.requirements?.length||0)-(a.ranking?.requirements?.length||0))||date(b)-date(a)):(sort==='newest'?date(b)-date(a):date(a)-date(b))
  });
  return <section className="history-pane">

@@ -216,7 +216,7 @@ def classify(job,terms,country,mode,days):
     if NON_TARGET_TITLE.search(title) and not title_matches:return "excluded","cargo"
     # Missing JDs on adjacent management roles deserve a review queue, not
     # silent exclusion. They are never confirmed automatically.
-    adjacent=bool(re.search(r"\\b(?:operations|operacoes|strategy|estrategia|transformation|transformacao|program|delivery|commercial|comercial)\\b",title)) and bool(re.search(r"\\b(?:lead|manager|head|director|gerente|coordenador|coordenadora|especialista)\\b",title))
+    adjacent=bool(re.search(r"\b(?:operations|operacoes|strategy|estrategia|transformation|transformacao|program|delivery|commercial|comercial)\b",title)) and bool(re.search(r"\b(?:lead|manager|head|director|gerente|coordenador|coordenadora|especialista)\b",title))
     uncertain_role=not title_matches and not evidence["family_evidence"] and adjacent
     if not title_matches and not evidence["family_evidence"] and not uncertain_role:return "excluded","cargo"
     loc=fold(job.get("location",""))

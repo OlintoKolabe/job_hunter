@@ -311,6 +311,12 @@ def source_freshness(source, checked_at):
 
 def active_source_tasks():
     tasks=set(source_tasks())
+    # Search the complete default role family on keyword-based LinkedIn guest.
+    # Do not expand Gupy here: its current public endpoint returns HTTP 404.
+    linkedin_terms=("product manager","product owner","project manager",
+        "gerente de projetos","gerente de produto","product marketing",
+        "marketing","growth","business analyst","analista de negocios","pmo")
+    tasks.update(("linkedin_guest",term) for term in linkedin_terms)
     with psycopg.connect(DATABASE,connect_timeout=8) as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT source,slug FROM jh_catalog_source")
@@ -388,6 +394,15 @@ def catalog_checks(request: Request):
             rows=[dict(zip(("source","slug","state","received","error","checked_at"),r)) for r in cur.fetchall()]
     return {"total":len(rows),"items":rows}
 
+def unique_jobs_by_url(found):
+    """Only collapse exact listing URLs, never distinct postings sharing a title."""
+    unique={}
+    for job in found:
+        key=url_key(job.get("url",""))
+        if key and key not in unique:
+            unique[key]=job
+    return unique
+
 @app.post("/api/catalog/scan")
 def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False,roles:str=DEFAULT_ROLES,country:str="BR",mode:str="remote",days:int=30,sort:str="newest",source:str="all"):
     require_auth(request)
@@ -414,14 +429,9 @@ def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False
     limit=max(1,min(limit,15))
     batch=tasks[offset:offset+limit]
     details,found=scan(batch,workers=6)
-    unique={}
-    pairset=set()
-    for job in found:
-        key=url_key(job["url"])
-        pair=pair_key(job["company"],job["title"]) if job["company"] else ""
-        if not key or key in unique or (pair and pair in pairset):continue
-        unique[key]=job
-        if pair:pairset.add(pair)
+    # Only deduplicate identical URLs. Company + role can represent distinct
+    # openings, offices or requisition IDs and must not discard jobs here.
+    unique=unique_jobs_by_url(found)
     raw_count=len(unique)
     try: items,review,filter_stats=analyze_filters(list(unique.values()),roles,country,mode,days,sort)
     except ValueError as e:raise HTTPException(400,str(e))

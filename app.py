@@ -260,13 +260,15 @@ def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:
             known_urls=set()
             known_pairs=set()
             if keys:
-                cur.execute("SELECT normalized_url FROM jh_history WHERE split_part(normalized_url,'?',1)=ANY(%s) AND lower(estado) IN ('candidatado','descartado','descartada')",(terminal_url_bases(items+review),))
+                cur.execute("SELECT normalized_url FROM jh_history WHERE split_part(normalized_url,'?',1)=ANY(%s) AND lower(estado) IN ('candidatado','descartado','descartada')",(terminal_url_bases(items+review+rejected),))
                 known_urls={terminal_url_key(row[0]) for row in cur.fetchall()}
             pairs=[pair_key(j["company"],j["title"]) for j in items+review if j["company"]]
             if pairs:
                 cur.execute("SELECT pair_key FROM jh_history WHERE pair_key=ANY(%s) AND lower(estado) IN ('candidatado','descartado','descartada')",(pairs,))
                 known_pairs={row[0] for row in cur.fetchall()}
     visible,pending,history_excluded=exclude_history_matches(items,review,known_urls,known_pairs)
+    _,rejected,_=exclude_history_matches([],rejected,known_urls,known_pairs)
+    rejected=[j for j in rejected if not any(b in normalized(j["company"]) for b in ("kraken","payward"))]
     visible=[j for j in visible if not any(b in normalized(j["company"]) for b in ("kraken","payward"))]
     pending=[j for j in pending if not any(b in normalized(j["company"]) for b in ("kraken","payward"))]
     # First seen is persisted independently of the terminal application history.
@@ -435,8 +437,17 @@ def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False
     raw_count=len(unique)
     try: items,review,filter_stats=analyze_filters(list(unique.values()),roles,country,mode,days,sort)
     except ValueError as e:raise HTTPException(400,str(e))
-    urls=[url_key(v["url"]) for v in items+review]
-    pairs=[pair_key(v["company"],v["title"]) for v in items+review if v["company"]]
+    # Offer out-of-filter vacancies for explicit decisions without treating them
+    # as eligible. Bound the response: this is a review sample, not bulk export.
+    from search_filters import classify,search_terms
+    terms=search_terms(roles)
+    rejected=[]
+    for job in unique.values():
+        verdict,reason=classify(job,terms,country,mode,days)
+        if verdict=="excluded" and len(rejected)<25:
+            rejected.append({k:job.get(k,"") for k in ("url","title","company","source","location","published")}|{"excluded_reason":reason})
+    urls=[url_key(v["url"]) for v in items+review+rejected]
+    pairs=[pair_key(v["company"],v["title"]) for v in items+review+rejected if v["company"]]
     known_urls=set();known_pairs=set()
     with psycopg.connect(DATABASE,connect_timeout=7) as conn:
         with conn.cursor() as cur:
@@ -477,7 +488,7 @@ def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False
     return {"total_sources":len(tasks),"due_only":due_only,"offset":offset,"next_offset":offset+len(batch),
             "complete":offset+len(batch)>=len(tasks),"details":details,
             "found":len(items),"new":fresh_count,"duplicates":history_excluded,"raw_count":raw_count,"filter_stats":filter_stats,
-            "jd_coverage":coverage,"review_items":pending[:150],"items":visible[:80],"notice":"Vagas candidatas: remoto/Brasil e requisitos ainda aguardam análise completa."}
+            "jd_coverage":coverage,"review_items":pending[:150],"excluded_items":rejected,"items":visible[:80],"notice":"Vagas candidatas: remoto/Brasil e requisitos ainda aguardam análise completa."}
 
 class JDRequest(BaseModel):
     jobs: list[dict]

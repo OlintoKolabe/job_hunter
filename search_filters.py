@@ -211,11 +211,14 @@ def classify(job,terms,country,mode,days):
     # Match the requested role before applying generic negative title tokens.
     # E.g. "Product Manager, Engineering" is a product leadership vacancy.
     title_matches=role_match(title,terms)
-    # Generic technical-title words are not definitive when the JD includes
-    # repeated evidence of a selected business/product/project family.
-    technical_with_jd=bool(NON_TARGET_TITLE.search(title)) and not title_matches and bool(evidence["family_evidence"])
-    if NON_TARGET_TITLE.search(title) and not title_matches and not technical_with_jd:return "excluded","cargo"
-    if not title_matches and not evidence["family_evidence"]:return "excluded","cargo"
+    # Reject explicit technical titles; incidental project words in their JD
+    # are insufficient evidence of a matching business role.
+    if NON_TARGET_TITLE.search(title) and not title_matches:return "excluded","cargo"
+    # Missing JDs on adjacent management roles deserve a review queue, not
+    # silent exclusion. They are never confirmed automatically.
+    adjacent=bool(re.search(r"\\b(?:operations|operacoes|strategy|estrategia|transformation|transformacao|program|delivery|commercial|comercial)\\b",title)) and bool(re.search(r"\\b(?:lead|manager|head|director|gerente|coordenador|coordenadora|especialista)\\b",title))
+    uncertain_role=not title_matches and not evidence["family_evidence"] and adjacent
+    if not title_matches and not evidence["family_evidence"] and not uncertain_role:return "excluded","cargo"
     loc=fold(job.get("location",""))
     structured_geo=fold(" ".join(str(job.get(k) or "") for k in ("country","countryCode","countryName","city","state","region","eligibleLocations","remoteRegions")))
     loc=(loc+" "+structured_geo).strip()
@@ -233,7 +236,7 @@ def classify(job,terms,country,mode,days):
     if days and (published is None or not now-timedelta(days=days)<=published<=now):
         return "excluded","data"
     unknown=[]
-    if technical_with_jd:unknown.append("cargo_a_confirmar")
+    if uncertain_role:unknown.append("cargo_a_confirmar")
     if not mode_ok:unknown.append("modalidade")
     if not country_ok:unknown.append("pais")
     if unknown:return "review",",".join(unknown)

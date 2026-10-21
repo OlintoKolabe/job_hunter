@@ -414,14 +414,13 @@ def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False
     limit=max(1,min(limit,15))
     batch=tasks[offset:offset+limit]
     details,found=scan(batch,workers=6)
+    # Only deduplicate identical URLs. Company + role can represent distinct
+    # openings, offices or requisition IDs and must not discard jobs here.
     unique={}
-    pairset=set()
     for job in found:
         key=url_key(job["url"])
-        pair=pair_key(job["company"],job["title"]) if job["company"] else ""
-        if not key or key in unique or (pair and pair in pairset):continue
-        unique[key]=job
-        if pair:pairset.add(pair)
+        if key and key not in unique:
+            unique[key]=job
     raw_count=len(unique)
     try: items,review,filter_stats=analyze_filters(list(unique.values()),roles,country,mode,days,sort)
     except ValueError as e:raise HTTPException(400,str(e))

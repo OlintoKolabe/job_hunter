@@ -260,15 +260,13 @@ def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:
             known_urls=set()
             known_pairs=set()
             if keys:
-                cur.execute("SELECT normalized_url FROM jh_history WHERE split_part(normalized_url,'?',1)=ANY(%s) AND lower(estado) IN ('candidatado','descartado','descartada')",(terminal_url_bases(items+review+rejected),))
+                cur.execute("SELECT normalized_url FROM jh_history WHERE split_part(normalized_url,'?',1)=ANY(%s) AND lower(estado) IN ('candidatado','descartado','descartada')",(terminal_url_bases(items+review),))
                 known_urls={terminal_url_key(row[0]) for row in cur.fetchall()}
             pairs=[pair_key(j["company"],j["title"]) for j in items+review if j["company"]]
             if pairs:
                 cur.execute("SELECT pair_key FROM jh_history WHERE pair_key=ANY(%s) AND lower(estado) IN ('candidatado','descartado','descartada')",(pairs,))
                 known_pairs={row[0] for row in cur.fetchall()}
     visible,pending,history_excluded=exclude_history_matches(items,review,known_urls,known_pairs)
-    _,rejected,_=exclude_history_matches([],rejected,known_urls,known_pairs)
-    rejected=[j for j in rejected if not any(b in normalized(j["company"]) for b in ("kraken","payward"))]
     visible=[j for j in visible if not any(b in normalized(j["company"]) for b in ("kraken","payward"))]
     pending=[j for j in pending if not any(b in normalized(j["company"]) for b in ("kraken","payward"))]
     # First seen is persisted independently of the terminal application history.

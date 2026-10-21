@@ -94,7 +94,7 @@ def extra(source,slug):
         url="https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?"+urllib.parse.urlencode(
             {"keywords":slug,"location":"Brazil","f_WT":"2","f_TPR":"r604800","start":"0"})
         jobs=html_links(url,r"/jobs/view/|/jobs-guest/jobs/api/jobPosting/")
-        for j in jobs:j["source"]="LinkedIn guest"
+        for j in jobs:j["source"]="linkedin_guest"
         return jobs,"validado" if jobs else "pendente",len(jobs)
     if source=="gupy":
         jobs=[];received=0

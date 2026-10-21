@@ -394,6 +394,15 @@ def catalog_checks(request: Request):
             rows=[dict(zip(("source","slug","state","received","error","checked_at"),r)) for r in cur.fetchall()]
     return {"total":len(rows),"items":rows}
 
+def unique_jobs_by_url(found):
+    """Only collapse exact listing URLs, never distinct postings sharing a title."""
+    unique={}
+    for job in found:
+        key=url_key(job.get("url",""))
+        if key and key not in unique:
+            unique[key]=job
+    return unique
+
 @app.post("/api/catalog/scan")
 def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False,roles:str=DEFAULT_ROLES,country:str="BR",mode:str="remote",days:int=30,sort:str="newest",source:str="all"):
     require_auth(request)
@@ -422,11 +431,7 @@ def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False
     details,found=scan(batch,workers=6)
     # Only deduplicate identical URLs. Company + role can represent distinct
     # openings, offices or requisition IDs and must not discard jobs here.
-    unique={}
-    for job in found:
-        key=url_key(job["url"])
-        if key and key not in unique:
-            unique[key]=job
+    unique=unique_jobs_by_url(found)
     raw_count=len(unique)
     try: items,review,filter_stats=analyze_filters(list(unique.values()),roles,country,mode,days,sort)
     except ValueError as e:raise HTTPException(400,str(e))

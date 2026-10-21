@@ -41,7 +41,7 @@ class LinkedInCards(HTMLParser):
         if self.card is None and tag=="li" and ("base-card" in classes or "job-search-card" in classes):
             self.card={"title":"","company":"","location":"","url":"","published":""};self.depth=1;return
         if self.card is None:return
-        self.depth+=1
+        if tag not in ("img","br","hr","input","meta","link","source","wbr","area"):self.depth+=1
         if tag=="a" and (re.search(r"/jobs/view/|/jobs-guest/jobs/api/jobPosting/",a.get("href",""),re.I)):
             self.card["url"]=a["href"]
         if tag=="h3" or ("base-search-card__title" in classes):self.field="title"
@@ -54,7 +54,7 @@ class LinkedInCards(HTMLParser):
     def handle_endtag(self,tag):
         if self.card is None:return
         if tag in ("h3","h4","span","time"):self.field=None
-        self.depth-=1
+        if tag not in ("img","br","hr","input","meta","link","source","wbr","area"):self.depth-=1
         if self.depth==0:
             self.cards.append(self.card);self.card=None;self.field=None
 

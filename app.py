@@ -311,6 +311,12 @@ def source_freshness(source, checked_at):
 
 def active_source_tasks():
     tasks=set(source_tasks())
+    # Search the complete default role family on keyword-based LinkedIn guest.
+    # Do not expand Gupy here: its current public endpoint returns HTTP 404.
+    linkedin_terms=("product manager","product owner","project manager",
+        "gerente de projetos","gerente de produto","product marketing",
+        "marketing","growth","business analyst","analista de negocios","pmo")
+    tasks.update(("linkedin_guest",term) for term in linkedin_terms)
     with psycopg.connect(DATABASE,connect_timeout=8) as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT source,slug FROM jh_catalog_source")

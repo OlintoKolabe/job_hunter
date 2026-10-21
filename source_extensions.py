@@ -32,6 +32,46 @@ def html_links(url,pattern=None):
         if val:results.append(val)
     return results
 
+class LinkedInCards(HTMLParser):
+    """Parse the public LinkedIn job-card fields without inferring eligibility."""
+    def __init__(self):
+        super().__init__();self.cards=[];self.depth=0;self.card=None;self.field=None
+    def handle_starttag(self,tag,attrs):
+        a=dict(attrs);classes=a.get("class","")
+        if self.card is None and tag=="li" and ("base-card" in classes or "job-search-card" in classes):
+            self.card={"title":"","company":"","location":"","url":"","published":""};self.depth=1;return
+        if self.card is None:return
+        if tag not in ("img","br","hr","input","meta","link","source","wbr","area"):self.depth+=1
+        if tag=="a" and (re.search(r"/jobs/view/|/jobs-guest/jobs/api/jobPosting/",a.get("href",""),re.I)):
+            self.card["url"]=a["href"]
+        if tag=="h3" or ("base-search-card__title" in classes):self.field="title"
+        elif tag=="h4" or ("base-search-card__subtitle" in classes):self.field="company"
+        elif "job-search-card__location" in classes:self.field="location"
+        elif tag=="time" and a.get("datetime"):self.card["published"]=a["datetime"]
+    def handle_data(self,data):
+        if self.card is not None and self.field and data.strip():
+            self.card[self.field]+=" "+data.strip()
+    def handle_endtag(self,tag):
+        if self.card is None:return
+        if tag in ("h3","h4","span","time"):self.field=None
+        if tag not in ("img","br","hr","input","meta","link","source","wbr","area"):self.depth-=1
+        if self.depth==0:
+            self.cards.append(self.card);self.card=None;self.field=None
+
+def linkedin_cards(url):
+    req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0","Accept":"text/html"})
+    with urllib.request.urlopen(req,timeout=10) as resp:
+        body=resp.read(2_000_001)
+        if len(body)>2_000_000:raise ValueError("response too large")
+        base=resp.url
+    parsed=LinkedInCards();parsed.feed(body.decode("utf-8","replace"))
+    jobs=[]
+    for card in parsed.cards:
+        link=urllib.parse.urljoin(base,card["url"])
+        value=item(card["company"].strip(),card["title"].strip(),link,card["location"].strip(),"linkedin_guest",card["published"])
+        if value:jobs.append(value)
+    return jobs
+
 def extra(source,slug):
     jobs=[]
     if source=="smartrecruiters":
@@ -93,8 +133,7 @@ def extra(source,slug):
     if source=="linkedin_guest":
         url="https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?"+urllib.parse.urlencode(
             {"keywords":slug,"location":"Brazil","f_WT":"2","f_TPR":"r604800","start":"0"})
-        jobs=html_links(url,r"/jobs/view/|/jobs-guest/jobs/api/jobPosting/")
-        for j in jobs:j["source"]="linkedin_guest"
+        jobs=linkedin_cards(url)
         return jobs,"validado" if jobs else "pendente",len(jobs)
     if source=="gupy":
         jobs=[];received=0

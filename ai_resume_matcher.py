@@ -6,6 +6,7 @@ We preserve Job Hunter's database, verified facts, and DOCX renderer.
 No jobs are sent to the API unless JH_AI_ENABLED=1 and a key is configured.
 """
 import json
+import math
 import os
 import re
 import unicodedata
@@ -59,6 +60,9 @@ def _ask(task, jd, title, company=""):
       "requirements:[{name:string, mandatory:boolean, match:'direct'|'transferable'|'unproven',"
       "evidence_ids:[string]}]}. Score measures professional fit, considering required experience,"
       " seniority and actual accountability, not document layout. Penalize unproven mandatory requirements."
+      " For each evaluated requirement, name MUST quote a short, exact passage from the job description"
+      " (not a paraphrase, translation or invented qualification). Include 3 to 8 actual job requirements"
+      " when available. Evidence IDs must come only from the provided facts."
       " For cv return {selected_fact_ids:[string], summary:string, rewrites:[{id:string,text:string}]}. "
       "Rewrite selected facts into concise ATS bullets without inventing details; if uncertain, keep the original fact. Select at most 24 relevant fact IDs. Summary must use only verified professional context; "
       "do not invent dates, skills, credentials or measurable outcomes. "
@@ -67,10 +71,21 @@ def _ask(task, jd, title, company=""):
     body = {"task":task,"job":{"title":title[:150],"company":company[:150],
                                    "description":jd_clean[:MAX_JD_CHARS]},
             "facts":catalog}
+    evaluation_schema={"type":"object","additionalProperties":False,
+      "required":["score","reasoning","requirements"],
+      "properties":{"score":{"type":"integer"},"reasoning":{"type":"string"},
+        "requirements":{"type":"array","items":{"type":"object",
+          "additionalProperties":False,
+          "required":["name","mandatory","match","evidence_ids"],
+          "properties":{"name":{"type":"string"},"mandatory":{"type":"boolean"},
+            "match":{"type":"string","enum":["direct","transferable","unproven"]},
+            "evidence_ids":{"type":"array","items":{"type":"string"}}}}}}}
     payload={"model":os.getenv("JH_RESUME_AI_MODEL",MODEL_DEFAULT),
              "messages":[{"role":"system","content":instructions},
                          {"role":"user","content":json.dumps(body,ensure_ascii=False)}],
-             "response_format":{"type":"json_object"},"temperature":0,
+             "response_format":({"type":"json_schema","json_schema":{
+                "name":"job_fit_evaluation","strict":True,"schema":evaluation_schema}}
+                if task=="evaluate" else {"type":"json_object"}),"temperature":0,
              "max_tokens":1800 if task=="evaluate" else 1250}
     req=urllib.request.Request("https://api.openai.com/v1/chat/completions",
        data=json.dumps(payload,ensure_ascii=False).encode("utf-8"),
@@ -104,21 +119,39 @@ def estimate_cost(usage):
 def evaluate(jd,title,company=""):
     answer=_ask("evaluate",jd,title,company)
     score=answer.get("score")
+    # JSON-mode responses can represent the same bounded number as a decimal
+    # or numeric string. Normalize those shapes without accepting missing,
+    # qualitative, out-of-range, or Boolean scores.
+    if type(score) is str:
+        match=re.fullmatch(r"\s*(\d{1,3}(?:[.,]\d+)?)(?:\s*%|\s*/\s*100)?\s*",score)
+        score=float(match.group(1).replace(',','.')) if match else None
+    if type(score) is float and math.isfinite(score) and 0<=score<=100:
+        score=round(score)
     if type(score) is not int or not 0<=score<=100:
+        print('JH_AI_INVALID_SCORE_TYPE',type(answer.get('score')).__name__,flush=True)
         raise ValueError("Pontuação inválida da IA")
     ids={x["id"] for x in evidence_catalog()}
     def lex(text):
         value=unicodedata.normalize("NFKD",str(text).casefold())
         value="".join(c for c in value if not unicodedata.combining(c))
         return set(re.findall(r"[a-z0-9]{3,}",value))
-    jd_terms=lex(relevant_jd_text(jd))
+    jd_clean=relevant_jd_text(jd)
+    jd_terms=lex(jd_clean)
+    def normalized_phrase(value):
+        value=unicodedata.normalize('NFKD',str(value).casefold())
+        value=''.join(c for c in value if not unicodedata.combining(c))
+        return ' '.join(re.findall(r'[a-z0-9]+',value))
+    normalized_jd=normalized_phrase(jd_clean)
     supported=[]
     for row in answer.get("requirements",[])[:20]:
         if not isinstance(row,dict): continue
         name=str(row.get("name") or "")[:150]
         terms=lex(name)
-        # Reject completely invented JD requirements, even if model claims a match.
-        if not terms or len(terms & jd_terms)/len(terms)<0.65:continue
+        # Prefer quoted JD passages; accept minor grammatical variants but
+        # never award credit for requirements absent from the source text.
+        quoted=normalized_phrase(name) in normalized_jd if len(name)>=8 else False
+        overlap=len(terms & jd_terms)/len(terms) if terms else 0
+        if not quoted and (len(terms)<2 or overlap<0.50):continue
         match=row.get("match")
         evidence=[x for x in row.get("evidence_ids",[]) if isinstance(x,str) and x in ids]
         if match not in ("direct","transferable","unproven"): continue
@@ -225,3 +258,58 @@ def to_ranking(job, roles, analysis):
                  "coverage_pct":100,"ai_evidence_source":"resume_matcher_methodology",
                  "ai_usage":analysis.get("usage",{})})
     return base
+def shortlist_jobs(jobs, roles, limit=40):
+    """Zero-token, high-recall ordering before the existing AI fit evaluator.
+
+    This is only a candidate queue; it never manufactures a fit score. Reuse
+    the existing bilingual job-family aliases and the existing AI evaluator.
+    """
+    import re
+    from search_filters import fold, search_terms, requested_families, ROLE_FAMILIES
+    limit = max(1, min(50, int(limit)))
+    terms = search_terms(roles)
+    families = requested_families(terms) or set(ROLE_FAMILIES)
+    clues = {
+        'product': ('backlog', 'roadmap', 'product discovery', 'product strategy', 'produto', 'stakeholder', 'agile'),
+        'projects': ('project management', 'gestao de projetos', 'delivery', 'pmo', 'cronograma', 'budget'),
+        'marketing': ('marketing', 'branding', 'go-to-market', 'campaign', 'campanha', 'crm'),
+        'growth': ('growth', 'conversion', 'conversao', 'experimentation', 'acquisition', 'retention'),
+        'business': ('business analysis', 'analise de negocios', 'requirements', 'requisitos', 'processos'),
+    }
+    def priority(job):
+        title = fold(job.get('title'))
+        jd = fold(str(job.get('description') or '')[:7000])
+        matched = [family for family in families if any(
+            re.search(r'(?<![a-z])' + re.escape(alias) + r'(?![a-z])', title)
+            for alias in ROLE_FAMILIES[family])]
+        strength = (80 if matched else 0) + min(20, sum(4 for term in terms if len(term) > 3 and term in title))
+        strength += min(16, sum(2 for family in (matched or families) for token in clues[family] if token in jd))
+        if len(jd) >= 300:
+            strength += 12
+        return strength
+    unique = {}
+    for job in jobs:
+        if not isinstance(job, dict) or not isinstance(job.get('url'), str) or not job['url'].startswith('https://'):
+            continue
+        if job.get('needs_verification'):
+            continue
+        # Persisted scores are already ranked in the UI; do not waste a
+        # shortlisting slot on a job that requires no new paid evaluation.
+        if isinstance(job.get('ranking'), dict) and job['ranking'].get('score') is not None:
+            continue
+        unique.setdefault(job['url'], job)
+    ranked = sorted(unique.values(), key=lambda j: (-priority(j), j['url']))
+    selected, used = [], set()
+    for family in sorted(families):
+        candidate = next((j for j in ranked if j['url'] not in used and any(
+            alias in fold(j.get('title')) for alias in ROLE_FAMILIES[family])), None)
+        if candidate:
+            selected.append(candidate['url'])
+            used.add(candidate['url'])
+    for job in ranked:
+        if len(selected) >= limit:
+            break
+        if job['url'] not in used:
+            selected.append(job['url'])
+            used.add(job['url'])
+    return selected[:limit]

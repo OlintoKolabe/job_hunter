@@ -14,6 +14,38 @@ JD=("Senior Product Manager required to lead discovery, product roadmaps, stakeh
     "Preferred: programming in Python and extensive Power BI dashboards.")
 
 class AIResumeMatcherTests(unittest.TestCase):
+    def test_real_jd_phrasing_is_not_lost_to_strict_word_overlap(self):
+        # Source wording can include filler words even when a meaningful
+        # quoted requirement is fully present in the job description.
+        jd=('You will be responsible for the strategic management of our product '
+            'roadmap and partnerships with key cross functional stakeholders. '
+            'Prioritize the backlog with the engineering team and delivery managers.')
+        answer={'score':72,'reasoning':'Evidence-based match',
+                'requirements':[{'name':'strategic management of our product roadmap and partnerships',
+                                 'mandatory':True,'match':'transferable','evidence_ids':['1:0']}]}
+        with patch('ai_resume_matcher._ask',return_value=answer):
+            result=evaluate(jd,'Product Manager')
+        self.assertEqual(len(result['requirements']),1)
+        self.assertEqual(result['requirements'][0]['match'],'transferable')
+
+    def test_requirement_not_present_in_jd_is_never_credited(self):
+        answer={'score':95,'requirements':[{'name':'Kubernetes platform administration',
+                                          'mandatory':True,'match':'direct','evidence_ids':['1:0']}]}
+        with patch('ai_resume_matcher._ask',return_value=answer):
+            with self.assertRaisesRegex(ValueError,'requisitos auditáveis'):
+                evaluate(JD,'Product Manager')
+
+    def test_numeric_json_scores_are_normalized_without_inflation(self):
+        base={'reasoning':'Relevant experience',
+              'requirements':[{'name':'product roadmaps','mandatory':True,
+                               'match':'direct','evidence_ids':['1:0']}]}
+        for value,expected in [(75.4,75),('75',75),('75,4%',75),('75/100',75)]:
+            with self.subTest(value=value),patch('ai_resume_matcher._ask',return_value={**base,'score':value}):
+                self.assertEqual(evaluate(JD,'Product Manager')['score'],expected)
+        for invalid in (None,True,-1,101,'very good','999/100'):
+            with self.subTest(invalid=invalid),patch('ai_resume_matcher._ask',return_value={**base,'score':invalid}):
+                with self.assertRaises(ValueError):evaluate(JD,'Product Manager')
+
     def test_no_key_no_paid_call(self):
         with patch.dict(os.environ,{"JH_AI_ENABLED":"0","OPENAI_API_KEY":""}):
             with self.assertRaises(AIUnavailable):
@@ -163,5 +195,104 @@ class AIResumeMatcherTests(unittest.TestCase):
                 service.ai_resume_download(service.ResumeAIRequest(
                     url="https://example.com/job/1",title="Senior Product Manager"),Mock())
         settled.assert_called_once_with(unittest.mock.ANY,25,estimate_cost(usage),False)
+
+class ShortlistTests(unittest.TestCase):
+    def test_http_shortlist_rejects_oversized_batch(self):
+        from unittest.mock import Mock
+        from app import ranking_shortlist, ShortlistRequest
+        from fastapi import HTTPException
+        with patch('app.require_auth'):
+            with self.assertRaises(HTTPException) as error:
+                ranking_shortlist(Mock(),ShortlistRequest(jobs=[{}]*2501,roles='Product Manager'))
+        self.assertEqual(error.exception.status_code,400)
+
+    def test_endpoint_never_calls_paid_ai(self):
+        from unittest.mock import Mock
+        from app import ranking_shortlist, ShortlistRequest
+        with patch('app.require_auth'),patch('ai_resume_matcher._ask',side_effect=AssertionError('Unexpected paid AI')):
+            result=ranking_shortlist(Mock(),ShortlistRequest(
+                jobs=[{'url':'https://example.org/v', 'title':'Product Manager'}],
+                roles='Product Manager',limit=10))
+        self.assertEqual(result['urls'],['https://example.org/v'])
+        self.assertEqual(result['ai_calls'],0)
+
+    def test_global_relevance_and_diversity_without_tokens(self):
+        from ai_resume_matcher import shortlist_jobs
+        rows = [dict(url=f'https://example.org/jobs/{i}', title='Office Assistant') for i in range(150)]
+        rows.append(dict(url='https://example.org/jobs/best', title='Senior Product Manager',
+                         description='roadmap product strategy backlog agile stakeholder ' * 25))
+        rows.append(dict(url='https://example.org/jobs/project', title='Project Manager'))
+        chosen = shortlist_jobs(rows, 'Product Manager, Project Manager', 10)
+        self.assertIn('https://example.org/jobs/best', chosen[:2])
+        self.assertIn('https://example.org/jobs/project', chosen[:2])
+        self.assertEqual(len(chosen), 10)
+
+    def test_global_shortlist_excludes_unverified_and_duplicates(self):
+        from ai_resume_matcher import shortlist_jobs
+        rows = [dict(url='https://a.com/a', title='Product Manager', needs_verification=['pais']),
+                dict(url='https://b.com/b', title='Product Manager', source='indeed'),
+                dict(url='https://b.com/b', title='Product Manager', source='ashby')]
+        self.assertEqual(shortlist_jobs(rows, 'Product Manager'), ['https://b.com/b'])
+
+class ShortlistedJDTests(unittest.TestCase):
+    def test_inhire_full_jd_uses_existing_provider_api_for_cv_and_ranking(self):
+        from jd_enrichment import fallback_public_jd
+        job={'url':'https://cobli.inhire.app/vagas/cf249d92-5a0c-4143-bb3a-c7e5ea688d00/product-manager-s-nior-account-experience',
+             'title':'Product Manager Sênior','company':'Cobli','source':'inHire'}
+        body='Responsabilidades: liderar roadmap e stakeholders. '*12
+        with patch('jd_enrichment.fetch_json',return_value={'jobPage':{'description':body}}) as api, \
+             patch('jd_enrichment.extract_public_jd',side_effect=AssertionError('No fallback needed')):
+            self.assertEqual(fallback_public_jd(job),body)
+        self.assertEqual(api.call_args.args[0],
+                         'https://api.inhire.app/job-posts/public/pages/cf249d92-5a0c-4143-bb3a-c7e5ea688d00')
+        self.assertEqual(api.call_args.args[1],{'X-Tenant':'cobli'})
+
+    def test_failed_ai_validation_charges_only_actual_token_usage(self):
+        from jd_enrichment import hydrate_jobs
+        from ai_resume_matcher import _last_billable_usage, estimate_cost
+        from unittest.mock import Mock
+        usage={'prompt_tokens':4600,'completion_tokens':700}
+        def invalid_ai(*args):
+            _last_billable_usage.set(usage)
+            raise ValueError('IA não apresentou requisitos auditáveis')
+        cursor=Mock()
+        cursor.fetchall.return_value=[]
+        job={'url':'https://example.org/job','title':'Product Manager',
+             'description':JD}
+        with patch.dict(os.environ,{'JH_AI_ENABLED':'1','OPENAI_API_KEY':'test','DATABASE_URL':'test'}), \
+             patch('jd_enrichment.get_cached',return_value=None), \
+             patch('jd_enrichment.evaluate_ai',side_effect=invalid_ai), \
+             patch('jd_enrichment.reserve',return_value=9), \
+             patch('jd_enrichment.settle') as settle, \
+             patch('jd_enrichment.psycopg.connect'):
+            result,_=hydrate_jobs(cursor,[job],'Product Manager',lambda url:url)
+        self.assertIsNone(result[0]['ranking']['score'])
+        settle.assert_called_once_with(unittest.mock.ANY,9,estimate_cost(usage),False)
+
+    def test_indeed_ranking_reuses_existing_exact_jobspy_jd(self):
+        from jd_enrichment import fallback_public_jd
+        job={'url':'https://br.indeed.com/viewjob?jk=ed26935acd1ff08e',
+             'title':'Product Manager','company':'Empresa'}
+        full='Responsible for product discovery and roadmaps. '*12
+        with patch('indeed_provider.description_for_job',return_value=full) as spy, \
+             patch('jd_enrichment.extract_public_jd',side_effect=AssertionError('unnecessary scraper')):
+            self.assertEqual(fallback_public_jd(job),full)
+        spy.assert_called_once_with(job['url'],job['title'],job['company'])
+
+    def test_failed_indeed_jobspy_can_fall_back_to_public_html(self):
+        from jd_enrichment import fallback_public_jd
+        job={'url':'https://br.indeed.com/viewjob?jk=e41955656030e3b2',
+             'title':'Product Manager','company':'Empresa'}
+        with patch('indeed_provider.description_for_job',return_value=None), \
+             patch('jd_enrichment.extract_public_jd',return_value='public JD') as html_reader:
+            self.assertEqual(fallback_public_jd(job),'public JD')
+        html_reader.assert_called_once_with(job['url'])
+
+    def test_other_sources_do_not_run_indeed_search(self):
+        from jd_enrichment import fallback_public_jd
+        job={'url':'https://boards.greenhouse.io/example/jobs/123','title':'Product Manager'}
+        with patch('indeed_provider.description_for_job',side_effect=AssertionError('Indeed only')), \
+             patch('jd_enrichment.extract_public_jd',return_value='generic JD'):
+            self.assertEqual(fallback_public_jd(job),'generic JD')
 
 if __name__=="__main__":unittest.main()

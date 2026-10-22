@@ -764,6 +764,36 @@ def _cv_source(url):
     return key,row[0]
 
 
+@app.post("/api/resume/download")
+async def direct_cv_download(request: Request):
+    """Generate factual ATS DOCX using the existing deterministic engine; no GPT API."""
+    require_auth(request)
+    payload=await request.json()
+    url=str(payload.get("url") or "")
+    title=str(payload.get("title") or "Vaga selecionada")[:120]
+    company=str(payload.get("company") or "Empresa")[:100]
+    try:
+        key,jd=_cv_source(url)
+        plan=build_plan(jd,title)
+        plan["cv_mode"]="deterministic_existing_engine"
+        plan["cv_build"]=os.getenv("RENDER_GIT_COMMIT","local")[:12]
+        data=render_docx(plan)
+        audit(plan,data)
+        quality=evaluate_rendered_resume(plan,data,jd)
+        if not quality["factual_ok"]:
+            raise HTTPException(422,"Auditoria factual não aprovada")
+    except HTTPException:
+        raise
+    except (ValueError, AssertionError) as exc:
+        raise HTTPException(422,"Não foi possível gerar currículo validado para esta vaga") from exc
+    safe=lambda v:re.sub(r"[^\\wÀ-ÿ -]","",v).strip()[:75]
+    name="Olinto Manso Pereira - "+safe(title)+" - "+safe(company)+".docx"
+    from urllib.parse import quote
+    return StreamingResponse(io.BytesIO(data),media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+       headers={"Content-Disposition":f"attachment; filename*=UTF-8''{quote(name)}",
+                "Cache-Control":"no-store","X-CV-Mode":"deterministic_existing_engine"})
+
+
 @app.get("/api/gpt-action/download")
 def gpt_cv_download(ticket:str):
     from resume_engine import EXPERIENCE

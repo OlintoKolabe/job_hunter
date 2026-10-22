@@ -767,6 +767,105 @@ def generate_resume(payload: ResumeGenerate, request: Request):
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         headers={**headers,"Content-Disposition":f"attachment; filename*=UTF-8''{encoded_filename}"})
 
+
+# GPT Actions CV bridge: no OpenAI API calls and no application credentials exposed.
+# Requires independently provisioned CV_ACTION_TOKEN via Render secret settings.
+def _cv_action_auth(request: Request):
+    token=os.environ.get("CV_ACTION_TOKEN","")
+    candidate=request.headers.get("authorization","")
+    if not token or not secrets.compare_digest(candidate,"Bearer "+token):
+        raise HTTPException(401,"GPT Action não autorizada")
+
+def _cv_source(url):
+    key=url_key(url)
+    if not key or len(key)>500:raise HTTPException(400,"URL da vaga inválida")
+    with psycopg.connect(DATABASE,connect_timeout=8) as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT description FROM jh_jd_cache WHERE normalized_url=%s",(key,))
+            row=cur.fetchone()
+    if not row or not row[0]:raise HTTPException(404,"Descrição da vaga ausente no cache")
+    return key,row[0]
+
+@app.get("/api/gpt-action/context")
+def gpt_cv_context(url: str,request:Request,title:str=""):
+    _cv_action_auth(request)
+    from resume_engine import EXPERIENCE,EDUCATION
+    key,jd=_cv_source(url)
+    return {"url":key,"title":title[:120],"jd":jd[:24000],
+            "facts":[{"id":f"{i}:{j}","company":e["company"],"role":e["role"],
+                      "fact":fact} for i,e in enumerate(EXPERIENCE) for j,fact in enumerate(e["facts"])],
+            "education":[x for x in EDUCATION if "odontolog" not in x.casefold()],
+            "instructions":"Select only factual evidence IDs. Do not write new credentials, dates, companies or claims."}
+
+class GPTCVSelection(BaseModel):
+    url:str
+    title:str=""
+    company:str=""
+    fact_ids:list[str]
+
+@app.post("/api/gpt-action/cv")
+def gpt_cv_select(payload:GPTCVSelection,request:Request):
+    _cv_action_auth(request)
+    from resume_engine import EXPERIENCE
+    key,jd=_cv_source(payload.url)
+    if not 1<=len(payload.fact_ids)<=24 or len(set(payload.fact_ids))!=len(payload.fact_ids):
+        raise HTTPException(400,"Seleção inválida ou repetida")
+    allowed={f"{i}:{j}" for i,e in enumerate(EXPERIENCE) for j,_ in enumerate(e["facts"])}
+    if any(x not in allowed for x in payload.fact_ids):
+        raise HTTPException(400,"Evidência não verificada")
+    if not serializer:raise HTTPException(503,"Assinatura de sessão indisponível")
+    title=payload.title.strip()[:120]
+    company=payload.company.strip()[:100]
+    packed={"url":key,"title":title,"company":company,"ids":payload.fact_ids,
+            "jd_hash":hashlib.sha256(jd.encode()).hexdigest()}
+    ticket=serializer.dumps(packed,salt="cv-action-download-v1")
+    base=str(request.base_url).rstrip("/")
+    return {"download_url":base+"/api/gpt-action/download?ticket="+urllib.parse.quote(ticket),
+            "expires_in_seconds":900,"selected_facts":len(payload.fact_ids),
+            "message":"Currículo pronto para download, usando somente evidências confirmadas."}
+
+@app.get("/api/gpt-action/download")
+def gpt_cv_download(ticket:str):
+    from resume_engine import EXPERIENCE
+    if not serializer:raise HTTPException(503,"Assinatura indisponível")
+    try:payload=serializer.loads(ticket,salt="cv-action-download-v1",max_age=900)
+    except (BadSignature,SignatureExpired):raise HTTPException(401,"Link expirado ou inválido")
+    key,jd=_cv_source(payload.get("url",""))
+    if hashlib.sha256(jd.encode()).hexdigest()!=payload.get("jd_hash"):
+        raise HTTPException(409,"Descrição da vaga alterada")
+    ids=payload.get("ids",[])
+    if not isinstance(ids,list) or not 1<=len(ids)<=24 or len(ids)!=len(set(ids)):
+        raise HTTPException(400,"Seleção inválida")
+    allowed={f"{i}:{j}":(i,f) for i,e in enumerate(EXPERIENCE) for j,f in enumerate(e["facts"])}
+    if any(x not in allowed for x in ids):raise HTTPException(400,"Evidência desconhecida")
+    plan=build_plan(jd,payload.get("title","") or "Vaga selecionada")
+    selected={}
+    for id_ in ids:
+        i,f=allowed[id_]
+        selected.setdefault(i,[]).append(f)
+    by_index={e["source_index"]:e for e in plan["experience"]}
+    older={e["source_index"]:e for e in plan["additional_experience"]}
+    for i,facts in selected.items():
+        if i in by_index:by_index[i]["facts"]=facts
+        else:
+            e=older.pop(i,None)
+            if e is None:raise HTTPException(400,"Experiência desconhecida")
+            e["facts"]=facts
+            plan["experience"].append(e)
+    plan["additional_experience"]=list(older.values())
+    plan["cv_mode"]="gpt_action_verified_facts"
+    plan["cv_build"]=os.getenv("RENDER_GIT_COMMIT","local")[:12]
+    data=render_docx(plan)
+    audit(plan,data)
+    quality=evaluate_rendered_resume(plan,data,jd)
+    if not quality["factual_ok"]:raise HTTPException(422,"Falha na auditoria factual")
+    safe=lambda v:re.sub(r"[^\\wÀ-ÿ -]","",v).strip()[:75]
+    filename="Olinto Manso Pereira - "+safe(payload.get("title","Vaga"))+" - "+safe(payload.get("company","Empresa"))+".docx"
+    from urllib.parse import quote
+    return StreamingResponse(io.BytesIO(data),media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      headers={"Content-Disposition":f"attachment; filename*=UTF-8''{quote(filename)}",
+               "Cache-Control":"no-store","X-CV-Mode":"gpt_action_verified_facts"})
+
 @app.get("/api/status")
 def status(request: Request):
     require_auth(request)

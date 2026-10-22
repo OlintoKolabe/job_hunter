@@ -40,7 +40,6 @@ serializer = URLSafeTimedSerializer(SECRET) if SECRET else None
 
 from contextlib import asynccontextmanager
 from mcp.server.fastmcp import FastMCP
-from mcp.server.transport_security import TransportSecuritySettings
 
 cv_mcp=FastMCP("Cacador de Vagas CV", stateless_http=True, streamable_http_path="/")
 
@@ -93,7 +92,7 @@ class _CVAuthorizedMCP:
                 return
         await self.inner(scope,receive,send)
 
-app.mount("/cv-mcp",_CVAuthorizedMCP(cv_mcp.streamable_http_app(transport_security=TransportSecuritySettings(allowed_hosts=["olinto-job-hunter.onrender.com","olinto-job-hunter.onrender.com:*"], allowed_origins=["https://chatgpt.com","https://chat.openai.com"]))))
+app.mount("/cv-mcp",_CVAuthorizedMCP(cv_mcp.streamable_http_app()))
 
 @app.on_event("startup")
 def bootstrap_catalog_if_requested():

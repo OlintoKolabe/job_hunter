@@ -844,16 +844,12 @@ def gpt_cv_download(ticket:str):
     for id_ in ids:
         i,f=allowed[id_]
         selected.setdefault(i,[]).append(f)
-    by_index={e["source_index"]:e for e in plan["experience"]}
-    older={e["source_index"]:e for e in plan["additional_experience"]}
-    for i,facts in selected.items():
-        if i in by_index:by_index[i]["facts"]=facts
-        else:
-            e=older.pop(i,None)
-            if e is None:raise HTTPException(400,"Experiência desconhecida")
-            e["facts"]=facts
-            plan["experience"].append(e)
-    plan["additional_experience"]=list(older.values())
+    plan["experience"]=[{"role":EXPERIENCE[i]["role"],"company":EXPERIENCE[i]["company"],
+                         "dates":EXPERIENCE[i]["dates"],"facts":facts,"source_index":i}
+                        for i,facts in sorted(selected.items())]
+    plan["additional_experience"]=[{"role":row["role"],"company":row["company"],
+                                    "dates":row["dates"],"source_index":i}
+                                   for i,row in enumerate(EXPERIENCE) if i not in selected]
     plan["cv_mode"]="gpt_action_verified_facts"
     plan["cv_build"]=os.getenv("RENDER_GIT_COMMIT","local")[:12]
     data=render_docx(plan)

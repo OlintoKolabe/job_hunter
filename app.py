@@ -27,7 +27,7 @@ from search_filters import analyze_filters,apply_filters,search_terms,discovery_
 from first_seen import flag_new_jobs
 from catalog_engine import source_tasks,scan
 from catalog_bootstrap import maybe_start
-from jd_enrichment import hydrate_jobs
+from jd_enrichment import hydrate_jobs, persist_listing_jds
 from resume_engine import build_plan, render_docx, audit, evaluate_rendered_resume
 
 app = FastAPI(docs_url=None, redoc_url=None)
@@ -322,10 +322,12 @@ def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:
                 except Exception as exc:
                     sources.append({"source":feed,"state":"error","received":0,"error":type(exc).__name__})
     raw_count=len(items)
+    raw_jobs=list(items)
     try: items,review,filter_stats=analyze_filters(items,roles,country,mode,days,sort)
     except ValueError as e: raise HTTPException(400,str(e))
     with psycopg.connect(DATABASE,connect_timeout=8) as conn:
         with conn.cursor() as cur:
+            source_jd_stats=persist_listing_jds(cur,raw_jobs,items+review,url_key)
             keys=[url_key(j["url"]) for j in items+review]
             known_urls=set()
             known_pairs=set()
@@ -360,7 +362,7 @@ def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:
     # Pending eligibility is not automatically enriched or scored.
     fresh_count=len(visible)
     return {"source":"Multifuente","queried":len(sources),"total":len(items),
-        "new":fresh_count,"duplicates":history_excluded,"jd_coverage":coverage,"items":visible[:100],"review_items":pending[:150],"filter_stats":filter_stats,"raw_count":raw_count,"details":sources,
+        "new":fresh_count,"duplicates":history_excluded,"jd_coverage":coverage,"source_jd_stats":source_jd_stats,"items":visible[:100],"review_items":pending[:150],"filter_stats":filter_stats,"raw_count":raw_count,"details":sources,
         "notice":"Vagas coletadas, ainda sem triagem de elegibilidade Brasil/remoto ou score."}
 
 
@@ -503,6 +505,7 @@ def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False
     # openings, offices or requisition IDs and must not discard jobs here.
     unique=unique_jobs_by_url(found)
     raw_count=len(unique)
+    raw_jobs=list(unique.values())
     try: items,review,filter_stats=analyze_filters(list(unique.values()),roles,country,mode,days,sort)
     except ValueError as e:raise HTTPException(400,str(e))
     # Offer out-of-filter vacancies for explicit decisions without treating them
@@ -519,6 +522,7 @@ def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False
     known_urls=set();known_pairs=set()
     with psycopg.connect(DATABASE,connect_timeout=7) as conn:
         with conn.cursor() as cur:
+            source_jd_stats=persist_listing_jds(cur,raw_jobs,items+review,url_key)
             for entry in details:
                 cur.execute("""INSERT INTO jh_catalog_checks(source,slug,state,received,error)
                     VALUES(%s,%s,%s,%s,%s) ON CONFLICT(source,slug) DO UPDATE SET
@@ -558,7 +562,7 @@ def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False
     return {"total_sources":len(tasks),"due_only":due_only,"offset":offset,"next_offset":offset+len(batch),
             "complete":offset+len(batch)>=len(tasks),"details":details,
             "found":len(items),"new":fresh_count,"duplicates":history_excluded,"raw_count":raw_count,"filter_stats":filter_stats,
-            "jd_coverage":coverage,"review_items":pending[:150],"excluded_items":rejected,"items":visible[:80],"notice":"Vagas candidatas: remoto/Brasil e requisitos ainda aguardam análise completa."}
+            "jd_coverage":coverage,"source_jd_stats":source_jd_stats,"review_items":pending[:150],"excluded_items":rejected,"items":visible[:80],"notice":"Vagas candidatas: remoto/Brasil e requisitos ainda aguardam análise completa."}
 
 class JDRequest(BaseModel):
     jobs: list[dict]

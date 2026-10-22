@@ -8,6 +8,7 @@ No jobs are sent to the API unless JH_AI_ENABLED=1 and a key is configured.
 import json
 import os
 import re
+import unicodedata
 import urllib.request
 
 from resume_engine import EXPERIENCE
@@ -82,14 +83,23 @@ def evaluate(jd,title,company=""):
     if type(score) is not int or not 0<=score<=100:
         raise ValueError("Pontuação inválida da IA")
     ids={x["id"] for x in evidence_catalog()}
+    def lex(text):
+        value=unicodedata.normalize("NFKD",str(text).casefold())
+        value="".join(c for c in value if not unicodedata.combining(c))
+        return set(re.findall(r"[a-z0-9]{3,}",value))
+    jd_terms=lex(jd)
     supported=[]
     for row in answer.get("requirements",[])[:20]:
         if not isinstance(row,dict): continue
+        name=str(row.get("name") or "")[:150]
+        terms=lex(name)
+        # Reject completely invented JD requirements, even if model claims a match.
+        if not terms or len(terms & jd_terms)/len(terms)<0.65:continue
         match=row.get("match")
         evidence=[x for x in row.get("evidence_ids",[]) if isinstance(x,str) and x in ids]
         if match not in ("direct","transferable","unproven"): continue
         if match!="unproven" and not evidence:match="unproven"
-        supported.append({"name":str(row.get("name") or "")[:150],
+        supported.append({"name":name,
           "mandatory":row.get("mandatory") is True,"match":match,
           "evidence_ids":evidence[:4] if match!="unproven" else []})
     if not supported:raise ValueError("IA não apresentou requisitos auditáveis")

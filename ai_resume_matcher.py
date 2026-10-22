@@ -6,6 +6,7 @@ We preserve Job Hunter's database, verified facts, and DOCX renderer.
 No jobs are sent to the API unless JH_AI_ENABLED=1 and a key is configured.
 """
 import json
+import math
 import os
 import re
 import unicodedata
@@ -104,7 +105,16 @@ def estimate_cost(usage):
 def evaluate(jd,title,company=""):
     answer=_ask("evaluate",jd,title,company)
     score=answer.get("score")
+    # JSON-mode responses can represent the same bounded number as a decimal
+    # or numeric string. Normalize those shapes without accepting missing,
+    # qualitative, out-of-range, or Boolean scores.
+    if type(score) is str:
+        match=re.fullmatch(r"\s*(\d{1,3}(?:[.,]\d+)?)(?:\s*%|\s*/\s*100)?\s*",score)
+        score=float(match.group(1).replace(',','.')) if match else None
+    if type(score) is float and math.isfinite(score) and 0<=score<=100:
+        score=round(score)
     if type(score) is not int or not 0<=score<=100:
+        print('JH_AI_INVALID_SCORE_TYPE',type(answer.get('score')).__name__,flush=True)
         raise ValueError("Pontuação inválida da IA")
     ids={x["id"] for x in evidence_catalog()}
     def lex(text):

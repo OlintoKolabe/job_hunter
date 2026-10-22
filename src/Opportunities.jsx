@@ -117,14 +117,31 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{}}){
  }
  const [cvNow,setCvNow]=useState([]);
  function generateCv(job){
-   // Existing button is the only trigger; no server-side OpenAI API call.
+   // Plus-compatible handoff: no MCP, API key, paid API call or automatic generation.
    setError('');
-   const instruction='Use o plugin privado Caçador CV ATS para produzir meu currículo para a vaga que selecionei. Consulte fetch_cv_job, compare os requisitos com meus fatos comprovados, escolha somente os IDs das evidências relevantes, chame prepare_verified_cv e devolva o DOCX ATS. Não invente experiências, formação, ferramentas ou resultados. URL da vaga: '+job.url+'; Cargo: '+job.title+'; Empresa: '+job.company+'.';
-   const chatUrl='https://chatgpt.com/?prompt='+encodeURIComponent(instruction);
-   if(navigator.clipboard?.writeText){navigator.clipboard.writeText(instruction).catch(()=>{});}
-   const opened=window.open(chatUrl,'_blank','noopener,noreferrer');
-   setMessage('ChatGPT aberto com a instrução da vaga preparada. Envie a mensagem usando o plugin Caçador CV ATS conectado. A instrução também foi copiada quando permitido pelo navegador.');
+   const jd=String(job.description||job.jd_text||job.full_description||'').trim();
+   const instruction=[
+     'Gere um currículo ATS em DOCX para Olinto Manso Pereira, adaptado exclusivamente à vaga abaixo.',
+     'Use apenas fatos profissionais e acadêmicos comprovados. Se não houver acesso ao histórico profissional validado, peça meu currículo-base antes de gerar; nunca invente fatos.',
+     'Formação confirmada: graduação pela USP (não declarar área); MBA em Marketing pela USP; MBA em Administration & Management pela FGV; PSPO I.',
+     'Experiência: mais de 20 anos em marketing, gestão de produtos digitais e físicos, Product Management, Product Ownership, Product Marketing, Growth, Branding, Inovação e liderança de equipes ágeis.',
+     'Não mencionar Odontologia, Turismo/UEG nem Design/UNIVALI. Não inventar ferramentas, resultados, datas ou formações.',
+     'Entregar arquivo DOCX com nome Olinto Manso Pereira - '+String(job.title||'Cargo')+' - '+String(job.company||'Empresa')+'.docx.',
+     'Vaga: '+String(job.title||'')+' | Empresa: '+String(job.company||'')+' | URL: '+String(job.url||''),
+     jd?'Descrição fornecida pelo Caçador:\n'+jd:'A descrição integral não veio no cartão. Consulte a URL da vaga ou peça a descrição antes de redigir o currículo.'
+   ].join('\n\n');
+   if(navigator.clipboard?.writeText){
+     navigator.clipboard.writeText(instruction).then(()=>{
+       setMessage('Instruções da vaga copiadas. Na aba do ChatGPT, cole (Ctrl+V) e envie. O currículo será gerado lá, sem plugin nem API paga.');
+     }).catch(()=>{
+       setMessage('ChatGPT aberto. Copie as instruções da vaga usando um navegador que permita acesso à área de transferência.');
+     });
+   }else{
+     setMessage('ChatGPT aberto, mas o navegador não permitiu copiar automaticamente as instruções.');
+   }
+   window.open('https://chatgpt.com/','_blank','noopener,noreferrer');
  }
+
  const currentMatches=searchedQuery!==''&&searchedQuery===query();
  const sourceKey=v=>String(v||'').toLowerCase().replace(/[^a-z0-9]/g,'');
  const visibleReviews=(currentMatches?reviews:[]).filter(v=>(source==='all'||sourceKey(v.source)===sourceKey(source)||source==='greenhouse'&&sourceKey(v.source)==='greenhouseeu'));

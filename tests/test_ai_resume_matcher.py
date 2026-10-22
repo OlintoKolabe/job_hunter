@@ -91,22 +91,18 @@ class AIResumeMatcherTests(unittest.TestCase):
         import asyncio
         from unittest.mock import Mock
         import app as service
-        class RequestStub:
-            async def json(self):
-                return {"url":"https://example.com/job/1","title":"Senior Product Manager",
-                        "company":"Example"}
         result={"selected_fact_ids":["1:0","1:1","1:2","4:1","4:2"],
                 "summary":"Experiência comprovada em produtos, roadmaps e gestão de equipes."}
-        async def run():
-            with patch.dict(os.environ,{"JH_AI_ENABLED":"1","OPENAI_API_KEY":"test-only"}), \
-                 patch("app.require_auth"), patch("app._cv_source",return_value=("example.com/job/1",JD)), \
-                 patch("score_repository.reserve",return_value=23), \
-                 patch("score_repository.settle"),patch("app.psycopg.connect"), \
-                 patch("ai_resume_matcher._ask",return_value=result):
-                response=await service.ai_resume_download(RequestStub())
-                document=b"".join([part async for part in response.body_iterator])
-                return response, document
-        response,document=asyncio.run(run())
+        async def drain(response):
+            return b"".join([part async for part in response.body_iterator])
+        with patch.dict(os.environ,{"JH_AI_ENABLED":"1","OPENAI_API_KEY":"test-only"}), \
+             patch("app.require_auth"), patch("app._cv_source",return_value=("example.com/job/1",JD)), \
+             patch("score_repository.reserve",return_value=23), \
+             patch("score_repository.settle"),patch("app.psycopg.connect"), \
+             patch("ai_resume_matcher._ask",return_value=result):
+            payload=service.ResumeAIRequest(url="https://example.com/job/1",title="Senior Product Manager",company="Example")
+            response=service.ai_resume_download(payload,Mock())
+            document=asyncio.run(drain(response))
         self.assertEqual(response.status_code,200)
         self.assertEqual(document[:2],b"PK")
         self.assertIn("wordprocessingml",response.media_type)

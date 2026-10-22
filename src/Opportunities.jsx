@@ -116,18 +116,14 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{}}){
    finally{setDecisionNow(prev=>prev.filter(x=>x!==job.url))}
  }
  const [cvNow,setCvNow]=useState([]);
- async function generateCv(job){
-   setCvNow(prev=>[...prev,job.url]);setError('');
-   try{
-     const response=await fetch('/api/resume/gpt-start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:job.url,title:job.title,company:job.company})});
-     const data=await response.json().catch(()=>null);
-     if(!response.ok)throw Error(data?.detail||'Falha ao preparar a vaga para ChatGPT');
-     if(!data?.chat_url)throw Error('Integração GPT não configurada');
-     const instruction='Use a Action de currículo para consultar esta vaga, selecione somente IDs de evidências comprovadas e gere o DOCX. URL: '+data.url+'; cargo: '+data.title+'; empresa: '+data.company+'.';
-     if(navigator.clipboard?.writeText){await navigator.clipboard.writeText(instruction)}
-     setMessage('Instrução da vaga copiada. Cole-a no GPT que será aberto; o DOCX só será gerado após validação das evidências.');
-     window.open(data.chat_url,'_blank','noopener,noreferrer');
-   }catch(error){setError(error.message)}finally{setCvNow(prev=>prev.filter(x=>x!==job.url))}
+ function generateCv(job){
+   // Existing button is the only trigger; no server-side OpenAI API call.
+   setError('');
+   const instruction='Use o plugin privado Caçador CV ATS para produzir meu currículo para a vaga que selecionei. Consulte fetch_cv_job, compare os requisitos com meus fatos comprovados, escolha somente os IDs das evidências relevantes, chame prepare_verified_cv e devolva o DOCX ATS. Não invente experiências, formação, ferramentas ou resultados. URL da vaga: '+job.url+'; Cargo: '+job.title+'; Empresa: '+job.company+'.';
+   const chatUrl='https://chatgpt.com/?prompt='+encodeURIComponent(instruction);
+   if(navigator.clipboard?.writeText){navigator.clipboard.writeText(instruction).catch(()=>{});}
+   const opened=window.open(chatUrl,'_blank','noopener,noreferrer');
+   setMessage('ChatGPT aberto com a instrução da vaga preparada. Envie a mensagem usando o plugin Caçador CV ATS conectado. A instrução também foi copiada quando permitido pelo navegador.');
  }
  const currentMatches=searchedQuery!==''&&searchedQuery===query();
  const sourceKey=v=>String(v||'').toLowerCase().replace(/[^a-z0-9]/g,'');

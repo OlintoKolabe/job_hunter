@@ -59,7 +59,9 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{}}){
      }
    }
    await enrichAvailable();
-   if(['himalayas','remotive','remoteok'].includes(source)){
+   // Indeed is an on-demand provider, not a catalog board. A catalog scan
+   // with source=indeed always returns 400 and can flood the UI with retries.
+   if(['himalayas','remotive','remoteok','indeed'].includes(source)){
      setCompleted(true);
      setMessage('Consulta à fonte '+source+' concluída; vagas apresentadas após filtros e exclusões do Histórico.');
      return;

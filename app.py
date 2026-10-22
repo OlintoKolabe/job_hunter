@@ -41,16 +41,12 @@ serializer = URLSafeTimedSerializer(SECRET) if SECRET else None
 
 from contextlib import asynccontextmanager
 from mcp.server.fastmcp import FastMCP
-from mcp.server.transport_security import TransportSecuritySettings
 
-cv_mcp=FastMCP("Cacador de Vagas CV", stateless_http=True,
-    transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False))
+cv_mcp=FastMCP("Cacador de Vagas CV", stateless_http=True)
 
 @cv_mcp.tool()
-def fetch_cv_job(url:str,title:str="",access_token:str="")->dict:
+def fetch_cv_job(url:str,title:str="")->dict:
     """Read a selected vacancy JD and the verified evidence IDs."""
-    if not os.environ.get("CV_ACTION_TOKEN") or not secrets.compare_digest(access_token,os.environ["CV_ACTION_TOKEN"]):
-        raise ValueError("Not authorized")
     from resume_engine import EXPERIENCE,EDUCATION
     key,jd=_cv_source(url)
     return {"url":key,"title":title,"jd":jd[:24000],
@@ -59,10 +55,8 @@ def fetch_cv_job(url:str,title:str="",access_token:str="")->dict:
             "education":EDUCATION}
 
 @cv_mcp.tool()
-def prepare_verified_cv(url:str, fact_ids:list[str], title:str="",company:str="",access_token:str="")->dict:
+def prepare_verified_cv(url:str, fact_ids:list[str], title:str="",company:str="")->dict:
     """Create a signed 15-minute DOCX download ticket from existing verified evidence IDs only."""
-    if not os.environ.get("CV_ACTION_TOKEN") or not secrets.compare_digest(access_token,os.environ["CV_ACTION_TOKEN"]):
-        raise ValueError("Not authorized")
     from resume_engine import EXPERIENCE
     key,jd=_cv_source(url)
     allowed={f"{i}:{j}" for i,e in enumerate(EXPERIENCE) for j,_ in enumerate(e["facts"])}
@@ -77,11 +71,27 @@ def prepare_verified_cv(url:str, fact_ids:list[str], title:str="",company:str=""
 
 @asynccontextmanager
 async def cv_lifespan(app):
+    maybe_start(DATABASE)
     async with cv_mcp.session_manager.run():
         yield
 
 app.router.lifespan_context=cv_lifespan
-app.mount("/cv-mcp",cv_mcp.streamable_http_app(streamable_http_path="/"))
+class _CVAuthorizedMCP:
+    def __init__(self, inner):
+        self.inner=inner
+    async def __call__(self, scope, receive, send):
+        if scope["type"]=="http":
+            headers=dict(scope.get("headers",[]))
+            token=os.environ.get("CV_ACTION_TOKEN","")
+            provided=headers.get(b"authorization",b"").decode("latin1")
+            if not token or not secrets.compare_digest(provided,"Bearer "+token):
+                response=JSONResponse({"detail":"Unauthorized"},status_code=401,
+                    headers={"WWW-Authenticate":"Bearer","Cache-Control":"no-store"})
+                await response(scope,receive,send)
+                return
+        await self.inner(scope,receive,send)
+
+app.mount("/cv-mcp",_CVAuthorizedMCP(cv_mcp.streamable_http_app(streamable_http_path="/")))
 
 @app.on_event("startup")
 def bootstrap_catalog_if_requested():

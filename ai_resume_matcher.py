@@ -60,6 +60,9 @@ def _ask(task, jd, title, company=""):
       "requirements:[{name:string, mandatory:boolean, match:'direct'|'transferable'|'unproven',"
       "evidence_ids:[string]}]}. Score measures professional fit, considering required experience,"
       " seniority and actual accountability, not document layout. Penalize unproven mandatory requirements."
+      " For each evaluated requirement, name MUST quote a short, exact passage from the job description"
+      " (not a paraphrase, translation or invented qualification). Include 3 to 8 actual job requirements"
+      " when available. Evidence IDs must come only from the provided facts."
       " For cv return {selected_fact_ids:[string], summary:string, rewrites:[{id:string,text:string}]}. "
       "Rewrite selected facts into concise ATS bullets without inventing details; if uncertain, keep the original fact. Select at most 24 relevant fact IDs. Summary must use only verified professional context; "
       "do not invent dates, skills, credentials or measurable outcomes. "
@@ -132,14 +135,23 @@ def evaluate(jd,title,company=""):
         value=unicodedata.normalize("NFKD",str(text).casefold())
         value="".join(c for c in value if not unicodedata.combining(c))
         return set(re.findall(r"[a-z0-9]{3,}",value))
-    jd_terms=lex(relevant_jd_text(jd))
+    jd_clean=relevant_jd_text(jd)
+    jd_terms=lex(jd_clean)
+    def normalized_phrase(value):
+        value=unicodedata.normalize('NFKD',str(value).casefold())
+        value=''.join(c for c in value if not unicodedata.combining(c))
+        return ' '.join(re.findall(r'[a-z0-9]+',value))
+    normalized_jd=normalized_phrase(jd_clean)
     supported=[]
     for row in answer.get("requirements",[])[:20]:
         if not isinstance(row,dict): continue
         name=str(row.get("name") or "")[:150]
         terms=lex(name)
-        # Reject completely invented JD requirements, even if model claims a match.
-        if not terms or len(terms & jd_terms)/len(terms)<0.65:continue
+        # Prefer quoted JD passages; accept minor grammatical variants but
+        # never award credit for requirements absent from the source text.
+        quoted=normalized_phrase(name) in normalized_jd if len(name)>=8 else False
+        overlap=len(terms & jd_terms)/len(terms) if terms else 0
+        if not quoted and (len(terms)<2 or overlap<0.50):continue
         match=row.get("match")
         evidence=[x for x in row.get("evidence_ids",[]) if isinstance(x,str) and x in ids]
         if match not in ("direct","transferable","unproven"): continue

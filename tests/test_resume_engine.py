@@ -289,3 +289,32 @@ class BackendResumeRouteContractTests(unittest.TestCase):
         self.assertIn("AI=quality_fallback",weaker_doc.core_properties.keywords)
 
 if __name__=="__main__":unittest.main()
+
+
+class GPTActionContractTests(unittest.TestCase):
+    def test_action_requires_secret_not_session(self):
+        from unittest.mock import patch
+        from fastapi import HTTPException
+        import app
+        class R:
+            headers={"authorization":"Bearer invalid"}
+        with patch.dict("os.environ",{"CV_ACTION_TOKEN":"known-secret"}):
+            with self.assertRaises(HTTPException) as error:
+                app._cv_action_auth(R())
+            self.assertEqual(error.exception.status_code,401)
+        with patch.dict("os.environ",{"CV_ACTION_TOKEN":"known-secret"}):
+            R.headers={"authorization":"Bearer known-secret"}
+            app._cv_action_auth(R())
+
+    def test_action_export_does_not_use_llm_key(self):
+        import inspect,app
+        source=inspect.getsource(app.gpt_cv_download)
+        self.assertIn("audit(plan,data)",source)
+        self.assertIn("max_age=900",source)
+        self.assertNotIn("apply_hybrid(",source)
+
+    def test_gpt_source_is_verified_only(self):
+        from resume_engine import EXPERIENCE
+        ids={f"{i}:{j}" for i,e in enumerate(EXPERIENCE) for j,_ in enumerate(e["facts"])}
+        self.assertTrue(ids)
+        self.assertNotIn("999:999",ids)

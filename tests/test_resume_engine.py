@@ -227,6 +227,15 @@ class ResumeEngineTests(unittest.TestCase):
                     if unsupported.casefold() not in " ".join(f for e in EXPERIENCE for f in e["facts"]).casefold():
                         self.assertNotIn(unsupported.casefold(),content.casefold())
 
+    def test_education_contains_usp_and_mbas_without_degree_area(self):
+        from resume_engine import EDUCATION
+        text=" | ".join(EDUCATION)
+        self.assertIn("Graduação — Universidade de São Paulo (USP)",text)
+        self.assertIn("MBA em Marketing",text)
+        self.assertIn("MBA em Administração e Gestão",text)
+        self.assertIn("PSPO I",text)
+        self.assertNotIn("Odontologia",text)
+
     def test_empty_jd_rejected(self):
         with self.assertRaises(ValueError):build_plan("  ","A")
 

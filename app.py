@@ -763,14 +763,12 @@ class ResumeGenerate(BaseModel):
 def start_gpt_cv(payload: ResumeGenerate, request: Request):
     """Explicit click only. GPT Actions run through ChatGPT, not a billed server API."""
     require_auth(request)
-    gpt_url=os.environ.get("CV_GPT_URL","").strip()
-    if not gpt_url.startswith("https://chatgpt.com/g/"):
-        raise HTTPException(503,"GPT de currículos ainda não configurado; nenhuma geração foi iniciada")
+    gpt_url="https://chatgpt.com/"
     key,jd=_cv_source(payload.url)
     if not jd.strip():
         raise HTTPException(404,"Descrição da vaga ausente")
     return {"chat_url":gpt_url,"url":key,"title":payload.title,"company":payload.company,
-            "message":"Abra o GPT e forneça a URL da vaga para consultar as evidências via Action."}
+            "message":"Abra o ChatGPT com o plugin Caçador de Vagas conectado e envie a instrução copiada."}
 
 @app.post("/api/resume/generate")
 def generate_resume(payload: ResumeGenerate, request: Request):

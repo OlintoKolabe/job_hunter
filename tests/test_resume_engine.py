@@ -276,19 +276,14 @@ if __name__=="__main__":unittest.main()
 
 
 class GPTActionContractTests(unittest.TestCase):
-    def test_action_requires_secret_not_session(self):
-        from unittest.mock import patch
-        from fastapi import HTTPException
+    def test_only_private_mcp_and_signed_download_exist(self):
         import app
-        class R:
-            headers={"authorization":"Bearer invalid"}
-        with patch.dict("os.environ",{"CV_ACTION_TOKEN":"known-secret"}):
-            with self.assertRaises(HTTPException) as error:
-                app._cv_action_auth(R())
-            self.assertEqual(error.exception.status_code,401)
-        with patch.dict("os.environ",{"CV_ACTION_TOKEN":"known-secret"}):
-            R.headers={"authorization":"Bearer known-secret"}
-            app._cv_action_auth(R())
+        paths=[route.path for route in app.app.routes if hasattr(route,"path")]
+        self.assertIn("/api/gpt-action/download",paths)
+        self.assertNotIn("/api/gpt-action/context",paths)
+        self.assertNotIn("/api/gpt-action/cv",paths)
+        self.assertNotIn("/api/resume/gpt-start",paths)
+        self.assertFalse(hasattr(app,"_cv_action_auth"))
 
     def test_action_export_does_not_use_llm_key(self):
         import inspect,app

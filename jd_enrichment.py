@@ -13,7 +13,8 @@ from jd_signals import signals
 from block4_score import score_job,merge_semantic_requirements,hard_role_mismatch,recommend_application
 from jd_retrieval import extract_public_jd
 from score_repository import get_cached,get_previous_semantic,save,reserve,settle,PROFILE_VERSION,RUBRIC_VERSION,key_for
-from ai_resume_matcher import evaluate as evaluate_ai, to_ranking, estimate_cost
+from ai_resume_matcher import (evaluate as evaluate_ai, to_ranking, estimate_cost,
+                               reset_billable_usage, billable_usage)
 import os
 import psycopg
 from search_filters import detect_work_mode
@@ -139,12 +140,11 @@ def hydrate_jobs(cursor,jobs,roles,url_key,limit=PER_BATCH_LIMIT):
                     with budget_conn.cursor() as budget_cur:
                         usage_id=reserve(budget_cur,key,amount=0.015)
                 if usage_id is not None:
-                    actual=0.015
                     successful=False
+                    reset_billable_usage()
                     try:
                         result=evaluate_ai(description,str(complete.get('title') or ''),
                                            str(complete.get('company') or ''))
-                        actual=estimate_cost(result.get('usage',{}))
                         evaluation=to_ranking(complete,roles,result)
                         model='ai_matcher'
                         ai_status='interpreted'
@@ -159,6 +159,9 @@ def hydrate_jobs(cursor,jobs,roles,url_key,limit=PER_BATCH_LIMIT):
                            'reason':'Análise por IA não concluída; nenhuma nota substituta foi inventada'})
                         model='ai_error'
                     finally:
+                        # As in the CV flow, failed validation after a provider
+                        # response is billable, but never assume full reservation.
+                        actual=min(0.015,estimate_cost(billable_usage()))
                         with psycopg.connect(os.environ['DATABASE_URL'],connect_timeout=7) as budget_conn:
                             with budget_conn.cursor() as budget_cur:
                                 settle(budget_cur,usage_id,actual,successful)

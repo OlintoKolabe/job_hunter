@@ -42,7 +42,7 @@ serializer = URLSafeTimedSerializer(SECRET) if SECRET else None
 from contextlib import asynccontextmanager
 from mcp.server.fastmcp import FastMCP
 
-cv_mcp=FastMCP("Cacador de Vagas CV", stateless_http=True)
+cv_mcp=FastMCP("Cacador de Vagas CV", stateless_http=True, streamable_http_path="/")
 
 @cv_mcp.tool()
 def fetch_cv_job(url:str,title:str="")->dict:
@@ -76,6 +76,8 @@ async def cv_lifespan(app):
         yield
 
 app.router.lifespan_context=cv_lifespan
+# The MCP mount is deliberately authenticated at the ASGI boundary.
+# The GPT/ChatGPT client must supply CV_ACTION_TOKEN in its bearer-header connection.
 class _CVAuthorizedMCP:
     def __init__(self, inner):
         self.inner=inner
@@ -91,7 +93,7 @@ class _CVAuthorizedMCP:
                 return
         await self.inner(scope,receive,send)
 
-app.mount("/cv-mcp",_CVAuthorizedMCP(cv_mcp.streamable_http_app(streamable_http_path="/")))
+app.mount("/cv-mcp",_CVAuthorizedMCP(cv_mcp.streamable_http_app()))
 
 @app.on_event("startup")
 def bootstrap_catalog_if_requested():

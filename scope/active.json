@@ -14,7 +14,8 @@
     "score_repository.py",
     "Dockerfile",
     "tests/test_ai_resume_matcher.py",
-    "tests/test_opportunity_ui_contracts.py"
+    "tests/test_opportunity_ui_contracts.py",
+    "tests/test_block4_1.py"
   ],
   "forbidden_paths": [
     ".github/workflows/",

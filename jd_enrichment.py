@@ -63,7 +63,9 @@ def fallback_public_jd(job):
                 content=value.get('content') or value.get('description') or value.get('jobDescription') or ''
                 if not content and isinstance(value.get('job'),dict):
                     content=value['job'].get('description') or ''
-                if isinstance(content,str) and len(content.strip())>=300:
+                # Preserve even short provider responses in the JD cache; the
+                # evaluator separately rejects JDs too sparse for scoring.
+                if isinstance(content,str) and content.strip():
                     return content[:MAX_JD_CHARS]
         except Exception:
             pass

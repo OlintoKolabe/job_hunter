@@ -6,7 +6,7 @@ function DecisionActions({job,pending,onDecision,onGenerateCv}){
  return <div style={{display:'flex',justifyContent:'flex-end',gap:8}}>
   <button type="button" disabled={pending} onClick={()=>onDecision(job,'Candidatado')} style={{...shared,background:'#16803c',border:'1px solid #16803c'}}>Candidatado</button>
   <button type="button" disabled={pending} onClick={()=>onDecision(job,'Descartado')} style={{...shared,background:'#b91c1c',border:'1px solid #b91c1c'}}>Descartado</button>
-  <button type="button" disabled={pending} onClick={()=>onGenerateCv(job)} style={{...shared,background:'#2563eb',border:'1px solid #2563eb'}}>Gerar currículo ATS</button>
+  <button type="button" onClick={()=>onGenerateCv(job)} style={{...shared,background:'#2563eb',border:'1px solid #2563eb'}}>Gerar currículo ATS</button>
  </div>;
 }
 export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{}}){
@@ -95,7 +95,6 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{}}){
    }catch(e){setScoringFailed(prev=>[...prev,job.url]);setError(e.message)}
    finally{setScoringNow([]);setScoringAttempted(prev=>[...prev,job.url])}
  }
- const [cvNow,setCvNow]=useState([]);
  const [decisionNow,setDecisionNow]=useState([]),[hiddenDecisions,setHiddenDecisions]=useState([]);
  async function markDecision(job,state){
    if(decisionNow.includes(job.url))return;
@@ -117,29 +116,30 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{}}){
    }catch(e){setError('Não foi possível marcar “'+job.title+'” como '+state+': '+(e.name==='TimeoutError'?'servidor demorou a responder; confira o Histórico antes de tentar novamente.':e.message))}
    finally{setDecisionNow(prev=>prev.filter(x=>x!==job.url))}
  }
- async function generateCv(job){
-   // One-click download using the existing audited factual DOCX engine. No GPT API.
-   if(cvNow.includes(job.url))return;
-   setCvNow(v=>[...v,job.url]);setError('');setMessage('Gerando currículo ATS…');
-   try{
-     const response=await fetch('/api/resume/download',{method:'POST',
-       headers:{'Content-Type':'application/json'},
-       credentials:'same-origin',signal:AbortSignal.timeout(45000),
-       body:JSON.stringify({url:job.url,title:job.title,company:job.company||'Empresa'})});
-     if(!response.ok){
-       const error=await response.json().catch(()=>({}));
-       throw Error(error.detail||('Falha HTTP '+response.status));
-     }
-     const blob=await response.blob();
-     const disposition=response.headers.get('Content-Disposition')||'';
-     const encoded=disposition.match(/filename\\*=UTF-8''([^;]+)/i);
-     const filename=encoded?decodeURIComponent(encoded[1]):('Olinto Manso Pereira - '+(job.title||'Vaga')+'.docx');
-     const href=URL.createObjectURL(blob),link=document.createElement('a');
-     link.href=href;link.download=filename;document.body.appendChild(link);link.click();link.remove();
-     setTimeout(()=>URL.revokeObjectURL(href),30000);
-     setMessage('DOCX gerado pelo motor factual existente e disponibilizado para download (sem ChatGPT/API).');
-   }catch(e){setError('Currículo não gerado: '+e.message);setMessage('');}
-   finally{setCvNow(v=>v.filter(x=>x!==job.url));}
+ function generateCv(job){
+   // Plus-compatible handoff: no MCP, API key, paid API call or automatic generation.
+   setError('');
+   const jd=String(job.description||job.jd_text||job.full_description||'').trim();
+   const instruction=[
+     'Gere um currículo ATS em DOCX para Olinto Manso Pereira, adaptado exclusivamente à vaga abaixo.',
+     'Use apenas fatos profissionais e acadêmicos comprovados. Se não houver acesso ao histórico profissional validado, peça meu currículo-base antes de gerar; nunca invente fatos.',
+     'Formação confirmada: graduação pela USP (não declarar área); MBA em Marketing pela USP; MBA em Administration & Management pela FGV; PSPO I.',
+     'Experiência: mais de 20 anos em marketing, gestão de produtos digitais e físicos, Product Management, Product Ownership, Product Marketing, Growth, Branding, Inovação e liderança de equipes ágeis.',
+     'Não mencionar Odontologia, Turismo/UEG nem Design/UNIVALI. Não inventar ferramentas, resultados, datas ou formações.',
+     'Entregar arquivo DOCX com nome Olinto Manso Pereira - '+String(job.title||'Cargo')+' - '+String(job.company||'Empresa')+'.docx.',
+     'Vaga: '+String(job.title||'')+' | Empresa: '+String(job.company||'')+' | URL: '+String(job.url||''),
+     jd?'Descrição fornecida pelo Caçador:\n'+jd:'A descrição integral não veio no cartão. Consulte a URL da vaga ou peça a descrição antes de redigir o currículo.'
+   ].join('\n\n');
+   if(navigator.clipboard?.writeText){
+     navigator.clipboard.writeText(instruction).then(()=>{
+       setMessage('Instruções da vaga copiadas. Na aba do ChatGPT, cole (Ctrl+V) e envie. O currículo será gerado lá, sem plugin nem API paga.');
+     }).catch(()=>{
+       setMessage('ChatGPT aberto. Copie as instruções da vaga usando um navegador que permita acesso à área de transferência.');
+     });
+   }else{
+     setMessage('ChatGPT aberto, mas o navegador não permitiu copiar automaticamente as instruções.');
+   }
+   window.open('https://chatgpt.com/','_blank','noopener,noreferrer');
  }
 
  const currentMatches=searchedQuery!==''&&searchedQuery===query();

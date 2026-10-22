@@ -38,4 +38,8 @@ class OpportunityUIContracts(unittest.TestCase):
         self.assertIn("if(v.needs_verification?.includes('pais'))return 3;",s)
         self.assertIn(".sort((a,b)=>geoPriority(a)-geoPriority(b)).map(v=>",s)
 
+    def test_indeed_on_demand_search_does_not_scan_catalog(self):
+        s=Path("src/Opportunities.jsx").read_text()
+        self.assertIn("['himalayas','remotive','remoteok','indeed'].includes(source)",s)
+
 if __name__=="__main__":unittest.main()

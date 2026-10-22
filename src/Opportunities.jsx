@@ -59,21 +59,30 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{}}){
        }
      }
    }
-   async function rankEntireCollection(){
-     if(!all.size)return;
+   async function rankEntireCollection(maxNew=10){
+     const available=[...all.values()].filter(j=>!scoredOrAttempted.has(j.url));
+     if(!available.length||maxNew<=0)return;
      setMessage('Selecionando as melhores candidatas de '+all.size+' vagas antes da avaliação por IA…');
      const response=await fetch('/api/ranking/shortlist',{method:'POST',headers:{'Content-Type':'application/json'},
-       signal:AbortSignal.timeout(15000),body:JSON.stringify({jobs:[...all.values()].map(j=>({url:j.url,title:j.title,description:(j.description||'').slice(0,1500),ranking:j.ranking,needs_verification:j.needs_verification})),roles,limit:40})});
+       signal:AbortSignal.timeout(15000),body:JSON.stringify({jobs:available.map(j=>({url:j.url,title:j.title,description:(j.description||'').slice(0,1500),ranking:j.ranking,needs_verification:j.needs_verification})),roles,limit:maxNew})});
      if(!response.ok)throw Error('Triagem global indisponível (HTTP '+response.status+'); nenhuma avaliação paga foi iniciada.');
      const selection=await response.json();
      if(!Array.isArray(selection.urls))throw Error('Resposta inválida da triagem global');
      setMessage('Triagem de '+all.size+' vagas concluída. Avaliando até '+selection.urls.length+' candidatas prioritárias com IA…');
      await enrichAvailable(selection.urls);
    }
+   // Surface an initial, tightly bounded set of real scores while the slower
+   // multi-board catalog continues scanning. Leave six slots for the complete
+   // collection; never re-evaluate a URL or silently use mock scores.
+   const earlyRanking=rankEntireCollection(4).catch(err=>{
+     setScoringFailed(prev=>[...prev,'shortlist-initial']);
+     setMessage('Triagem inicial indisponível; continuando a busca de vagas. '+err.message);
+   });
    // Indeed is an on-demand provider, not a catalog board. A catalog scan
    // with source=indeed always returns 400 and can flood the UI with retries.
    if(['himalayas','remotive','remoteok','indeed'].includes(source)){
-     await rankEntireCollection();
+     await earlyRanking;
+     await rankEntireCollection(Math.max(0,10-scoredOrAttempted.size));
      setCompleted(true);
      setMessage('Consulta à fonte '+source+' concluída; vagas apresentadas após filtros e exclusões do Histórico.');
      return;
@@ -88,7 +97,8 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{}}){
     if(batch.complete){completedAll=true;break}
     if(!(batch.details||[]).length)break;
    }
-   await rankEntireCollection();
+   await earlyRanking;
+   await rankEntireCollection(Math.max(0,10-scoredOrAttempted.size));
    setCompleted(completedAll);
    setMessage(completedAll&&!skipped&&!Object.values(sourceTotals).some(v=>v.erros)?'Busca concluída.':('Busca com fontes indisponíveis: '+(skipped+Object.values(sourceTotals).reduce((n,v)=>n+v.erros,0))+' falhas registradas. Zero resultado não significa zero vagas. Confira Fontes.'));
   }catch(e){setError(e.message);setMessage('Busca parcial — os resultados encontrados continuam disponíveis.')}
@@ -214,6 +224,14 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{}}){
  };
  const ordered=[...combined.values()].filter(v=>!hiddenDecisions.includes(v.url)&&(!onlyNew||(v.is_new&&v.ranking?.score==null))).sort((a,b)=>{
    const date=v=>{const x=Date.parse(v.published||'');return Number.isFinite(x)?x:0};
+   // Unconfirmed country/mode must not crowd out the confirmed opportunities.
+   if(Boolean(a.confirmed)!==Boolean(b.confirmed))return a.confirmed?-1:1;
+   // In the score view, an evaluated strong match must reach the first ten
+   // even if its eligible remote location says LATAM rather than Brazil.
+   if(sort==='score'){
+     const scoreDiff=(b.ranking?.score??-1)-(a.ranking?.score??-1);
+     if(scoreDiff)return scoreDiff;
+   }
    if(country==='BR'||country==='LATAM'){
      const geoDiff=geoPriority(a)-geoPriority(b);
      if(geoDiff)return geoDiff;

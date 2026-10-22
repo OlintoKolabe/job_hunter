@@ -1,18 +1,21 @@
 {
-  "id": "JOB-HUNTER-GPT-MCP-CV-SINGLE-ENGINE",
+  "id": "JOB-HUNTER-RESUME-MATCHER-AI-SINGLE-ENGINE",
   "status": "active",
-  "base_ref": "0b872988c10933a4c5a17902eaf28df897e8d152",
+  "base_ref": "97868f582d76869a0fda782c62061ad3f72e486b",
   "production_ref": "feat/phase1-web-foundation",
-  "feature_ref": "feat/gpt-action-cv-single-block",
-  "objective": "Replace selected-vacancy DOCX generation with single explicit-click ChatGPT private MCP flow; preserve validated facts and one renderer.",
+  "feature_ref": "feat/resume-matcher-ai-evaluation-cv",
+  "objective": "Replace failed vacancy scoring and CV selection with a single evidence-grounded OpenAI-backed engine inspired by Resume Matcher; preserve search, decisions, database and DOCX renderer.",
   "allowed_files": [
     "scope/active.json",
     "app.py",
     "src/Opportunities.jsx",
-    "requirements.txt",
-    "tests/test_resume_engine.py",
+    "ai_resume_matcher.py",
+    "jd_enrichment.py",
+    "score_repository.py",
+    "Dockerfile",
+    "tests/test_ai_resume_matcher.py",
     "tests/test_opportunity_ui_contracts.py",
-    "resume_engine.py"
+    "tests/test_block4_1.py"
   ],
   "forbidden_paths": [
     ".github/workflows/",
@@ -24,22 +27,22 @@
     "migrations/"
   ],
   "forbidden_changes": [
-    "any automatic CV generation",
-    "new database or schedulers",
-    "paid OpenAI API calls",
-    "credential hardcoding",
-    "unverified factual statements",
-    "unapproved migrations or runtime scaling"
+    "automatic CV generation absent user click",
+    "new database tables or schedulers",
+    "multiple CV generators",
+    "hardcoded API key or leakage",
+    "unsupported factual claims",
+    "changes to job search/filter/decision behavior"
   ],
   "acceptance": [
-    "1 - Trigger CV generation only after click on existing button",
-    "2 - Zero OpenAI API charges and no dependency on local GPU",
-    "3 - Reuse persisted vacancy description and verified career facts",
-    "4 - Use one renderer and no duplicated legacy generation API",
-    "5 - Validate evidence IDs and audit reopened DOCX",
-    "6 - Private bearer authentication and expiring signed link",
-    "7 - Build and unit tests plus live MCP authentication and user DOCX must pass before final homologation",
-    "8 - Strict allowlist of changed files; keep unrelated functions stable"
+    "AI-based professional-fit 0-100 grounded in validated facts and mandatory JD requirements",
+    "Separate professional fit from ATS formatting",
+    "Only one-click CV AI after user requests it",
+    "Reuse existing DOCX renderer and audit bullet factual provenance",
+    "Never silently use deterministic CV when AI fails or is disabled",
+    "Limit monthly API spending with existing reservation mechanism",
+    "No new DB, schedulers or duplicate pipelines",
+    "Pass unit/build/integration tests and inspect branch diff before live deployment"
   ],
-  "deployment": "Do not merge to main or deploy until isolated gate checks and integrated homologation are complete."
+  "deployment": "Experimental branch only until documented gated tests and live AI+DOCX verification; main requires separate explicit permission."
 }

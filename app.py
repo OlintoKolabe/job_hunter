@@ -268,9 +268,9 @@ def restore_persisted_scores(cursor, jobs, roles, url_key):
     for key, jd_hash, result, model, cache_hash, fetched_at in cursor.fetchall():
         if key in by_url or not isinstance(result, dict):
             continue
-        if require_hybrid and model not in ("hybrid", "ai_error", "hard_exclusion"):
+        if require_hybrid and model not in ("ai_matcher", "hard_exclusion"):
             continue
-        if result.get("score") is None and not (require_hybrid and model == "hybrid"):
+        if result.get("score") is None:
             continue
         by_url[key] = (jd_hash, result, cache_hash, fetched_at)
     restored = 0
@@ -762,6 +762,65 @@ def _cv_source(url):
             row=cur.fetchone()
     if not row or not row[0]:raise HTTPException(404,"Descrição da vaga ausente no cache")
     return key,row[0]
+
+
+@app.post("/api/resume/ai-download")
+async def ai_resume_download(request: Request):
+    """One-click AI resume download; never silently use the deterministic old CV."""
+    require_auth(request)
+    from ai_resume_matcher import AIUnavailable, tailored_plan, estimate_cost
+    from score_repository import reserve, settle
+    body=await request.json()
+    url=str(body.get("url") or "")[:2000]
+    title=str(body.get("title") or "")[:120]
+    company=str(body.get("company") or "")[:100]
+    if not url.startswith("https://") or not title:
+        raise HTTPException(400,"Vaga inválida")
+    try:
+        _,jd=_cv_source(url)
+    except HTTPException as error:
+        if error.status_code!=404:raise
+        # Public vacancy extraction, not contingent on prior scoring.
+        from jd_retrieval import extract_public_jd
+        jd=extract_public_jd(url) or ""
+    if len(jd.strip())<100:
+        raise HTTPException(422,"Descrição integral indisponível; não é seguro gerar currículo desta vaga")
+    if os.getenv("JH_AI_ENABLED")!="1" or not os.getenv("OPENAI_API_KEY"):
+        raise HTTPException(503,"Geração por IA indisponível; configure OPENAI_API_KEY e JH_AI_ENABLED=1")
+    with psycopg.connect(DATABASE,connect_timeout=7) as conn:
+        with conn.cursor() as cur:
+            usage_id=reserve(cur,"resume:"+url_key(url),amount=0.015)
+    if usage_id is None:
+        raise HTTPException(429,"Limite mensal de custo da IA atingido")
+    cost=0.015
+    success=False
+    try:
+        plan=tailored_plan(jd,title,company)
+        cost=estimate_cost(plan.get("ai_usage",{}))
+        plan["cv_build"]=os.getenv("RENDER_GIT_COMMIT","local")[:12]
+        document=render_docx(plan)
+        audit(plan,document)
+        quality=evaluate_rendered_resume(plan,document,jd)
+        if not quality["factual_ok"]:
+            raise HTTPException(422,"Auditoria de fatos do currículo reprovada")
+        success=True
+    except AIUnavailable as exc:
+        raise HTTPException(503,str(exc)) from exc
+    except (ValueError,AssertionError) as exc:
+        raise HTTPException(422,"IA não produziu currículo factual auditável") from exc
+    except urllib.error.HTTPError as exc:
+        raise HTTPException(502,"Provedor de IA indisponível") from exc
+    finally:
+        with psycopg.connect(DATABASE,connect_timeout=7) as conn:
+            with conn.cursor() as cur:
+                settle(cur,usage_id,cost,success)
+    safe=lambda v:re.sub(r"[^\\wÀ-ÿ -]","",v).strip()[:75]
+    name="Olinto Manso Pereira - "+safe(title)+" - "+safe(company or "Empresa")+".docx"
+    from urllib.parse import quote
+    return StreamingResponse(io.BytesIO(document),
+       media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+       headers={"Content-Disposition":f"attachment; filename*=UTF-8''{quote(name)}",
+                "Cache-Control":"no-store","X-CV-Mode":"ai_resume_matcher_evidence_v1"})
 
 
 @app.get("/api/gpt-action/download")

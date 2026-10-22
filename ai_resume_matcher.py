@@ -10,6 +10,7 @@ import os
 import re
 import unicodedata
 import urllib.request
+import urllib.error
 
 from resume_engine import EXPERIENCE, relevant_jd_text
 
@@ -64,12 +65,22 @@ def _ask(task, jd, title, company=""):
        data=json.dumps(payload,ensure_ascii=False).encode("utf-8"),
        headers={"Authorization":"Bearer "+os.environ["OPENAI_API_KEY"],
                 "Content-Type":"application/json"},method="POST")
-    with urllib.request.urlopen(req,timeout=35) as response:
-        answer=json.load(response)
+    print(f"JH_OPENAI_REQUEST task={task} model={payload['model']}",flush=True)
+    try:
+        with urllib.request.urlopen(req,timeout=35) as response:
+            answer=json.load(response)
+    except urllib.error.HTTPError as exc:
+        print(f"JH_OPENAI_HTTP_ERROR task={task} status={exc.code}",flush=True)
+        raise
+    except Exception as exc:
+        print(f"JH_OPENAI_TRANSPORT_ERROR task={task} type={type(exc).__name__}",flush=True)
+        raise
+    usage=answer.get("usage") or {}
+    print(f"JH_OPENAI_RESPONSE task={task} prompt_tokens={usage.get('prompt_tokens',0)} completion_tokens={usage.get('completion_tokens',0)}",flush=True)
     output=json.loads(answer["choices"][0]["message"]["content"])
     if not isinstance(output,dict):
         raise ValueError("Resposta da IA não é um objeto")
-    output["_usage"]=answer.get("usage") or {}
+    output["_usage"]=usage
     return output
 
 

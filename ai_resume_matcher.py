@@ -188,3 +188,116 @@ def tailored_plan(jd,title,company=""):
         new_terms=lex(proposed)
         source_numbers=set(re.findall(r"\d+(?:[,.]\d+)?",original))
         new_numbers=set(re.findall(r"\d+(?:[,.]\d+)?",proposed))
+        if (20<=len(proposed)<=240 and len(new_terms)>=4
+            and len(new_terms & source_terms)/len(new_terms)>=0.48
+            and new_numbers<=source_numbers
+            and not re.search(r"\b(?:SQL|Power BI|Tableau|Odontologia|UEG|UNIVALI)\b",proposed,re.I)):
+            rewrite_candidates[id_]=proposed
+            provenance[proposed]=original
+    plan=build_plan(jd,title)
+    selected={}
+    for id_ in requested:
+        idx,fact=valid[id_]
+        selected.setdefault(idx,[]).append(rewrite_candidates.get(id_,fact))
+    plan["experience"]=[{"role":EXPERIENCE[i]["role"],"company":EXPERIENCE[i]["company"],
+              "dates":EXPERIENCE[i]["dates"],"facts":facts,"source_index":i}
+              for i,facts in selected.items()]
+    plan["additional_experience"]=[{"role":row["role"],"company":row["company"],
+                                    "dates":row["dates"],"source_index":i}
+                                    for i,row in enumerate(EXPERIENCE) if i not in selected]
+    summary=str(answer.get("summary") or "").strip()[:520]
+    # Forbid candidate factual identifiers outside the verified catalog in free text.
+    # Keep deterministic verified summary instead when potentially fabricated facts appear.
+    forbidden=re.search(r"\b(?:SQL|Python|Tableau|Power BI|Odontologia|UEG|UNIVALI)\b",summary,re.I)
+    numbers=re.search(r"\b\d{2,}\b",summary)
+    if summary and not forbidden and not numbers:
+        plan["summary"]=summary
+    plan["bullet_provenance"]=provenance
+    plan["cv_mode"]="ai_resume_matcher_evidence_v1"
+    plan["ai_usage"]=answer.get("_usage",{})
+    return plan
+
+
+def to_ranking(job, roles, analysis):
+    """Map verified semantic fit to existing Job Hunter UI without a second scoring model."""
+    from block4_score import score_job
+    base=score_job(job,roles)
+    rows=[]
+    catalog={item["id"]:item for item in evidence_catalog()}
+    for req in analysis["requirements"]:
+        kind="obrigatorio" if req["mandatory"] else "desejavel"
+        evidence="; ".join(catalog[x]["company"]+": "+catalog[x]["fact"]
+                          for x in req["evidence_ids"] if x in catalog)
+        match=req["match"]
+        points={"direct":1.0,"transferable":0.5,"unproven":0.0}[match]
+        rows.append({"name":req["name"],"type":kind,"status":"comprovado" if points else "nao_comprovado",
+                     "match_level":{"direct":"direta","transferable":"transferivel",
+                                    "unproven":"nao_comprovada"}[match],
+                     "match_points":points,"evidence":evidence or None,
+                     "explanation":"Correspondência baseada em experiência documentada" if evidence else "Sem evidência profissional documentada"})
+    mandatory=sum(r["type"]=="obrigatorio" for r in rows)
+    desirable=len(rows)-mandatory
+    unverified=sum(r["match_points"]==0 for r in rows)
+    base.update({"score":analysis["score"],"fit":analysis["score"],"score_max":100,
+                 "confidence":"ai_grounded_experience","requirements":rows,
+                 "reason":analysis["reasoning"],"evaluated_requirements":len(rows),
+                 "mandatory_count":mandatory,"desirable_count":desirable,
+                 "unverified_count":unverified,"uninterpreted_count":0,
+                 "coverage_pct":100,"ai_evidence_source":"resume_matcher_methodology",
+                 "ai_usage":analysis.get("usage",{})})
+    return base
+def shortlist_jobs(jobs, roles, limit=40):
+    """Zero-token, high-recall ordering before the existing AI fit evaluator.
+
+    This is only a candidate queue; it never manufactures a fit score. Reuse
+    the existing bilingual job-family aliases and the existing AI evaluator.
+    """
+    import re
+    from search_filters import fold, search_terms, requested_families, ROLE_FAMILIES
+    limit = max(1, min(50, int(limit)))
+    terms = search_terms(roles)
+    families = requested_families(terms) or set(ROLE_FAMILIES)
+    clues = {
+        'product': ('backlog', 'roadmap', 'product discovery', 'product strategy', 'produto', 'stakeholder', 'agile'),
+        'projects': ('project management', 'gestao de projetos', 'delivery', 'pmo', 'cronograma', 'budget'),
+        'marketing': ('marketing', 'branding', 'go-to-market', 'campaign', 'campanha', 'crm'),
+        'growth': ('growth', 'conversion', 'conversao', 'experimentation', 'acquisition', 'retention'),
+        'business': ('business analysis', 'analise de negocios', 'requirements', 'requisitos', 'processos'),
+    }
+    def priority(job):
+        title = fold(job.get('title'))
+        jd = fold(str(job.get('description') or '')[:7000])
+        matched = [family for family in families if any(
+            re.search(r'(?<![a-z])' + re.escape(alias) + r'(?![a-z])', title)
+            for alias in ROLE_FAMILIES[family])]
+        strength = (80 if matched else 0) + min(20, sum(4 for term in terms if len(term) > 3 and term in title))
+        strength += min(16, sum(2 for family in (matched or families) for token in clues[family] if token in jd))
+        if len(jd) >= 300:
+            strength += 12
+        return strength
+    unique = {}
+    for job in jobs:
+        if not isinstance(job, dict) or not isinstance(job.get('url'), str) or not job['url'].startswith('https://'):
+            continue
+        if job.get('needs_verification'):
+            continue
+        # Persisted scores are already ranked in the UI; do not waste a
+        # shortlisting slot on a job that requires no new paid evaluation.
+        if isinstance(job.get('ranking'), dict) and job['ranking'].get('score') is not None:
+            continue
+        unique.setdefault(job['url'], job)
+    ranked = sorted(unique.values(), key=lambda j: (-priority(j), j['url']))
+    selected, used = [], set()
+    for family in sorted(families):
+        candidate = next((j for j in ranked if j['url'] not in used and any(
+            alias in fold(j.get('title')) for alias in ROLE_FAMILIES[family])), None)
+        if candidate:
+            selected.append(candidate['url'])
+            used.add(candidate['url'])
+    for job in ranked:
+        if len(selected) >= limit:
+            break
+        if job['url'] not in used:
+            selected.append(job['url'])
+            used.add(job['url'])
+    return selected[:limit]

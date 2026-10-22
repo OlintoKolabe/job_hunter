@@ -13,7 +13,7 @@ from jd_signals import signals
 from block4_score import score_job,merge_semantic_requirements,hard_role_mismatch,recommend_application
 from jd_retrieval import extract_public_jd
 from score_repository import get_cached,get_previous_semantic,save,reserve,settle,PROFILE_VERSION,RUBRIC_VERSION,key_for
-from ai_interpreter import interpret
+from ai_resume_matcher import evaluate as evaluate_ai, to_ranking, estimate_cost
 import os
 import psycopg
 from search_filters import detect_work_mode
@@ -115,49 +115,41 @@ def hydrate_jobs(cursor,jobs,roles,url_key,limit=PER_BATCH_LIMIT):
                    "reason":"Cargo de desenvolvimento ou QA técnico, sem experiência profissional comprovada nessa função; não é um julgamento da capacidade de aprendizado."})
                 model='hard_exclusion'
                 ai_status='not_needed'
-            # Re-grade previously paid AI extraction before considering another API request.
-            previous=get_previous_semantic(cursor,key,jd_hash,roles) if description and not is_technical_role else None
-            if previous and len(previous)<4:previous=None
-            if previous:
-                evaluation=merge_semantic_requirements(evaluation,previous)
-                evaluation['ai_interpreted']=True
-                evaluation['regraded_from_cache']=True
-                model='hybrid'
-                ai_status='cache'
-            # Only new or truly changed descriptions may require paid interpretation.
-            if description and not previous and not is_technical_role and os.getenv('JH_AI_ENABLED')=='1' and os.getenv('OPENAI_API_KEY'):
+            # Resume Matcher-inspired, evidence-grounded AI replaces the legacy
+            # extraction + deterministic grading on opt-in; one paid call per JD.
+            if description and not is_technical_role and os.getenv('JH_AI_ENABLED')=='1' and os.getenv('OPENAI_API_KEY'):
                 with psycopg.connect(os.environ['DATABASE_URL'],connect_timeout=7) as budget_conn:
                     with budget_conn.cursor() as budget_cur:
-                        usage_id=reserve(budget_cur,key)
+                        usage_id=reserve(budget_cur,key,amount=0.015)
                 if usage_id is not None:
-                    ai_status='attempted'
-                    extracted=None; actual=0.002
+                    actual=0.015
+                    successful=False
                     try:
-                        extracted=interpret(description)
-                        if extracted:
-                            usage=extracted.get('usage',{})
-                            actual=(usage.get('prompt_tokens',0)*0.20+usage.get('completion_tokens',0)*1.20)/1000000
+                        result=evaluate_ai(description,str(complete.get('title') or ''),
+                                           str(complete.get('company') or ''))
+                        actual=estimate_cost(result.get('usage',{}))
+                        evaluation=to_ranking(complete,roles,result)
+                        model='ai_matcher'
+                        ai_status='interpreted'
+                        successful=True
                     except Exception as exc:
                         ai_status='failed'
-                        print('JH_AI_INTERPRET_FAILURE',type(exc).__name__,flush=True)
+                        print('JH_AI_MATCHER_FAILURE',type(exc).__name__,flush=True)
+                        evaluation.update({'score':None,'fit':None,'confidence':'ai_error',
+                           'reason':'Análise por IA não concluída; nenhuma nota substituta foi inventada'})
+                        model='ai_error'
                     finally:
                         with psycopg.connect(os.environ['DATABASE_URL'],connect_timeout=7) as budget_conn:
                             with budget_conn.cursor() as budget_cur:
-                                settle(budget_cur,usage_id,actual,bool(extracted and extracted.get("requirements")))
-                    if ai_status=='failed' or not extracted or not extracted.get('requirements'):
-                        ai_status='failed'
-                        evaluation['_ai_failed']=True
-                        model='ai_error'
-                    if extracted and extracted.get('requirements'):
-                        evaluation=merge_semantic_requirements(evaluation,extracted['requirements'])
-                        evaluation['ai_interpreted']=True
-                        model='hybrid'
-                        ai_status='interpreted'
+                                settle(budget_cur,usage_id,actual,successful)
                 else:
                     ai_status='budget_exhausted'
-            elif description and not previous and not is_technical_role:
+                    evaluation.update({'score':None,'fit':None,'confidence':'ai_budget_exhausted'})
+            elif description and not is_technical_role:
                 ai_status='disabled'
-            if description and (evaluation.get('score') is not None or model in ('hybrid','ai_error','hard_exclusion')):save(cursor,key,jd_hash,roles,evaluation,model)
+                evaluation.update({'score':None,'fit':None,'confidence':'ai_disabled',
+                                   'reason':'IA desligada: é necessária a chave OpenAI e JH_AI_ENABLED=1'})
+            if description and (evaluation.get('score') is not None or model in ('ai_matcher','ai_error','hard_exclusion')):save(cursor,key,jd_hash,roles,evaluation,model)
         recommendation=recommend_application(complete,evaluation)
         # Persist the secondary judgment alongside an existing score without
         # changing the score key, spending API credits or changing the model.

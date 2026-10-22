@@ -773,7 +773,8 @@ class ResumeAIRequest(BaseModel):
 def ai_resume_download(payload: ResumeAIRequest, request: Request):
     """One-click AI resume download; never silently use the deterministic old CV."""
     require_auth(request)
-    from ai_resume_matcher import AIUnavailable, tailored_plan, estimate_cost
+    from ai_resume_matcher import (AIUnavailable, tailored_plan, estimate_cost,
+                                   reset_billable_usage, billable_usage)
     from score_repository import reserve, settle
     url=payload.url[:2000]
     title=payload.title[:120]
@@ -800,13 +801,12 @@ def ai_resume_download(payload: ResumeAIRequest, request: Request):
     if usage_id is None:
         print("JH_CV_REJECT code=budget_exhausted",flush=True)
         raise HTTPException(429,"Limite mensal de custo da IA atingido")
-    cost=0.015
+    reset_billable_usage()
     success=False
     try:
         print("JH_CV_STAGE stage=ai_selection",flush=True)
         plan=tailored_plan(jd,title,company)
         print(f"JH_CV_STAGE stage=ai_selected tokens={plan.get('ai_usage',{}).get('total_tokens',0)}",flush=True)
-        cost=estimate_cost(plan.get("ai_usage",{}))
         plan["cv_build"]=os.getenv("RENDER_GIT_COMMIT","local")[:12]
         document=render_docx(plan)
         print(f"JH_CV_STAGE stage=docx_rendered bytes={len(document)}",flush=True)
@@ -826,6 +826,10 @@ def ai_resume_download(payload: ResumeAIRequest, request: Request):
     except urllib.error.HTTPError as exc:
         raise HTTPException(502,"Provedor de IA indisponível") from exc
     finally:
+        # Reservation is a ceiling, not a charge. Failed validation can occur
+        # after the provider bills tokens, so account for returned usage even
+        # when no usable plan was produced. No response means no known charge.
+        cost=min(0.015,estimate_cost(billable_usage()))
         with psycopg.connect(DATABASE,connect_timeout=7) as conn:
             with conn.cursor() as cur:
                 settle(cur,usage_id,cost,success)

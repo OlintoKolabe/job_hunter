@@ -235,6 +235,18 @@ class ShortlistTests(unittest.TestCase):
         self.assertEqual(shortlist_jobs(rows, 'Product Manager'), ['https://b.com/b'])
 
 class ShortlistedJDTests(unittest.TestCase):
+    def test_inhire_full_jd_uses_existing_provider_api_for_cv_and_ranking(self):
+        from jd_enrichment import fallback_public_jd
+        job={'url':'https://cobli.inhire.app/vagas/cf249d92-5a0c-4143-bb3a-c7e5ea688d00/product-manager-s-nior-account-experience',
+             'title':'Product Manager Sênior','company':'Cobli','source':'inHire'}
+        body='Responsabilidades: liderar roadmap e stakeholders. '*12
+        with patch('jd_enrichment.fetch_json',return_value={'jobPage':{'description':body}}) as api, \
+             patch('jd_enrichment.extract_public_jd',side_effect=AssertionError('No fallback needed')):
+            self.assertEqual(fallback_public_jd(job),body)
+        self.assertEqual(api.call_args.args[0],
+                         'https://api.inhire.app/job-posts/public/pages/cf249d92-5a0c-4143-bb3a-c7e5ea688d00')
+        self.assertEqual(api.call_args.args[1],{'X-Tenant':'cobli'})
+
     def test_failed_ai_validation_charges_only_actual_token_usage(self):
         from jd_enrichment import hydrate_jobs
         from ai_resume_matcher import _last_billable_usage, estimate_cost

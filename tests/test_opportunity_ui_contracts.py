@@ -8,19 +8,21 @@ class OpportunityUIContracts(unittest.TestCase):
         self.assertIn("visibleReviews.forEach(v=>{if(!combined.has(v.url))combined.set(v.url,{...v,confirmed:false})})",s)
     def test_shared_action_buttons_in_all_three_sections(self):
         s=Path("src/Opportunities.jsx").read_text()
-        self.assertEqual(s.count("<DecisionActions job={v} pending={decisionNow.includes(v.url)} onDecision={markDecision} onGenerateCv={generateCv}/>"),3)
+        self.assertEqual(s.count("<DecisionActions job={v} pending={decisionNow.includes(v.url)} onDecision={markDecision} onGenerateCv={generateCv} cvPending={cvNow.includes(v.url)}/>"),3)
         self.assertIn("onClick={()=>onGenerateCv(job)}",s)
         self.assertIn("background:'#2563eb'",s)
         self.assertEqual(s.count("onClick={()=>markDecision(v,'Candidatado')}"),0)
         self.assertEqual(s.count("onClick={()=>markDecision(v,'Descartado')}"),0)
 
-    def test_cv_is_existing_button_only_and_routes_to_chatgpt_plus(self):
+    def test_cv_is_existing_button_only_and_downloads_using_ai(self):
         s=Path("src/Opportunities.jsx").read_text()
-        self.assertEqual(s.count(">Gerar currículo ATS</button>"),1)
+        self.assertIn("'Gerar currículo ATS'",s)
         self.assertEqual(s.count("onClick={()=>generateCv(v)}"),0)
         self.assertNotIn("v.ranking?.score!=null&&<button",s)
-        self.assertIn("Plus-compatible handoff",s)
-        self.assertIn("window.open",s)
+        self.assertIn("AI-only one-click flow",s)
+        self.assertIn("fetch('/api/resume/ai-download'",s)
+        self.assertIn("anchor.download=filename",s)
+        self.assertNotIn("window.open('https://chatgpt.com",s)
         self.assertNotIn("/api/resume/generate",s)
         self.assertNotIn("/api/resume/gpt-start",s)
         self.assertNotIn("Preparar com ChatGPT</button>",s)

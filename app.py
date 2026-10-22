@@ -768,6 +768,7 @@ class ResumeAIRequest(BaseModel):
     url: str
     title: str
     company: str = ""
+    description: str = ""
 
 @app.post("/api/resume/ai-download")
 def ai_resume_download(payload: ResumeAIRequest, request: Request):
@@ -786,9 +787,16 @@ def ai_resume_download(payload: ResumeAIRequest, request: Request):
         _,jd=_cv_source(url)
     except HTTPException as error:
         if error.status_code!=404:raise
-        # Public vacancy extraction, not contingent on prior scoring.
-        from jd_retrieval import extract_public_jd
-        jd=extract_public_jd(url) or ""
+        # Reuse the full JD carried by the current search before fetching it.
+        # This avoids losing JobSpy-provided Indeed descriptions when the public
+        # page is blocked. No empty/sparse snippet can be treated as a full JD.
+        jd=payload.description[:18000] if len(payload.description.strip())>=300 else ""
+        if not jd:
+            from jd_retrieval import extract_public_jd
+            jd=extract_public_jd(url) or ""
+        if len(jd.strip())<100 and urlsplit(url).hostname in ("br.indeed.com","www.indeed.com","indeed.com"):
+            from indeed_provider import description_for_job
+            jd=description_for_job(url,title,company) or ""
     print(f"JH_CV_STAGE stage=jd_ready length={len(jd)}",flush=True)
     if len(jd.strip())<100:
         print("JH_CV_REJECT code=jd_unavailable",flush=True)

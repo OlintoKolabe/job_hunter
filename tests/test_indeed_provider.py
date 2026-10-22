@@ -21,4 +21,16 @@ class IndeedProviderTests(unittest.TestCase):
     def test_empty_results_remain_empty(self):
         with patch("jobspy.scrape_jobs",return_value=pd.DataFrame()):
             self.assertEqual(indeed_provider.search("product owner"),[])
+    def test_detail_lookup_never_substitutes_another_indeed_job(self):
+        df=pd.DataFrame([
+            {"job_url":"https://br.indeed.com/viewjob?jk=1111111111111111","description":"Wrong job "*50},
+            {"job_url":"https://br.indeed.com/viewjob?jk=245b508b66b7f110","description":"Verified requirements "*35},
+        ])
+        with patch("jobspy.scrape_jobs",return_value=df):
+            text=indeed_provider.description_for_job("https://br.indeed.com/viewjob?jk=245b508b66b7f110","Project Manager","Acme")
+        self.assertTrue(text.startswith("Verified requirements"))
+    def test_detail_lookup_fails_closed_when_only_similar_jobs_exist(self):
+        df=pd.DataFrame([{"job_url":"https://br.indeed.com/viewjob?jk=1111111111111111","description":"Wrong job "*50}])
+        with patch("jobspy.scrape_jobs",return_value=df):
+            self.assertIsNone(indeed_provider.description_for_job("https://br.indeed.com/viewjob?jk=245b508b66b7f110","Project Manager"))
 if __name__=="__main__":unittest.main()

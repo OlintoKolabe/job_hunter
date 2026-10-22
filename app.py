@@ -166,7 +166,7 @@ def pair_key(empresa,cargo):
 
 @app.get("/health")
 def health():
-    return {"service":"job-hunter","alive":True}
+    return {"service":"job-hunter","alive":True,"ai_ready":os.getenv("JH_AI_ENABLED")=="1" and bool(os.getenv("OPENAI_API_KEY"))}
 
 @app.get("/api/me")
 def me(request: Request):

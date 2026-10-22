@@ -47,12 +47,26 @@ def remote_detail(job):
     return inhire_detail(job)
 
 def fallback_public_jd(job):
-    """Reuse the verified Indeed/JobSpy fallback already used for CVs.
+    """Single full-JD reader shared by ranking and CV creation.
 
-    A single selected JD is retrieved only after filtering/shortlisting; the
-    exact Indeed requisition key must match before JobSpy content is accepted.
+    Prefer a provider's existing public detail API where available. For Indeed
+    the exact requisition key must match before JobSpy content is accepted.
     """
     url=str(job.get('url') or '')
+    detail=remote_detail(job)
+    if detail:
+        try:
+            endpoint,headers=detail
+            result=fetch_json(endpoint,headers) if headers else fetch_json(endpoint)
+            value=(result.get('jobPage') or result.get('page') or result) if isinstance(result,dict) else {}
+            if isinstance(value,dict):
+                content=value.get('content') or value.get('description') or value.get('jobDescription') or ''
+                if not content and isinstance(value.get('job'),dict):
+                    content=value['job'].get('description') or ''
+                if isinstance(content,str) and len(content.strip())>=300:
+                    return content[:MAX_JD_CHARS]
+        except Exception:
+            pass
     if urlsplit(url).hostname in ('br.indeed.com','www.indeed.com','indeed.com'):
         try:
             from indeed_provider import description_for_job
@@ -85,18 +99,7 @@ def hydrate_jobs(cursor,jobs,roles,url_key,limit=PER_BATCH_LIMIT):
             pending.append((key,j))
     def fetch(pair):
         key,job=pair
-        try:
-            detail=remote_detail(job)
-            if not detail:return key,fallback_public_jd(job)
-            endpoint,headers=detail
-            result=fetch_json(endpoint,headers) if headers else fetch_json(endpoint)
-            value=(result.get("jobPage") or result.get("page") or result) if isinstance(result,dict) else {}
-            if not isinstance(value,dict):return key,fallback_public_jd(job)
-            content=value.get("content") or value.get("description") or value.get("jobDescription") or ""
-            if not content and isinstance(value.get("job"),dict):content=value["job"].get("description") or ""
-            if not isinstance(content,str) or not content.strip():return key,fallback_public_jd(job)
-            return key,content[:MAX_JD_CHARS]
-        except Exception:return key,fallback_public_jd(job)
+        return key,fallback_public_jd(job)
     fetched=0
     with ThreadPoolExecutor(max_workers=4) as pool:
         for future in as_completed([pool.submit(fetch,p) for p in pending[:limit]]):

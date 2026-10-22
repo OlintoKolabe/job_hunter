@@ -137,3 +137,33 @@ def tailored_plan(jd,title,company=""):
     plan["cv_mode"]="ai_resume_matcher_evidence_v1"
     plan["ai_usage"]=answer.get("_usage",{})
     return plan
+
+
+def to_ranking(job, roles, analysis):
+    """Map verified semantic fit to existing Job Hunter UI without a second scoring model."""
+    from block4_score import score_job
+    base=score_job(job,roles)
+    rows=[]
+    catalog={item["id"]:item for item in evidence_catalog()}
+    for req in analysis["requirements"]:
+        kind="obrigatorio" if req["mandatory"] else "desejavel"
+        evidence="; ".join(catalog[x]["company"]+": "+catalog[x]["fact"]
+                          for x in req["evidence_ids"] if x in catalog)
+        match=req["match"]
+        points={"direct":1.0,"transferable":0.5,"unproven":0.0}[match]
+        rows.append({"name":req["name"],"type":kind,"status":"comprovado" if points else "nao_comprovado",
+                     "match_level":{"direct":"direta","transferable":"transferivel",
+                                    "unproven":"nao_comprovada"}[match],
+                     "match_points":points,"evidence":evidence or None,
+                     "explanation":"Correspondência baseada em experiência documentada" if evidence else "Sem evidência profissional documentada"})
+    mandatory=sum(r["type"]=="obrigatorio" for r in rows)
+    desirable=len(rows)-mandatory
+    unverified=sum(r["match_points"]==0 for r in rows)
+    base.update({"score":analysis["score"],"fit":analysis["score"],"score_max":100,
+                 "confidence":"ai_grounded_experience","requirements":rows,
+                 "reason":analysis["reasoning"],"evaluated_requirements":len(rows),
+                 "mandatory_count":mandatory,"desirable_count":desirable,
+                 "unverified_count":unverified,"uninterpreted_count":0,
+                 "coverage_pct":100,"ai_evidence_source":"resume_matcher_methodology",
+                 "ai_usage":analysis.get("usage",{})})
+    return base

@@ -231,62 +231,46 @@ class ResumeEngineTests(unittest.TestCase):
         with self.assertRaises(ValueError):build_plan("  ","A")
 
 class BackendResumeRouteContractTests(unittest.TestCase):
-    """Execute the actual backend endpoint body with isolated DB/AI boundaries."""
-    def test_route_returns_a_reopened_provenance_docx(self):
-        import ast,asyncio,os,types
-        from pathlib import Path
-        from fastapi import HTTPException
-        from fastapi.responses import StreamingResponse
-        from resume_engine import evaluate_rendered_resume
-        from resume_hybrid import traceable_relevance
-        node=next(n for n in ast.parse((Path(__file__).parents[1]/"app.py").read_text()).body
-                  if isinstance(n,ast.FunctionDef) and n.name=="generate_resume")
-        node.decorator_list=[]
-        for arg in node.args.args:arg.annotation=None
-        node.returns=None
-        unit=ast.fix_missing_locations(ast.Module(body=[node],type_ignores=[]))
-        jd="Product Manager roadmap product discovery stakeholders user research scrum"
-        calls=[]
-        class FakeCursor:
-            def __enter__(self):return self
-            def __exit__(self,*exc):return False
-            def execute(self,sql,args=None):calls.append(sql)
-            def fetchone(self):return (jd,)
-        class FakeConnection:
-            def __enter__(self):return self
-            def __exit__(self,*exc):return False
-            def cursor(self):return FakeCursor()
-        fake_db=types.SimpleNamespace(connect=lambda *args,**kwargs:FakeConnection())
-        def fake_hybrid(cur,url,jd_text,plan):
-            return plan,{"mode":"deterministic","ai_calls":0,"cost_usd":0.0}
-        ns={"require_auth":lambda _:None,"url_key":lambda value:value.replace("https://",""),
-            "psycopg":fake_db,"DATABASE":"fixture","HTTPException":HTTPException,
-            "build_plan":build_plan,"apply_hybrid":fake_hybrid,
-            "render_docx":render_docx,"audit":audit,
-            "evaluate_rendered_resume":evaluate_rendered_resume,
-            "traceable_relevance":traceable_relevance,
-            "os":os,"io":io,"StreamingResponse":StreamingResponse}
-        exec(compile(unit,"app.py","exec"),ns)
-        payload=types.SimpleNamespace(url="https://example.org/vaga1",
-                                      title="Product Manager",company="Empresa")
-        response=ns["generate_resume"](payload,None)
-        self.assertIsInstance(response,StreamingResponse)
+    """Only the new GPT/MCP path can produce a user-selected ATS DOCX."""
+    def test_verified_gpt_download_reopens_and_audits_docx(self):
+        import app, asyncio, hashlib
+        from unittest.mock import patch
+        from itsdangerous import URLSafeTimedSerializer
+        from resume_engine import EXPERIENCE
+        jd="Product Manager roadmap discovery stakeholders backlog delivery"
+        evidence=["0:0"]
+        signer=URLSafeTimedSerializer("test-only-secret")
+        payload={"url":"https://example.com/vaga","title":"Product Manager",
+                 "company":"Empresa","ids":evidence,
+                 "jd_hash":hashlib.sha256(jd.encode()).hexdigest()}
+        ticket=signer.dumps(payload,salt="cv-action-download-v1")
+        with patch.object(app,"serializer",signer),patch.object(app,"_cv_source",return_value=(payload["url"],jd)):
+            response=app.gpt_cv_download(ticket)
         async def gather():return b"".join([part async for part in response.body_iterator])
-        data=asyncio.run(gather())
-        parsed=Document(io.BytesIO(data))
-        self.assertIn("AI=deterministic",parsed.core_properties.keywords)
-        self.assertEqual(response.headers["x-cv-mode"],"deterministic")
-        self.assertTrue(any("pg_advisory_xact_lock" in query for query in calls))
-        self.assertTrue(response.headers["x-document-sha256"])
-        def weakened_hybrid(cur,url,jd_text,plan):
-            trimmed=[{**entry,"facts":entry["facts"][:1]} for entry in plan["experience"]]
-            return {**plan,"experience":trimmed},{"mode":"hybrid","ai_calls":1,"cost_usd":0.0003}
-        ns["apply_hybrid"]=weakened_hybrid
-        weaker=ns["generate_resume"](payload,None)
-        self.assertEqual(weaker.headers["x-cv-mode"],"quality_fallback")
-        async def gather_weaker():return b"".join([part async for part in weaker.body_iterator])
-        weaker_doc=Document(io.BytesIO(asyncio.run(gather_weaker())))
-        self.assertIn("AI=quality_fallback",weaker_doc.core_properties.keywords)
+        parsed=Document(io.BytesIO(asyncio.run(gather())))
+        content=" ".join(p.text for p in parsed.paragraphs)
+        self.assertIn(EXPERIENCE[0]["facts"][0],content)
+        self.assertIn("gpt_action_verified_facts",parsed.core_properties.keywords)
+        self.assertEqual(response.headers["x-cv-mode"],"gpt_action_verified_facts")
+        self.assertTrue(response.headers["content-disposition"].endswith(".docx"))
+    def test_unverified_gpt_claim_is_rejected(self):
+        import app,hashlib
+        from unittest.mock import patch
+        from itsdangerous import URLSafeTimedSerializer
+        from fastapi import HTTPException
+        jd="Project Manager"
+        signer=URLSafeTimedSerializer("test-only-secret")
+        payload={"url":"https://example.com/vaga","title":"Project Manager",
+                 "company":"Empresa","ids":["999:999"],
+                 "jd_hash":hashlib.sha256(jd.encode()).hexdigest()}
+        ticket=signer.dumps(payload,salt="cv-action-download-v1")
+        with patch.object(app,"serializer",signer),patch.object(app,"_cv_source",return_value=(payload["url"],jd)):
+            with self.assertRaises(HTTPException) as error:app.gpt_cv_download(ticket)
+        self.assertEqual(error.exception.status_code,400)
+    def test_legacy_resume_generate_route_removed(self):
+        import app
+        paths=[route.path for route in app.app.routes if hasattr(route,"path")]
+        self.assertNotIn("/api/resume/generate",paths)
 
 if __name__=="__main__":unittest.main()
 

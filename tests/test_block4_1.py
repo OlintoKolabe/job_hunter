@@ -25,7 +25,7 @@ class Block41Tests(unittest.TestCase):
         cur=Mock()
         cur.fetchall.return_value=[(url,jd,datetime.now(timezone.utc))]
         stored={"score":82,"confidence":"semantic_evidence","requirements":[]}
-        with patch("jd_enrichment.get_cached",return_value=stored),patch("jd_enrichment.interpret") as interpret_ai,patch("jd_enrichment.score_job") as compute:
+        with patch("jd_enrichment.get_cached",return_value=stored),patch("jd_enrichment.evaluate_ai") as interpret_ai,patch("jd_enrichment.score_job") as compute:
             jobs,coverage=hydrate_jobs(cur,[{"url":url,"title":"Product Manager","source":"greenhouse"}],"Product Manager",lambda v:v)
         self.assertEqual(jobs[0]["ranking"]["score"],82)
         self.assertEqual(coverage["cached"],1)
@@ -47,7 +47,7 @@ class Block41Tests(unittest.TestCase):
         rows=[{"name":"Roadmap","type":"obrigatorio","skill_id":"roadmap"},{"name":"Backlog","type":"obrigatorio","skill_id":"backlog"}]
         self.assertIsNone(merge_semantic_requirements({"score":None},rows)["score"])
 
-    def test_regrade_existing_semantic_cache_without_openai(self):
+    def test_old_semantic_cache_is_not_misrepresented_as_new_ai_fit(self):
         from datetime import datetime, timezone
         from unittest.mock import Mock
         from jd_enrichment import hydrate_jobs
@@ -55,16 +55,12 @@ class Block41Tests(unittest.TestCase):
         jd="Required payments roadmap experience. "*20
         cur=Mock()
         cur.fetchall.return_value=[(url,jd,datetime.now(timezone.utc))]
-        old=[{"name":"Pix payments","type":"obrigatorio","skill_id":None},
-             {"name":"Roadmap","type":"obrigatorio","skill_id":"roadmap"},
-             {"name":"Payment operations","type":"obrigatorio","skill_id":None},
-             {"name":"Operational analytics","type":"desejavel","skill_id":None}]
-        with patch("jd_enrichment.get_cached",return_value=None),patch("jd_enrichment.get_previous_semantic",return_value=old),patch("jd_enrichment.interpret") as ai,patch("jd_enrichment.save") as saved:
+        with patch.dict("os.environ",{"JH_AI_ENABLED":"0","OPENAI_API_KEY":""}),patch("jd_enrichment.get_cached",return_value=None),patch("jd_enrichment.evaluate_ai") as ai,patch("jd_enrichment.save") as saved:
             jobs,_=hydrate_jobs(cur,[{"url":url,"title":"Payments PM"}],"Product Manager",lambda v:v)
-        self.assertTrue(jobs[0]["ranking"]["regraded_from_cache"])
-        self.assertIsNotNone(jobs[0]["ranking"]["score"])
+        self.assertIsNone(jobs[0]["ranking"]["score"])
+        self.assertEqual(jobs[0]["ai_status"],"disabled")
         ai.assert_not_called()
-        saved.assert_called_once()
+        saved.assert_not_called()
 
     def test_pm_collaboration_is_not_hands_on_coding(self):
         rows=[{"name":n,"type":"obrigatorio","skill_id":k} for n,k in
@@ -96,7 +92,7 @@ class Block41Tests(unittest.TestCase):
         jd="Senior Software Engineer: write production code with Python and maintain CI. "*10
         cur=Mock()
         cur.fetchall.return_value=[(url,jd,datetime.now(timezone.utc))]
-        with patch("jd_enrichment.get_cached",return_value=None),patch("jd_enrichment.interpret") as interpret_ai,patch("jd_enrichment.reserve") as reserve_ai,patch("jd_enrichment.save") as save:
+        with patch("jd_enrichment.get_cached",return_value=None),patch("jd_enrichment.evaluate_ai") as interpret_ai,patch("jd_enrichment.reserve") as reserve_ai,patch("jd_enrichment.save") as save:
             jobs,_=hydrate_jobs(cur,[{"url":url,"title":"Senior Software Engineer"}],"Product Manager",lambda v:v)
         self.assertEqual(jobs[0]["ranking"]["score"],0)
         self.assertEqual(jobs[0]["ai_status"],"not_needed")
@@ -190,7 +186,7 @@ class Block41Tests(unittest.TestCase):
         cur.fetchall.return_value=[(url,jd,datetime.now(timezone.utc))]
         cached={"score":72,"confidence":"semantic_evidence","requirements":[
             {"name":"Product roadmap","type":"obrigatorio","match_points":1,"match_level":"direta"}]}
-        with patch("jd_enrichment.get_cached",return_value=cached),patch("jd_enrichment.interpret") as ai:
+        with patch("jd_enrichment.get_cached",return_value=cached),patch("jd_enrichment.evaluate_ai") as ai:
             first,_=hydrate_jobs(cur,[{"url":url,"title":"Product Manager","detected_mode":"remote"}],"Product Manager",lambda v:v)
         self.assertIsNotNone(first[0]["ranking"]["application_recommendation"]["score"])
         self.assertTrue(any("jsonb_set" in str(call) for call in cur.execute.call_args_list))

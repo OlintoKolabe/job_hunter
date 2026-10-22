@@ -10,7 +10,8 @@
     "app.py",
     "src/Opportunities.jsx",
     "requirements.txt",
-    "tests/test_resume_engine.py"
+    "tests/test_resume_engine.py",
+    "tests/test_opportunity_ui_contracts.py"
   ],
   "forbidden_paths": [
     ".github/workflows/",
@@ -36,7 +37,7 @@
     "4 - Use one renderer and no duplicated legacy generation API",
     "5 - Validate evidence IDs and audit reopened DOCX",
     "6 - Private bearer authentication and expiring signed link",
-    "7 - Automated build, real MCP connector and downloadable DOCX tested before production approval",
+    "7 - Build and unit tests plus live MCP authentication and user DOCX must pass before final homologation",
     "8 - Strict allowlist of changed files; keep unrelated functions stable"
   ],
   "deployment": "Do not merge to main or deploy until isolated gate checks and integrated homologation are complete."

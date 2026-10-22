@@ -67,7 +67,13 @@ def _ask(task, jd, title, company=""):
     output=json.loads(answer["choices"][0]["message"]["content"])
     if not isinstance(output,dict):
         raise ValueError("Resposta da IA não é um objeto")
+    output["_usage"]=answer.get("usage") or {}
     return output
+
+
+def estimate_cost(usage):
+    """Conservative gpt-4.1-mini USD estimate; charge based on actual tokens."""
+    return (max(0,int(usage.get("prompt_tokens",0)))*0.40 + max(0,int(usage.get("completion_tokens",0)))*1.60)/1000000
 
 
 def evaluate(jd,title,company=""):
@@ -91,9 +97,13 @@ def evaluate(jd,title,company=""):
     missing=sum(r["match"]=="unproven" for r in mandatory)
     # A high LLM score cannot hide mandatory gaps.
     if mandatory and missing:score=min(score, max(0,100-25*missing))
+    points={"direct":1.0,"transferable":0.5,"unproven":0.0}
+    total=sum(3 if r["mandatory"] else 1 for r in supported)
+    supported_score=round(100*sum((3 if r["mandatory"] else 1)*points[r["match"]] for r in supported)/total)
+    score=min(score,supported_score+10)
     return {"score":score,"requirements":supported,
             "reasoning":str(answer.get("reasoning") or "")[:1000],
-            "source":"ai_resume_matcher_evidence_v1"}
+            "usage":answer.get("_usage",{}),"source":"ai_resume_matcher_evidence_v1"}
 
 
 def tailored_plan(jd,title,company=""):
@@ -125,4 +135,5 @@ def tailored_plan(jd,title,company=""):
     if summary and not forbidden and not numbers:
         plan["summary"]=summary
     plan["cv_mode"]="ai_resume_matcher_evidence_v1"
+    plan["ai_usage"]=answer.get("_usage",{})
     return plan

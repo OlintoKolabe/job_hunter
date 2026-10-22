@@ -59,12 +59,12 @@ class AIResumeMatcherTests(unittest.TestCase):
         ai={"score":68,"requirements":[{"name":"product roadmaps","mandatory":True,
              "match":"direct","evidence_ids":["1:0"]}],
              "reasoning":"Documented roadmaps","usage":{"prompt_tokens":100,"completion_tokens":80}}
-        with patch.dict(os.environ,{"JH_AI_ENABLED":"1","OPENAI_API_KEY":"test-only","DATABASE_URL":"fake"}), \\
-             patch("jd_enrichment.get_cached",return_value=None), \\
-             patch("jd_enrichment.evaluate_ai",return_value=ai) as called, \\
-             patch("jd_enrichment.reserve",return_value=9), \\
-             patch("jd_enrichment.settle") as settled, \\
-             patch("jd_enrichment.save") as saved, \\
+        with patch.dict(os.environ,{"JH_AI_ENABLED":"1","OPENAI_API_KEY":"test-only","DATABASE_URL":"fake"}), \
+             patch("jd_enrichment.get_cached",return_value=None), \
+             patch("jd_enrichment.evaluate_ai",return_value=ai) as called, \
+             patch("jd_enrichment.reserve",return_value=9), \
+             patch("jd_enrichment.settle") as settled, \
+             patch("jd_enrichment.save") as saved, \
              patch("jd_enrichment.psycopg.connect") as conn:
             result,_=hydrate_jobs(cursor,[{"url":url,"title":"Senior Product Manager",
                                            "description":JD}],"Product Manager",lambda x:x)
@@ -86,10 +86,10 @@ class AIResumeMatcherTests(unittest.TestCase):
         result={"selected_fact_ids":["1:0","1:1","1:2","4:1","4:2"],
                 "summary":"Experiência comprovada em produtos, roadmaps e gestão de equipes."}
         async def run():
-            with patch.dict(os.environ,{"JH_AI_ENABLED":"1","OPENAI_API_KEY":"test-only"}), \\
-                 patch("app.require_auth"), patch("app._cv_source",return_value=("example.com/job/1",JD)), \\
-                 patch("score_repository.reserve",return_value=23), \\
-                 patch("score_repository.settle"),patch("app.psycopg.connect"), \\
+            with patch.dict(os.environ,{"JH_AI_ENABLED":"1","OPENAI_API_KEY":"test-only"}), \
+                 patch("app.require_auth"), patch("app._cv_source",return_value=("example.com/job/1",JD)), \
+                 patch("score_repository.reserve",return_value=23), \
+                 patch("score_repository.settle"),patch("app.psycopg.connect"), \
                  patch("ai_resume_matcher._ask",return_value=result):
                 response=await service.ai_resume_download(RequestStub())
                 document=b"".join([part async for part in response.body_iterator])

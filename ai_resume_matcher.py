@@ -225,3 +225,58 @@ def to_ranking(job, roles, analysis):
                  "coverage_pct":100,"ai_evidence_source":"resume_matcher_methodology",
                  "ai_usage":analysis.get("usage",{})})
     return base
+def shortlist_jobs(jobs, roles, limit=40):
+    """Zero-token, high-recall ordering before the existing AI fit evaluator.
+
+    This is only a candidate queue; it never manufactures a fit score. Reuse
+    the existing bilingual job-family aliases and the existing AI evaluator.
+    """
+    import re
+    from search_filters import fold, search_terms, requested_families, ROLE_FAMILIES
+    limit = max(1, min(50, int(limit)))
+    terms = search_terms(roles)
+    families = requested_families(terms) or set(ROLE_FAMILIES)
+    clues = {
+        'product': ('backlog', 'roadmap', 'product discovery', 'product strategy', 'produto', 'stakeholder', 'agile'),
+        'projects': ('project management', 'gestao de projetos', 'delivery', 'pmo', 'cronograma', 'budget'),
+        'marketing': ('marketing', 'branding', 'go-to-market', 'campaign', 'campanha', 'crm'),
+        'growth': ('growth', 'conversion', 'conversao', 'experimentation', 'acquisition', 'retention'),
+        'business': ('business analysis', 'analise de negocios', 'requirements', 'requisitos', 'processos'),
+    }
+    def priority(job):
+        title = fold(job.get('title'))
+        jd = fold(str(job.get('description') or '')[:7000])
+        matched = [family for family in families if any(
+            re.search(r'(?<![a-z])' + re.escape(alias) + r'(?![a-z])', title)
+            for alias in ROLE_FAMILIES[family])]
+        strength = (80 if matched else 0) + min(20, sum(4 for term in terms if len(term) > 3 and term in title))
+        strength += min(16, sum(2 for family in (matched or families) for token in clues[family] if token in jd))
+        if len(jd) >= 300:
+            strength += 12
+        return strength
+    unique = {}
+    for job in jobs:
+        if not isinstance(job, dict) or not isinstance(job.get('url'), str) or not job['url'].startswith('https://'):
+            continue
+        if job.get('needs_verification'):
+            continue
+        # Persisted scores are already ranked in the UI; do not waste a
+        # shortlisting slot on a job that requires no new paid evaluation.
+        if isinstance(job.get('ranking'), dict) and job['ranking'].get('score') is not None:
+            continue
+        unique.setdefault(job['url'], job)
+    ranked = sorted(unique.values(), key=lambda j: (-priority(j), j['url']))
+    selected, used = [], set()
+    for family in sorted(families):
+        candidate = next((j for j in ranked if j['url'] not in used and any(
+            alias in fold(j.get('title')) for alias in ROLE_FAMILIES[family])), None)
+        if candidate:
+            selected.append(candidate['url'])
+            used.add(candidate['url'])
+    for job in ranked:
+        if len(selected) >= limit:
+            break
+        if job['url'] not in used:
+            selected.append(job['url'])
+            used.add(job['url'])
+    return selected[:limit]

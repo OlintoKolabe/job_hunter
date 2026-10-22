@@ -123,7 +123,9 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{}}){
      const data=await response.json().catch(()=>null);
      if(!response.ok)throw Error(data?.detail||'Falha ao preparar a vaga para ChatGPT');
      if(!data?.chat_url)throw Error('Integração GPT não configurada');
-     setMessage('Abrindo o ChatGPT para gerar o currículo da vaga escolhida. O DOCX será produzido após a seleção e validação das evidências.');
+     const instruction='Use a Action de currículo para consultar esta vaga, selecione somente IDs de evidências comprovadas e gere o DOCX. URL: '+data.url+'; cargo: '+data.title+'; empresa: '+data.company+'.';
+     if(navigator.clipboard?.writeText){await navigator.clipboard.writeText(instruction)}
+     setMessage('Instrução da vaga copiada. Cole-a no GPT que será aberto; o DOCX só será gerado após validação das evidências.');
      window.open(data.chat_url,'_blank','noopener,noreferrer');
    }catch(error){setError(error.message)}finally{setCvNow(prev=>prev.filter(x=>x!==job.url))}
  }

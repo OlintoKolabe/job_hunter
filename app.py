@@ -764,16 +764,20 @@ def _cv_source(url):
     return key,row[0]
 
 
+class ResumeAIRequest(BaseModel):
+    url: str
+    title: str
+    company: str = ""
+
 @app.post("/api/resume/ai-download")
-async def ai_resume_download(request: Request):
+def ai_resume_download(payload: ResumeAIRequest, request: Request):
     """One-click AI resume download; never silently use the deterministic old CV."""
     require_auth(request)
     from ai_resume_matcher import AIUnavailable, tailored_plan, estimate_cost
     from score_repository import reserve, settle
-    body=await request.json()
-    url=str(body.get("url") or "")[:2000]
-    title=str(body.get("title") or "")[:120]
-    company=str(body.get("company") or "")[:100]
+    url=payload.url[:2000]
+    title=payload.title[:120]
+    company=payload.company[:100]
     if not url.startswith("https://") or not title:
         raise HTTPException(400,"Vaga inválida")
     try:

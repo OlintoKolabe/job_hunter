@@ -151,7 +151,10 @@ def hydrate_jobs(cursor,jobs,roles,url_key,limit=PER_BATCH_LIMIT):
                         successful=True
                     except Exception as exc:
                         ai_status='failed'
-                        print('JH_AI_MATCHER_FAILURE',type(exc).__name__,flush=True)
+                        # Surface only the exception class and a bounded diagnostic;
+                        # never log the JD, evidence catalog, key, or model output.
+                        diagnostic=str(exc)[:100] if isinstance(exc,ValueError) else ''
+                        print('JH_AI_MATCHER_FAILURE',type(exc).__name__,repr(diagnostic),flush=True)
                         evaluation.update({'score':None,'fit':None,'confidence':'ai_error',
                            'reason':'Análise por IA não concluída; nenhuma nota substituta foi inventada'})
                         model='ai_error'

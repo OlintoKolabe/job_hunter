@@ -1,21 +1,22 @@
 {
-  "id": "JOB-HUNTER-RESUME-MATCHER-AI-SINGLE-ENGINE",
+  "id": "JOB-HUNTER-JD-COLLECTOR-CACHE-PRESERVATION",
+  "kind": "bugfix",
   "status": "active",
   "base_ref": "97868f582d76869a0fda782c62061ad3f72e486b",
   "production_ref": "feat/phase1-web-foundation",
   "feature_ref": "feat/resume-matcher-ai-evaluation-cv",
-  "objective": "Replace failed vacancy scoring and CV selection with a single evidence-grounded OpenAI-backed engine inspired by Resume Matcher; preserve search, decisions, database and DOCX renderer.",
-  "allowed_files": [
-    "scope/active.json",
+  "objective": "Preserve valid JDs already supplied by job collectors before filtering strips them, persist them in the existing JD cache and report per-source availability without changing ranking or CV generation.",
+  "allowed_paths": [
     "app.py",
     "src/Opportunities.jsx",
-    "ai_resume_matcher.py",
     "jd_enrichment.py",
-    "score_repository.py",
-    "Dockerfile",
-    "tests/test_ai_resume_matcher.py",
-    "tests/test_opportunity_ui_contracts.py",
-    "tests/test_block4_1.py"
+    "tests/test_ai_resume_matcher.py"
+  ],
+  "allowed_changes": [
+    "Cache full collector JDs for eligible or review jobs before their public payloads are reduced by the existing filters",
+    "Reject obviously invalid collector descriptions and preserve longer cached versions",
+    "Expose per-source collector JD availability through existing search and catalog API responses and existing UI diagnostics",
+    "Add directly related regression tests without new dependencies or schema changes"
   ],
   "forbidden_paths": [
     ".github/workflows/",
@@ -28,6 +29,9 @@
   ],
   "forbidden_changes": [
     "automatic CV generation absent user click",
+    "ranking, local or AI scoring engines, model providers and score thresholds",
+    "CV generation, templates, profile facts and résumé scoring",
+    "search eligibility, filter criteria or candidate decisions",
     "new database tables or schedulers",
     "multiple CV generators",
     "hardcoded API key or leakage",
@@ -35,14 +39,12 @@
     "changes to job search/filter/decision behavior"
   ],
   "acceptance": [
-    "AI-based professional-fit 0-100 grounded in validated facts and mandatory JD requirements",
-    "Separate professional fit from ATS formatting",
-    "Only one-click CV AI after user requests it",
-    "Reuse existing DOCX renderer and audit bullet factual provenance",
-    "Never silently use deterministic CV when AI fails or is disabled",
-    "Limit monthly API spending with existing reservation mechanism",
-    "No new DB, schedulers or duplicate pipelines",
-    "Pass unit/build/integration tests and inspect branch diff before live deployment"
+    "Valid collector JDs are stored before the existing filter strips descriptions",
+    "Invalid or blocked-page descriptions are not cached",
+    "No new database tables, paid AI calls, schedulers, source collectors or generators",
+    "JD availability counts appear in the existing source diagnostics",
+    "Existing search, ranking, CV and decision flows are unchanged",
+    "Pass regression, UI/build and canary integration checks before production deployment"
   ],
-  "deployment": "Experimental branch only until documented gated tests and live AI+DOCX verification; main requires separate explicit permission."
+  "deployment": "Scope contract update must be committed separately from implementation for the immutable-contract gate check; canary validation before production, main requires explicit permission."
 }

@@ -753,14 +753,7 @@ def logout(response: Response):
     response.delete_cookie(COOKIE)
     return {"ok":True}
 
-# GPT Actions CV bridge: no OpenAI API calls and no application credentials exposed.
-# Requires independently provisioned CV_ACTION_TOKEN via Render secret settings.
-def _cv_action_auth(request: Request):
-    token=os.environ.get("CV_ACTION_TOKEN","")
-    candidate=request.headers.get("authorization","")
-    if not token or not secrets.compare_digest(candidate,"Bearer "+token):
-        raise HTTPException(401,"GPT Action não autorizada")
-
+# Shared cached vacancy lookup for private MCP tools and the signed DOCX download.
 def _cv_source(url):
     key=url_key(url)
     if not key or len(key)>500:raise HTTPException(400,"URL da vaga inválida")
@@ -771,43 +764,6 @@ def _cv_source(url):
     if not row or not row[0]:raise HTTPException(404,"Descrição da vaga ausente no cache")
     return key,row[0]
 
-@app.get("/api/gpt-action/context")
-def gpt_cv_context(url: str,request:Request,title:str=""):
-    _cv_action_auth(request)
-    from resume_engine import EXPERIENCE,EDUCATION
-    key,jd=_cv_source(url)
-    return {"url":key,"title":title[:120],"jd":jd[:24000],
-            "facts":[{"id":f"{i}:{j}","company":e["company"],"role":e["role"],
-                      "fact":fact} for i,e in enumerate(EXPERIENCE) for j,fact in enumerate(e["facts"])],
-            "education":[x for x in EDUCATION if "odontolog" not in x.casefold()],
-            "instructions":"Select only factual evidence IDs. Do not write new credentials, dates, companies or claims."}
-
-class GPTCVSelection(BaseModel):
-    url:str
-    title:str=""
-    company:str=""
-    fact_ids:list[str]
-
-@app.post("/api/gpt-action/cv")
-def gpt_cv_select(payload:GPTCVSelection,request:Request):
-    _cv_action_auth(request)
-    from resume_engine import EXPERIENCE
-    key,jd=_cv_source(payload.url)
-    if not 1<=len(payload.fact_ids)<=24 or len(set(payload.fact_ids))!=len(payload.fact_ids):
-        raise HTTPException(400,"Seleção inválida ou repetida")
-    allowed={f"{i}:{j}" for i,e in enumerate(EXPERIENCE) for j,_ in enumerate(e["facts"])}
-    if any(x not in allowed for x in payload.fact_ids):
-        raise HTTPException(400,"Evidência não verificada")
-    if not serializer:raise HTTPException(503,"Assinatura de sessão indisponível")
-    title=payload.title.strip()[:120]
-    company=payload.company.strip()[:100]
-    packed={"url":key,"title":title,"company":company,"ids":payload.fact_ids,
-            "jd_hash":hashlib.sha256(jd.encode()).hexdigest()}
-    ticket=serializer.dumps(packed,salt="cv-action-download-v1")
-    base=str(request.base_url).rstrip("/")
-    return {"download_url":base+"/api/gpt-action/download?ticket="+urllib.parse.quote(ticket),
-            "expires_in_seconds":900,"selected_facts":len(payload.fact_ids),
-            "message":"Currículo pronto para download, usando somente evidências confirmadas."}
 
 @app.get("/api/gpt-action/download")
 def gpt_cv_download(ticket:str):

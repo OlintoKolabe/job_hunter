@@ -241,8 +241,8 @@ def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:
     allowed_sources={"all","inhire","quickin","gupy","greenhouse","ashby","lever","bamboohr","dynamite","linkedin_guest","jobgether","workable","himalayas","remotive","remoteok","indeed"}
     if source not in allowed_sources:raise HTTPException(400,"Fonte não reconhecida")
     if source=="indeed":
-        if not indeed_enabled():raise HTTPException(503,"Indeed não configurado no Render")
-        queries=discovery_queries(roles,limit=4)[:4]
+        if not indeed_enabled():raise HTTPException(503,"Indeed indisponível")
+        queries=discovery_queries(roles,limit=2)[:2]
         if not queries:queries=["product manager"]
         items=[]
         try:
@@ -397,7 +397,7 @@ def catalog(request: Request):
              "checked_at":h[3].isoformat() if h else None,**timing})
     return {"total":len(tasks),"due":due,"by_source":dict(Counter(s for s,_ in tasks)),
             "sources":sources,"mcp_status":{
-              "Scrapling":("Biblioteca local instalada; fallback JS habilitado" if os.environ.get("JH_SCRAPLING_JS")=="1" else "Biblioteca local instalada; fallback JS protegido por configuração"),"Indeed":("HasData configurado no Render — fonte disponível sob demanda" if indeed_enabled() else "Aguardando HASDATA_API_KEY no Render; MCP do ChatGPT não é acessível ao backend"),
+              "Scrapling":("Biblioteca local instalada; fallback JS habilitado" if os.environ.get("JH_SCRAPLING_JS")=="1" else "Biblioteca local instalada; fallback JS protegido por configuração"),"Indeed":"JobSpy no Render — consulta sob demanda (sem credencial)",
               "Nimble":"exige acesso autenticado e quota","Firecrawl":"exige chave e quota no Render"}}
 
 @app.get("/api/catalog/checks")

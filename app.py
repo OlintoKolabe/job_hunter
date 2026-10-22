@@ -780,6 +780,7 @@ def ai_resume_download(payload: ResumeAIRequest, request: Request):
     company=payload.company[:100]
     if not url.startswith("https://") or not title:
         raise HTTPException(400,"Vaga inválida")
+    print("JH_CV_STAGE stage=lookup",flush=True)
     try:
         _,jd=_cv_source(url)
     except HTTPException as error:
@@ -787,7 +788,9 @@ def ai_resume_download(payload: ResumeAIRequest, request: Request):
         # Public vacancy extraction, not contingent on prior scoring.
         from jd_retrieval import extract_public_jd
         jd=extract_public_jd(url) or ""
+    print(f"JH_CV_STAGE stage=jd_ready length={len(jd)}",flush=True)
     if len(jd.strip())<100:
+        print("JH_CV_REJECT code=jd_unavailable",flush=True)
         raise HTTPException(422,"Descrição integral indisponível; não é seguro gerar currículo desta vaga")
     if os.getenv("JH_AI_ENABLED")!="1" or not os.getenv("OPENAI_API_KEY"):
         raise HTTPException(503,"Geração por IA indisponível; configure OPENAI_API_KEY e JH_AI_ENABLED=1")
@@ -795,22 +798,30 @@ def ai_resume_download(payload: ResumeAIRequest, request: Request):
         with conn.cursor() as cur:
             usage_id=reserve(cur,"resume:"+url_key(url),amount=0.015)
     if usage_id is None:
+        print("JH_CV_REJECT code=budget_exhausted",flush=True)
         raise HTTPException(429,"Limite mensal de custo da IA atingido")
     cost=0.015
     success=False
     try:
+        print("JH_CV_STAGE stage=ai_selection",flush=True)
         plan=tailored_plan(jd,title,company)
+        print(f"JH_CV_STAGE stage=ai_selected tokens={plan.get('ai_usage',{}).get('total_tokens',0)}",flush=True)
         cost=estimate_cost(plan.get("ai_usage",{}))
         plan["cv_build"]=os.getenv("RENDER_GIT_COMMIT","local")[:12]
         document=render_docx(plan)
+        print(f"JH_CV_STAGE stage=docx_rendered bytes={len(document)}",flush=True)
         audit(plan,document)
+        print("JH_CV_STAGE stage=factual_audit_passed",flush=True)
         quality=evaluate_rendered_resume(plan,document,jd)
         if not quality["factual_ok"]:
+            print("JH_CV_REJECT code=quality_factual",flush=True)
             raise HTTPException(422,"Auditoria de fatos do currículo reprovada")
         success=True
+        print("JH_CV_SUCCESS",flush=True)
     except AIUnavailable as exc:
         raise HTTPException(503,str(exc)) from exc
     except (ValueError,AssertionError) as exc:
+        print(f"JH_CV_REJECT code=validation type={type(exc).__name__}",flush=True)
         raise HTTPException(422,"IA não produziu currículo factual auditável") from exc
     except urllib.error.HTTPError as exc:
         raise HTTPException(502,"Provedor de IA indisponível") from exc

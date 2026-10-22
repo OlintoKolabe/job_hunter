@@ -109,4 +109,38 @@ class AIResumeMatcherTests(unittest.TestCase):
         self.assertIn("AI=ai_resume_matcher_evidence_v1",
                       Document(io.BytesIO(document)).core_properties.keywords)
 
+    def test_failed_cv_without_provider_response_releases_full_reservation(self):
+        from unittest.mock import Mock
+        import app as service
+        with patch.dict(os.environ,{"JH_AI_ENABLED":"1","OPENAI_API_KEY":"test-only"}), \
+             patch("app.require_auth"), patch("app._cv_source",return_value=("example.com/job/1",JD)), \
+             patch("score_repository.reserve",return_value=24), \
+             patch("score_repository.settle") as settled, \
+             patch("app.psycopg.connect"), \
+             patch("ai_resume_matcher._ask",side_effect=ValueError("invalid response")):
+            with self.assertRaises(service.HTTPException) as raised:
+                service.ai_resume_download(service.ResumeAIRequest(
+                    url="https://example.com/job/1",title="Senior Product Manager"),Mock())
+        self.assertEqual(raised.exception.status_code,422)
+        settled.assert_called_once_with(unittest.mock.ANY,24,0.0,False)
+
+    def test_failed_cv_after_provider_response_charges_only_actual_tokens(self):
+        from unittest.mock import Mock
+        import app as service
+        from ai_resume_matcher import _last_billable_usage, estimate_cost
+        usage={"prompt_tokens":4000,"completion_tokens":800}
+        def incomplete_response(*_args):
+            _last_billable_usage.set(usage)
+            return {"selected_fact_ids":["999:9"]}
+        with patch.dict(os.environ,{"JH_AI_ENABLED":"1","OPENAI_API_KEY":"test-only"}), \
+             patch("app.require_auth"), patch("app._cv_source",return_value=("example.com/job/1",JD)), \
+             patch("score_repository.reserve",return_value=25), \
+             patch("score_repository.settle") as settled, \
+             patch("app.psycopg.connect"), \
+             patch("ai_resume_matcher._ask",side_effect=incomplete_response):
+            with self.assertRaises(service.HTTPException):
+                service.ai_resume_download(service.ResumeAIRequest(
+                    url="https://example.com/job/1",title="Senior Product Manager"),Mock())
+        settled.assert_called_once_with(unittest.mock.ANY,25,estimate_cost(usage),False)
+
 if __name__=="__main__":unittest.main()

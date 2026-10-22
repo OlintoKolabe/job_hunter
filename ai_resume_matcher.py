@@ -11,12 +11,23 @@ import re
 import unicodedata
 import urllib.request
 import urllib.error
+from contextvars import ContextVar
 
 from resume_engine import EXPERIENCE, relevant_jd_text
 
 MODEL_DEFAULT = "gpt-4.1-mini"
 MAX_JD_CHARS = 16000
 MAX_FACTS = 24
+_last_billable_usage = ContextVar("jh_last_billable_usage", default=None)
+
+
+def reset_billable_usage():
+    _last_billable_usage.set(None)
+
+
+def billable_usage():
+    """Token usage of the latest completed provider response in this request."""
+    return _last_billable_usage.get() or {}
 
 
 class AIUnavailable(Exception):
@@ -76,6 +87,7 @@ def _ask(task, jd, title, company=""):
         print(f"JH_OPENAI_TRANSPORT_ERROR task={task} type={type(exc).__name__}",flush=True)
         raise
     usage=answer.get("usage") or {}
+    _last_billable_usage.set(usage)
     print(f"JH_OPENAI_RESPONSE task={task} prompt_tokens={usage.get('prompt_tokens',0)} completion_tokens={usage.get('completion_tokens',0)}",flush=True)
     output=json.loads(answer["choices"][0]["message"]["content"])
     if not isinstance(output,dict):

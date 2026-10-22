@@ -14,6 +14,17 @@ JD=("Senior Product Manager required to lead discovery, product roadmaps, stakeh
     "Preferred: programming in Python and extensive Power BI dashboards.")
 
 class AIResumeMatcherTests(unittest.TestCase):
+    def test_numeric_json_scores_are_normalized_without_inflation(self):
+        base={'reasoning':'Relevant experience',
+              'requirements':[{'name':'product roadmaps','mandatory':True,
+                               'match':'direct','evidence_ids':['1:0']}]}
+        for value,expected in [(75.4,75),('75',75),('75,4%',75),('75/100',75)]:
+            with self.subTest(value=value),patch('ai_resume_matcher._ask',return_value={**base,'score':value}):
+                self.assertEqual(evaluate(JD,'Product Manager')['score'],expected)
+        for invalid in (None,True,-1,101,'very good','999/100'):
+            with self.subTest(invalid=invalid),patch('ai_resume_matcher._ask',return_value={**base,'score':invalid}):
+                with self.assertRaises(ValueError):evaluate(JD,'Product Manager')
+
     def test_no_key_no_paid_call(self):
         with patch.dict(os.environ,{"JH_AI_ENABLED":"0","OPENAI_API_KEY":""}):
             with self.assertRaises(AIUnavailable):
@@ -203,6 +214,28 @@ class ShortlistTests(unittest.TestCase):
         self.assertEqual(shortlist_jobs(rows, 'Product Manager'), ['https://b.com/b'])
 
 class ShortlistedJDTests(unittest.TestCase):
+    def test_failed_ai_validation_charges_only_actual_token_usage(self):
+        from jd_enrichment import hydrate_jobs
+        from ai_resume_matcher import _last_billable_usage, estimate_cost
+        from unittest.mock import Mock
+        usage={'prompt_tokens':4600,'completion_tokens':700}
+        def invalid_ai(*args):
+            _last_billable_usage.set(usage)
+            raise ValueError('IA não apresentou requisitos auditáveis')
+        cursor=Mock()
+        cursor.fetchall.return_value=[]
+        job={'url':'https://example.org/job','title':'Product Manager',
+             'description':JD}
+        with patch.dict(os.environ,{'JH_AI_ENABLED':'1','OPENAI_API_KEY':'test','DATABASE_URL':'test'}), \
+             patch('jd_enrichment.get_cached',return_value=None), \
+             patch('jd_enrichment.evaluate_ai',side_effect=invalid_ai), \
+             patch('jd_enrichment.reserve',return_value=9), \
+             patch('jd_enrichment.settle') as settle, \
+             patch('jd_enrichment.psycopg.connect'):
+            result,_=hydrate_jobs(cursor,[job],'Product Manager',lambda url:url)
+        self.assertIsNone(result[0]['ranking']['score'])
+        settle.assert_called_once_with(unittest.mock.ANY,9,estimate_cost(usage),False)
+
     def test_indeed_ranking_reuses_existing_exact_jobspy_jd(self):
         from jd_enrichment import fallback_public_jd
         job={'url':'https://br.indeed.com/viewjob?jk=ed26935acd1ff08e',

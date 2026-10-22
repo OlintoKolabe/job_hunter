@@ -29,7 +29,6 @@ from catalog_engine import source_tasks,scan
 from catalog_bootstrap import maybe_start
 from jd_enrichment import hydrate_jobs
 from resume_engine import build_plan, render_docx, audit, evaluate_rendered_resume
-from resume_hybrid import apply_hybrid, traceable_relevance
 
 app = FastAPI(docs_url=None, redoc_url=None)
 DIST = Path(__file__).resolve().parent / "dist"
@@ -38,6 +37,62 @@ SECRET = os.environ.get("APP_SECRET", "")
 PASSWORD = os.environ.get("APP_PASSWORD", "")
 DATABASE = os.environ.get("DATABASE_URL", "")
 serializer = URLSafeTimedSerializer(SECRET) if SECRET else None
+
+from contextlib import asynccontextmanager
+from mcp.server.fastmcp import FastMCP
+
+cv_mcp=FastMCP("Cacador de Vagas CV", stateless_http=True, streamable_http_path="/")
+
+@cv_mcp.tool()
+def fetch_cv_job(url:str,title:str="")->dict:
+    """Read a selected vacancy JD and the verified evidence IDs."""
+    from resume_engine import EXPERIENCE,EDUCATION
+    key,jd=_cv_source(url)
+    return {"url":key,"title":title,"jd":jd[:24000],
+            "evidence":[{"id":f"{i}:{j}","company":e["company"],"role":e["role"],"fact":fact}
+                for i,e in enumerate(EXPERIENCE) for j,fact in enumerate(e["facts"])],
+            "education":EDUCATION}
+
+@cv_mcp.tool()
+def prepare_verified_cv(url:str, fact_ids:list[str], title:str="",company:str="")->dict:
+    """Create a signed 15-minute DOCX download ticket from existing verified evidence IDs only."""
+    from resume_engine import EXPERIENCE
+    key,jd=_cv_source(url)
+    allowed={f"{i}:{j}" for i,e in enumerate(EXPERIENCE) for j,_ in enumerate(e["facts"])}
+    if not 1<=len(fact_ids)<=24 or len(set(fact_ids))!=len(fact_ids) or not set(fact_ids)<=allowed:
+        raise ValueError("Invalid evidence selection")
+    if not serializer:raise ValueError("Signing unavailable")
+    packed={"url":key,"title":title[:120],"company":company[:100],"ids":fact_ids,
+            "jd_hash":hashlib.sha256(jd.encode()).hexdigest()}
+    ticket=serializer.dumps(packed,salt="cv-action-download-v1")
+    return {"download_url":"https://olinto-job-hunter.onrender.com/api/gpt-action/download?ticket="+urllib.parse.quote(ticket),
+            "expires_in_seconds":900}
+
+@asynccontextmanager
+async def cv_lifespan(app):
+    maybe_start(DATABASE)
+    async with cv_mcp.session_manager.run():
+        yield
+
+app.router.lifespan_context=cv_lifespan
+# The MCP mount is deliberately authenticated at the ASGI boundary.
+# The GPT/ChatGPT client must supply CV_ACTION_TOKEN in its bearer-header connection.
+class _CVAuthorizedMCP:
+    def __init__(self, inner):
+        self.inner=inner
+    async def __call__(self, scope, receive, send):
+        if scope["type"]=="http":
+            headers=dict(scope.get("headers",[]))
+            token=os.environ.get("CV_ACTION_TOKEN","")
+            provided=headers.get(b"authorization",b"").decode("latin1")
+            if not token or not secrets.compare_digest(provided,"Bearer "+token):
+                response=JSONResponse({"detail":"Unauthorized"},status_code=401,
+                    headers={"WWW-Authenticate":"Bearer","Cache-Control":"no-store"})
+                await response(scope,receive,send)
+                return
+        await self.inner(scope,receive,send)
+
+app.mount("/cv-mcp",_CVAuthorizedMCP(cv_mcp.streamable_http_app()))
 
 @app.on_event("startup")
 def bootstrap_catalog_if_requested():
@@ -697,75 +752,55 @@ def logout(response: Response):
     response.delete_cookie(COOKIE)
     return {"ok":True}
 
-class ResumeGenerate(BaseModel):
-    url: str
-    title: str = ''
-    company: str = ''
-
-@app.post("/api/resume/generate")
-def generate_resume(payload: ResumeGenerate, request: Request):
-    """User-triggered CV generation from a persisted JD only.
-    Optional bounded AI uses the existing cache and spend reservation; DOCX
-    contents themselves are never written to the application database.
-    """
-    require_auth(request)
-    key=url_key(payload.url)
-    if not key or len(key)>500:
-        raise HTTPException(400,"URL da vaga inválida")
+# Shared cached vacancy lookup for private MCP tools and the signed DOCX download.
+def _cv_source(url):
+    key=url_key(url)
+    if not key or len(key)>500:raise HTTPException(400,"URL da vaga inválida")
     with psycopg.connect(DATABASE,connect_timeout=8) as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT description FROM jh_jd_cache WHERE normalized_url=%s",(key,))
             row=cur.fetchone()
-    if not row or not row[0]:
-        raise HTTPException(404,"Descrição da vaga não está armazenada; avalie a vaga primeiro.")
-    # Use the real role supplied by the vacancy card; URL slugs can be opaque IDs.
-    title=(payload.title or "").strip() or key.rstrip("/").split("/")[-1].replace("-"," ").title()
-    plan=build_plan(row[0],title)
-    baseline_plan=plan
-    # Serialize identical requests before looking up cache or reserving AI spend.
-    # Scoped to this transaction; no new tables or schema changes needed.
-    with psycopg.connect(DATABASE,connect_timeout=8) as cv_conn:
-        with cv_conn.cursor() as cv_cur:
-            cv_cur.execute("SELECT pg_advisory_xact_lock(hashtext(%s))",
-                           ("cv:"+key+":"+plan["jd_sha256"],))
-            plan,cv_usage=apply_hybrid(cv_cur,key,row[0],plan)
-    # Bind metadata to the response actually used, including cached fallback.
-    plan["cv_mode"]=cv_usage["mode"]
+    if not row or not row[0]:raise HTTPException(404,"Descrição da vaga ausente no cache")
+    return key,row[0]
+
+
+@app.get("/api/gpt-action/download")
+def gpt_cv_download(ticket:str):
+    from resume_engine import EXPERIENCE
+    if not serializer:raise HTTPException(503,"Assinatura indisponível")
+    try:payload=serializer.loads(ticket,salt="cv-action-download-v1",max_age=900)
+    except (BadSignature,SignatureExpired):raise HTTPException(401,"Link expirado ou inválido")
+    key,jd=_cv_source(payload.get("url",""))
+    if hashlib.sha256(jd.encode()).hexdigest()!=payload.get("jd_hash"):
+        raise HTTPException(409,"Descrição da vaga alterada")
+    ids=payload.get("ids",[])
+    if not isinstance(ids,list) or not 1<=len(ids)<=24 or len(ids)!=len(set(ids)):
+        raise HTTPException(400,"Seleção inválida")
+    allowed={f"{i}:{j}":(i,f) for i,e in enumerate(EXPERIENCE) for j,f in enumerate(e["facts"])}
+    if any(x not in allowed for x in ids):raise HTTPException(400,"Evidência desconhecida")
+    plan=build_plan(jd,payload.get("title","") or "Vaga selecionada")
+    selected={}
+    for id_ in ids:
+        i,f=allowed[id_]
+        selected.setdefault(i,[]).append(f)
+    plan["experience"]=[{"role":EXPERIENCE[i]["role"],"company":EXPERIENCE[i]["company"],
+                         "dates":EXPERIENCE[i]["dates"],"facts":facts,"source_index":i}
+                        for i,facts in sorted(selected.items())]
+    plan["additional_experience"]=[{"role":row["role"],"company":row["company"],
+                                    "dates":row["dates"],"source_index":i}
+                                   for i,row in enumerate(EXPERIENCE) if i not in selected]
+    plan["cv_mode"]="gpt_action_verified_facts"
     plan["cv_build"]=os.getenv("RENDER_GIT_COMMIT","local")[:12]
     data=render_docx(plan)
-    report=audit(plan,data)
-    quality=evaluate_rendered_resume(plan,data,row[0])
-    # Evaluate the actual reopened DOCX, not only the model's proposal.
-    # Deterministic recovery prevents a personalized document from regressing
-    # behind the current proven baseline on technical quality dimensions.
-    if cv_usage["mode"] in ("hybrid","cached_hybrid"):
-        baseline_data=render_docx(baseline_plan)
-        baseline_quality=evaluate_rendered_resume(baseline_plan,baseline_data,row[0])
-        proposed_evidence=traceable_relevance(plan,row[0],plan["experience"])
-        baseline_evidence=traceable_relevance(baseline_plan,row[0],baseline_plan["experience"])
-        if (not quality["factual_ok"] or
-            quality["technical_score"] < baseline_quality["technical_score"] or
-            proposed_evidence["supported_count"] < baseline_evidence["supported_count"]):
-            cv_usage["mode"]="quality_fallback"
-            plan={**baseline_plan,"cv_mode":"quality_fallback",
-                  "cv_build":plan["cv_build"]}
-            data=render_docx(plan)
-            report=audit(plan,data)
-            quality=evaluate_rendered_resume(plan,data,row[0])
+    audit(plan,data)
+    quality=evaluate_rendered_resume(plan,data,jd)
+    if not quality["factual_ok"]:raise HTTPException(422,"Falha na auditoria factual")
+    safe=lambda v:re.sub(r"[^\\wÀ-ÿ -]","",v).strip()[:75]
+    filename="Olinto Manso Pereira - "+safe(payload.get("title","Vaga"))+" - "+safe(payload.get("company","Empresa"))+".docx"
     from urllib.parse import quote
-    import re as _re
-    company=payload.company or key.split("/")[0].split(".")[0].replace("-"," ").title()
-    role=payload.title or title
-    def safe_name(value):
-        return _re.sub(r"[^\\wÀ-ÿ -]","",value,flags=_re.UNICODE).strip()[:90]
-    filename="Olinto Manso Pereira - "+safe_name(role)+" - "+safe_name(company)+".docx"
-    encoded_filename=quote(filename)
-    headers={"X-Resume-Engine":report["engine"],"X-Document-SHA256":report["document_sha256"],
-             "X-JD-SHA256":report["jd_sha256"],"X-AI-Calls":str(cv_usage["ai_calls"]),"X-AI-Cost-USD":str(cv_usage["cost_usd"]),"X-CV-Mode":cv_usage["mode"],"X-CV-Build":plan["cv_build"],"X-CV-Provenance":"job-hunter-cv-provenance-v1",
-             "X-CV-Structural-Score":str(quality["technical_score"])}
-    return StreamingResponse(io.BytesIO(data),
-        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        headers={**headers,"Content-Disposition":f"attachment; filename*=UTF-8''{encoded_filename}"})
+    return StreamingResponse(io.BytesIO(data),media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      headers={"Content-Disposition":f"attachment; filename*=UTF-8''{quote(filename)}",
+               "Cache-Control":"no-store","X-CV-Mode":"gpt_action_verified_facts"})
 
 @app.get("/api/status")
 def status(request: Request):

@@ -12,6 +12,16 @@ class OpportunityUIContracts(unittest.TestCase):
         self.assertEqual(s.count("onClick={()=>markDecision(v,'Candidatado')}"),0)
         self.assertEqual(s.count("onClick={()=>markDecision(v,'Descartado')}"),0)
 
+    def test_cv_is_existing_button_only_and_routes_to_chatgpt_plugin(self):
+        s=Path("src/Opportunities.jsx").read_text()
+        self.assertEqual(s.count("'Gerar currículo ATS (DOCX)'"),1)
+        self.assertEqual(s.count("onClick={()=>generateCv(v)}"),1)
+        self.assertIn("Caçador CV ATS",s)
+        self.assertIn("https://chatgpt.com/?prompt=",s)
+        self.assertNotIn("/api/resume/generate",s)
+        self.assertNotIn("/api/resume/gpt-start",s)
+        self.assertNotIn("Preparar com ChatGPT</button>",s)
+
     def test_geography_priority_precedes_scores_and_dates(self):
         s=Path("src/Opportunities.jsx").read_text()
         self.assertIn("const geoPriority=v=>",s)

@@ -313,6 +313,26 @@ class GPTActionContractTests(unittest.TestCase):
         self.assertIn("max_age=900",source)
         self.assertNotIn("apply_hybrid(",source)
 
+
+    def test_mcp_uses_one_docx_renderer_and_bearer_header(self):
+        import inspect,app
+        source=inspect.getsource(app.prepare_verified_cv)
+        self.assertNotIn("render_docx(",source)
+        self.assertNotIn("access_token",inspect.signature(app.fetch_cv_job).parameters)
+        self.assertNotIn("access_token",inspect.signature(app.prepare_verified_cv).parameters)
+        from unittest.mock import patch
+        import asyncio
+        class Inner:
+            async def __call__(self,scope,receive,send):
+                raise AssertionError("Unauthenticated MCP request reached inner server")
+        messages=[]
+        async def receive():return {"type":"http.request","body":b"","more_body":False}
+        async def send(message):messages.append(message)
+        with patch.dict("os.environ",{"CV_ACTION_TOKEN":"test-secret"}):
+            asyncio.run(app._CVAuthorizedMCP(Inner())({"type":"http","headers":[],"method":"POST","path":"/"},
+                  receive,send))
+        self.assertEqual(messages[0]["status"],401)
+
     def test_gpt_source_is_verified_only(self):
         from resume_engine import EXPERIENCE
         ids={f"{i}:{j}" for i,e in enumerate(EXPERIENCE) for j,_ in enumerate(e["facts"])}

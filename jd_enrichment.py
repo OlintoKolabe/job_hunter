@@ -149,7 +149,7 @@ def hydrate_jobs(cursor,jobs,roles,url_key,limit=PER_BATCH_LIMIT):
                 ai_status='disabled'
                 evaluation.update({'score':None,'fit':None,'confidence':'ai_disabled',
                                    'reason':'IA desligada: é necessária a chave OpenAI e JH_AI_ENABLED=1'})
-            if description and (evaluation.get('score') is not None or model in ('ai_matcher','ai_error','hard_exclusion')):save(cursor,key,jd_hash,roles,evaluation,model)
+            if description and (evaluation.get('score') is not None or model=='hard_exclusion'):save(cursor,key,jd_hash,roles,evaluation,model)
         recommendation=recommend_application(complete,evaluation)
         # Persist the secondary judgment alongside an existing score without
         # changing the score key, spending API credits or changing the model.

@@ -109,6 +109,27 @@ class AIResumeMatcherTests(unittest.TestCase):
         self.assertIn("AI=ai_resume_matcher_evidence_v1",
                       Document(io.BytesIO(document)).core_properties.keywords)
 
+    def test_cv_uses_full_listing_description_when_public_page_is_blocked(self):
+        import asyncio
+        from unittest.mock import Mock
+        import app as service
+        answer={"selected_fact_ids":["1:0","1:1","1:2","4:1","4:2"],"summary":"Gestão de produtos e projetos."}
+        with patch.dict(os.environ,{"JH_AI_ENABLED":"1","OPENAI_API_KEY":"test-only"}), \
+             patch("app.require_auth"),patch("app._cv_source",side_effect=service.HTTPException(404,"no cache")), \
+             patch("score_repository.reserve",return_value=35),patch("score_repository.settle"), \
+             patch("app.psycopg.connect"),patch("ai_resume_matcher._ask",return_value=answer), \
+             patch("jd_retrieval.extract_public_jd") as public:
+            response=service.ai_resume_download(service.ResumeAIRequest(
+                url="https://br.indeed.com/viewjob?jk=245b508b66b7f110",
+                title="Senior Product Manager",description=JD*2),Mock())
+            payload=asyncio.run(self._drain(response))
+        public.assert_not_called()
+        self.assertEqual(payload[:2],b"PK")
+
+    @staticmethod
+    async def _drain(response):
+        return b"".join([chunk async for chunk in response.body_iterator])
+
     def test_failed_cv_without_provider_response_releases_full_reservation(self):
         from unittest.mock import Mock
         import app as service

@@ -26,11 +26,12 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{}}){
 
    (d.items||[]).forEach(j=>all.set(j.url,j));record(d);count+=d.total||0;
    setResults(visibleUndecided([...all.values()]));setCounts({new:all.size,total:count});
-   // Score incomplete JDs as each batch arrives rather than waiting for the entire catalog.
+   // Select from the entire discovery universe before spending any AI tokens.
    const scoredOrAttempted=new Set();
    let resolved=0;
-   async function enrichAvailable(){
-     const candidates=[...all.values()].filter(j=>!scoredOrAttempted.has(j.url) &&
+   async function enrichAvailable(selectedUrls){
+     const selected=new Set(selectedUrls);
+     const candidates=[...all.values()].filter(j=>selected.has(j.url)&&!scoredOrAttempted.has(j.url) &&
        j.ranking?.score==null);
      const waiting=[...new Map(candidates.map(j=>[j.url,j])).values()];
      if(!waiting.length)return;
@@ -58,10 +59,21 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{}}){
        }
      }
    }
-   await enrichAvailable();
+   async function rankEntireCollection(){
+     if(!all.size)return;
+     setMessage('Selecionando as melhores candidatas de '+all.size+' vagas antes da avaliação por IA…');
+     const response=await fetch('/api/ranking/shortlist',{method:'POST',headers:{'Content-Type':'application/json'},
+       signal:AbortSignal.timeout(15000),body:JSON.stringify({jobs:[...all.values()].map(j=>({url:j.url,title:j.title,description:(j.description||'').slice(0,1500),ranking:j.ranking,needs_verification:j.needs_verification})),roles,limit:40})});
+     if(!response.ok)throw Error('Triagem global indisponível (HTTP '+response.status+'); nenhuma avaliação paga foi iniciada.');
+     const selection=await response.json();
+     if(!Array.isArray(selection.urls))throw Error('Resposta inválida da triagem global');
+     setMessage('Triagem de '+all.size+' vagas concluída. Avaliando até '+selection.urls.length+' candidatas prioritárias com IA…');
+     await enrichAvailable(selection.urls);
+   }
    // Indeed is an on-demand provider, not a catalog board. A catalog scan
    // with source=indeed always returns 400 and can flood the UI with retries.
    if(['himalayas','remotive','remoteok','indeed'].includes(source)){
+     await rankEntireCollection();
      setCompleted(true);
      setMessage('Consulta à fonte '+source+' concluída; vagas apresentadas após filtros e exclusões do Histórico.');
      return;
@@ -72,11 +84,11 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{}}){
     let batch;try{batch=await requestJson('/api/catalog/scan?offset='+offset+'&limit=4&'+qs)}catch(err){skipped++;offset+=4;setMessage('Alguns quadros falharam; continuando os demais. Falhas: '+skipped);continue}
     (batch.items||[]).filter(j=>source==='all'||j.source?.toLowerCase()===source||(source==='greenhouse'&&j.source?.toLowerCase()==='greenhouse_eu')).forEach(j=>{const old=all.get(j.url);all.set(j.url,old&&(old.ranking?.score!=null||scoredOrAttempted.has(j.url))?old:j)});record(batch);
     offset=batch.next_offset;if(!Number.isFinite(offset))throw Error('Paginação inválida');
-    count+=batch.found||0;setResults(visibleUndecided([...all.values()]));await enrichAvailable();setChecked(x=>x+(batch.details||[]).length);setCounts({new:all.size,total:count});
+    count+=batch.found||0;setResults(visibleUndecided([...all.values()]));setChecked(x=>x+(batch.details||[]).length);setCounts({new:all.size,total:count});
     if(batch.complete){completedAll=true;break}
     if(!(batch.details||[]).length)break;
    }
-   await enrichAvailable();
+   await rankEntireCollection();
    setCompleted(completedAll);
    setMessage(completedAll&&!skipped&&!Object.values(sourceTotals).some(v=>v.erros)?'Busca concluída.':('Busca com fontes indisponíveis: '+(skipped+Object.values(sourceTotals).reduce((n,v)=>n+v.erros,0))+' falhas registradas. Zero resultado não significa zero vagas. Confira Fontes.'));
   }catch(e){setError(e.message);setMessage('Busca parcial — os resultados encontrados continuam disponíveis.')}

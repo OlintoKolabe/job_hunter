@@ -1,23 +1,28 @@
-"""On-demand Brazil Indeed listing adapter; requires explicit HasData key."""
-import json, os, urllib.parse, urllib.request
+"""On-demand Indeed Brazil via JobSpy. No credentials, no proxy, bounded calls."""
 from collectors import item
 
-API="https://api.hasdata.com/scrape/indeed/listing"
 def enabled():
-    return bool(os.environ.get("HASDATA_API_KEY","").strip())
+    return True
 
 def search(keyword):
-    key=os.environ.get("HASDATA_API_KEY","").strip()
-    if not key:raise RuntimeError("Indeed indisponível: configure HASDATA_API_KEY")
-    params=urllib.parse.urlencode({"keyword":keyword,"location":"Brasil","domain":"br.indeed.com","sort":"date","start":0})
-    req=urllib.request.Request(API+"?"+params,headers={"x-api-key":key,"Accept":"application/json"})
-    with urllib.request.urlopen(req,timeout=90) as res:
-        payload=json.loads(res.read(2_000_000))
-    rows=payload.get("jobs") if isinstance(payload,dict) else None
-    if not isinstance(rows,list):raise ValueError("Resposta Indeed sem lista de vagas")
+    from jobspy import scrape_jobs
+    df=scrape_jobs(site_name="indeed",search_term=keyword,location="Brazil",
+                   country_indeed="Brazil",is_remote=True,results_wanted=15,
+                   fetch_description=False,verbose=0)
     jobs=[]
-    for row in rows:
-        if not isinstance(row,dict):continue
-        v=item(row.get("company"),row.get("title"),row.get("url"),row.get("location"),"indeed",row.get("isoDate") or "",row.get("description") or "")
-        if v:jobs.append(v)
+    for row in df.to_dict("records"):
+        loc=row.get("location")
+        if isinstance(loc,dict):
+            location=", ".join(str(loc.get(k) or "") for k in ("city","state","country") if loc.get(k))
+        else:
+            location=str(loc or "")
+        if location.lower() in ("nan","none","<na>"):location=""
+        url=row.get("job_url") or row.get("job_url_direct")
+        description=row.get("description")
+        published=row.get("date_posted")
+        value=item(row.get("company"),row.get("title"),url,location,"indeed",
+                   str(published or ""),str(description or ""))
+        if value:
+            if row.get("is_remote") is True:value["remote"]=True
+            jobs.append(value)
     return jobs

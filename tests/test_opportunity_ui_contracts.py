@@ -28,11 +28,12 @@ class OpportunityUIContracts(unittest.TestCase):
         self.assertNotIn("/api/resume/gpt-start",s)
         self.assertNotIn("Preparar com ChatGPT</button>",s)
 
-    def test_geography_priority_precedes_scores_and_dates(self):
+    def test_confirmed_and_scored_jobs_precede_uncertain_results(self):
         s=Path("src/Opportunities.jsx").read_text()
         self.assertIn("const geoPriority=v=>",s)
         self.assertIn("if(geoDiff)return geoDiff;",s)
-        self.assertLess(s.index("if(geoDiff)return geoDiff;"),s.index("return sort==='recommendation'"))
+        self.assertLess(s.index("if(Boolean(a.confirmed)!==Boolean(b.confirmed))"),s.index("if(geoDiff)return geoDiff;"))
+        self.assertLess(s.index("const scoreDiff=(b.ranking?.score??-1)"),s.index("if(geoDiff)return geoDiff;"))
         self.assertIn("if(explicitBrazil)return 0;",s)
         self.assertIn("if(latam)return 1;",s)
         self.assertIn("if(v.needs_verification?.includes('pais'))return 3;",s)
@@ -41,5 +42,11 @@ class OpportunityUIContracts(unittest.TestCase):
     def test_indeed_on_demand_search_does_not_scan_catalog(self):
         s=Path("src/Opportunities.jsx").read_text()
         self.assertIn("['himalayas','remotive','remoteok','indeed'].includes(source)",s)
+
+    def test_initial_scoring_starts_before_full_catalog_scan_with_ten_job_cap(self):
+        s=Path("src/Opportunities.jsx").read_text()
+        self.assertLess(s.index("const earlyRanking=rankEntireCollection(4)"),s.index("for(let n=0;n<180;n++)"))
+        self.assertIn("rankEntireCollection(Math.max(0,10-scoredOrAttempted.size))",s)
+        self.assertIn("filter(j=>!scoredOrAttempted.has(j.url))",s)
 
 if __name__=="__main__":unittest.main()

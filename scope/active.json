@@ -1,29 +1,16 @@
 {
-  "id": "JOB-HUNTER-CV-QUALITY-HOTFIX",
+  "id": "JOB-HUNTER-GPT-MCP-CV-SINGLE-ENGINE",
   "status": "active",
-  "base_ref": "aafe8327f1ff9b9b6cdbc73af6135bf7074f5403",
+  "base_ref": "0b872988c10933a4c5a17902eaf28df897e8d152",
   "production_ref": "feat/phase1-web-foundation",
-  "feature_ref": "fix/cv-quality-grounded-ranking",
-  "objective": "Single-scope CV hotfix: validate summary only against rendered evidence and make fallback rejection observable without widening AI or modifying job rankings.",
+  "feature_ref": "feat/gpt-action-cv-single-block",
+  "objective": "Replace selected-vacancy DOCX generation with single explicit-click ChatGPT private MCP flow; preserve validated facts and one renderer.",
   "allowed_files": [
     "scope/active.json",
-    "scripts/check_scope.py",
-    "tests/test_scope.py",
     "app.py",
-    "jd_enrichment.py",
-    "block4_score.py",
     "src/Opportunities.jsx",
     "requirements.txt",
-    "tests/test_block4_1.py",
-    "ai_interpreter.py",
-    "jd_retrieval.py",
-    "score_repository.py",
-    "migrations/block4_1.sql",
-    "resume_engine.py",
-    "tests/test_resume_engine.py",
-    "Dockerfile",
-    "resume_hybrid.py",
-    "tests/test_resume_hybrid.py"
+    "tests/test_resume_engine.py"
   ],
   "forbidden_paths": [
     ".github/workflows/",
@@ -31,38 +18,26 @@
     "src/Phase3.jsx",
     "collectors.py",
     "search_filters.py",
-    "catalog_engine.py"
+    "catalog_engine.py",
+    "migrations/"
   ],
   "forbidden_changes": [
-    "modify Render environment",
-    "execute migration on production database without separate authorization",
-    "unbounded calls to AI",
-    "automatically score pending eligibility rows"
+    "any automatic CV generation",
+    "new database or schedulers",
+    "paid OpenAI API calls",
+    "credential hardcoding",
+    "unverified factual statements",
+    "unapproved migrations or runtime scaling"
   ],
   "acceptance": [
-    "No AI call when cached analysis is current",
-    "No automatic AI calls for nonconfirmed jobs",
-    "JD fetch through cache then source API then safe public HTML",
-    "Manual pending job evaluation is user-triggered",
-    "Terminal UI state for every attempted evaluation",
-    "Backend-side spend reservation/limit and request logging",
-    "No changed paths beyond allowlist",
-    "CV generated only on user action from persisted JD",
-    "No unverifiable achievements or credentials",
-    "Actual model token billing measured before claiming AI cost",
-    "Re-download identical CV without new AI spending",
-    "Distinct JD classes produce distinct CV focus",
-    "No duplicate factual bullets",
-    "No AI requests in CV path",
-    "Relevant roles prioritized without changing chronology",
-    "Safe filename candidate-role-company",
-    "At most one microgeneration call per novel CV key",
-    "Persisted cache for identical JD/profile/model",
-    "No unsupported achievement claims",
-    "Deterministic fallback when AI unavailable or invalid",
-    "No changes to global vacancy rating and no new migration",
-    "AI may reorder/select verified facts but cannot author new professional bullets",
-    "Old cached hybrid resumes invalidated by independent rubric version"
+    "1 - Trigger CV generation only after click on existing button",
+    "2 - Zero OpenAI API charges and no dependency on local GPU",
+    "3 - Reuse persisted vacancy description and verified career facts",
+    "4 - Use one renderer and no duplicated legacy generation API",
+    "5 - Validate evidence IDs and audit reopened DOCX",
+    "6 - Private bearer authentication and expiring signed link",
+    "7 - Automated build, real MCP connector and downloadable DOCX tested before production approval",
+    "8 - Strict allowlist of changed files; keep unrelated functions stable"
   ],
-  "deployment": "No merge to main or deploy before explicit approval"
+  "deployment": "Do not merge to main or deploy until isolated gate checks and integrated homologation are complete."
 }

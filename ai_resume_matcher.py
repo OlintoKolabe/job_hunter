@@ -47,8 +47,8 @@ def _ask(task, jd, title, company=""):
       "requirements:[{name:string, mandatory:boolean, match:'direct'|'transferable'|'unproven',"
       "evidence_ids:[string]}]}. Score measures professional fit, considering required experience,"
       " seniority and actual accountability, not document layout. Penalize unproven mandatory requirements."
-      " For cv return {selected_fact_ids:[string], summary:string}. "
-      "Select at most 24 relevant fact IDs. Summary must use only verified professional context; "
+      " For cv return {selected_fact_ids:[string], summary:string, rewrites:[{id:string,text:string}]}. "
+      "Rewrite selected facts into concise ATS bullets without inventing details; if uncertain, keep the original fact. Select at most 24 relevant fact IDs. Summary must use only verified professional context; "
       "do not invent dates, skills, credentials or measurable outcomes. "
       "Prefer an accurate, specific CV over keyword stuffing. "
     )
@@ -127,11 +127,34 @@ def tailored_plan(jd,title,company=""):
     requested=[x for x in requested if isinstance(x,str) and x in valid]
     requested=list(dict.fromkeys(requested))[:MAX_FACTS]
     if len(requested)<4:raise ValueError("Seleção insuficiente de evidências")
+    # Rewrite only when lexical overlap and numeric provenance are safe.
+    provenance={}
+    rewrite_candidates={}
+    for change in answer.get("rewrites",[]) if isinstance(answer.get("rewrites"),list) else []:
+        if not isinstance(change,dict):continue
+        id_=change.get("id")
+        if id_ not in valid or id_ not in requested:continue
+        original=valid[id_][1]
+        proposed=str(change.get("text") or "").strip()
+        def lex(value):
+            value=unicodedata.normalize("NFKD",value.casefold())
+            value="".join(x for x in value if not unicodedata.combining(x))
+            return set(re.findall(r"[a-z0-9]{3,}",value))
+        source_terms=lex(original)
+        new_terms=lex(proposed)
+        source_numbers=set(re.findall(r"\d+(?:[,.]\d+)?",original))
+        new_numbers=set(re.findall(r"\d+(?:[,.]\d+)?",proposed))
+        if (20<=len(proposed)<=240 and len(new_terms)>=4
+            and len(new_terms & source_terms)/len(new_terms)>=0.48
+            and new_numbers<=source_numbers
+            and not re.search(r"\b(?:SQL|Power BI|Tableau|Odontologia|UEG|UNIVALI)\b",proposed,re.I)):
+            rewrite_candidates[id_]=proposed
+            provenance[proposed]=original
     plan=build_plan(jd,title)
     selected={}
     for id_ in requested:
         idx,fact=valid[id_]
-        selected.setdefault(idx,[]).append(fact)
+        selected.setdefault(idx,[]).append(rewrite_candidates.get(id_,fact))
     plan["experience"]=[{"role":EXPERIENCE[i]["role"],"company":EXPERIENCE[i]["company"],
               "dates":EXPERIENCE[i]["dates"],"facts":facts,"source_index":i}
               for i,facts in selected.items()]
@@ -145,6 +168,7 @@ def tailored_plan(jd,title,company=""):
     numbers=re.search(r"\b\d{2,}\b",summary)
     if summary and not forbidden and not numbers:
         plan["summary"]=summary
+    plan["bullet_provenance"]=provenance
     plan["cv_mode"]="ai_resume_matcher_evidence_v1"
     plan["ai_usage"]=answer.get("_usage",{})
     return plan

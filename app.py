@@ -565,6 +565,21 @@ class JDRequest(BaseModel):
     roles: str=DEFAULT_ROLES
     manual: bool=False
 
+class ShortlistRequest(BaseModel):
+    jobs: list[dict]
+    roles: str=DEFAULT_ROLES
+    limit: int=40
+
+@app.post('/api/ranking/shortlist')
+def ranking_shortlist(request: Request, payload: ShortlistRequest):
+    """Cost-free shortlist over the *whole* collected set, before AI spending."""
+    require_auth(request)
+    if len(payload.jobs)>2500 or len(payload.roles)>700:
+        raise HTTPException(400,'Seleção grande demais')
+    from ai_resume_matcher import shortlist_jobs
+    return {'urls':shortlist_jobs(payload.jobs,payload.roles,payload.limit),
+            'total_considered':len(payload.jobs),'ai_calls':0}
+
 @app.post("/api/jd/enrich")
 def jd_enrich(request: Request, payload: JDRequest):
     require_auth(request)

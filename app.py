@@ -753,22 +753,6 @@ def logout(response: Response):
     response.delete_cookie(COOKIE)
     return {"ok":True}
 
-class ResumeGenerate(BaseModel):
-    url: str
-    title: str = ''
-    company: str = ''
-
-@app.post("/api/resume/gpt-start")
-def start_gpt_cv(payload: ResumeGenerate, request: Request):
-    """Explicit click only. GPT Actions run through ChatGPT, not a billed server API."""
-    require_auth(request)
-    gpt_url="https://chatgpt.com/"
-    key,jd=_cv_source(payload.url)
-    if not jd.strip():
-        raise HTTPException(404,"Descrição da vaga ausente")
-    return {"chat_url":gpt_url,"url":key,"title":payload.title,"company":payload.company,
-            "message":"Abra o ChatGPT com o plugin Caçador de Vagas conectado e envie a instrução copiada."}
-
 # GPT Actions CV bridge: no OpenAI API calls and no application credentials exposed.
 # Requires independently provisioned CV_ACTION_TOKEN via Render secret settings.
 def _cv_action_auth(request: Request):

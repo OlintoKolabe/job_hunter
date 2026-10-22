@@ -11,7 +11,8 @@
     "src/Opportunities.jsx",
     "requirements.txt",
     "tests/test_resume_engine.py",
-    "tests/test_opportunity_ui_contracts.py"
+    "tests/test_opportunity_ui_contracts.py",
+    "resume_engine.py"
   ],
   "forbidden_paths": [
     ".github/workflows/",

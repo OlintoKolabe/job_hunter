@@ -268,9 +268,9 @@ def restore_persisted_scores(cursor, jobs, roles, url_key):
     for key, jd_hash, result, model, cache_hash, fetched_at in cursor.fetchall():
         if key in by_url or not isinstance(result, dict):
             continue
-        if require_hybrid and model not in ("hybrid", "ai_error", "hard_exclusion"):
+        if require_hybrid and model not in ("ai_matcher", "hard_exclusion"):
             continue
-        if result.get("score") is None and not (require_hybrid and model == "hybrid"):
+        if result.get("score") is None:
             continue
         by_url[key] = (jd_hash, result, cache_hash, fetched_at)
     restored = 0

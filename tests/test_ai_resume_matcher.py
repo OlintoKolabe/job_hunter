@@ -14,6 +14,27 @@ JD=("Senior Product Manager required to lead discovery, product roadmaps, stakeh
     "Preferred: programming in Python and extensive Power BI dashboards.")
 
 class AIResumeMatcherTests(unittest.TestCase):
+    def test_real_jd_phrasing_is_not_lost_to_strict_word_overlap(self):
+        # Source wording can include filler words even when a meaningful
+        # quoted requirement is fully present in the job description.
+        jd=('You will be responsible for the strategic management of our product '
+            'roadmap and partnerships with key cross functional stakeholders. '
+            'Prioritize the backlog with the engineering team and delivery managers.')
+        answer={'score':72,'reasoning':'Evidence-based match',
+                'requirements':[{'name':'strategic management of our product roadmap and partnerships',
+                                 'mandatory':True,'match':'transferable','evidence_ids':['1:0']}]}
+        with patch('ai_resume_matcher._ask',return_value=answer):
+            result=evaluate(jd,'Product Manager')
+        self.assertEqual(len(result['requirements']),1)
+        self.assertEqual(result['requirements'][0]['match'],'transferable')
+
+    def test_requirement_not_present_in_jd_is_never_credited(self):
+        answer={'score':95,'requirements':[{'name':'Kubernetes platform administration',
+                                          'mandatory':True,'match':'direct','evidence_ids':['1:0']}]}
+        with patch('ai_resume_matcher._ask',return_value=answer):
+            with self.assertRaisesRegex(ValueError,'requisitos auditáveis'):
+                evaluate(JD,'Product Manager')
+
     def test_numeric_json_scores_are_normalized_without_inflation(self):
         base={'reasoning':'Relevant experience',
               'requirements':[{'name':'product roadmaps','mandatory':True,

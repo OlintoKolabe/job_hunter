@@ -49,6 +49,18 @@ class AIResumeMatcherTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 tailored_plan(JD,"Senior Product Manager")
 
+    def test_ai_bullet_rewrites_require_original_fact_provenance(self):
+        base={"selected_fact_ids":["1:0","1:1","1:2","4:1","4:2"],
+              "summary":"Gestão de produtos, projetos e stakeholders.",
+              "rewrites":[{"id":"1:0","text":"Gestão e criação de roadmaps de produto, priorizando impacto e valor percebido."},
+                          {"id":"1:1","text":"Implementou SQL e Power BI para gerar ROI de 900% no departamento."}]}
+        with patch("ai_resume_matcher._ask",return_value=base):
+            plan=tailored_plan(JD,"Product Manager")
+        facts=[f for entry in plan["experience"] for f in entry["facts"]]
+        self.assertIn("Gestão e criação de roadmaps de produto, priorizando impacto e valor percebido.",facts)
+        self.assertIn(EXPERIENCE[1]["facts"][1],facts)
+        self.assertTrue(audit(plan,render_docx(plan))["factual_bullets_verified"])
+
     def test_post_filter_hydration_uses_ai_fit_and_existing_budget(self):
         from datetime import datetime,timezone
         from unittest.mock import Mock

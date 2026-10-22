@@ -29,7 +29,6 @@ from catalog_engine import source_tasks,scan
 from catalog_bootstrap import maybe_start
 from jd_enrichment import hydrate_jobs
 from resume_engine import build_plan, render_docx, audit, evaluate_rendered_resume
-from resume_hybrid import apply_hybrid, traceable_relevance
 
 app = FastAPI(docs_url=None, redoc_url=None)
 DIST = Path(__file__).resolve().parent / "dist"
@@ -769,72 +768,6 @@ def start_gpt_cv(payload: ResumeGenerate, request: Request):
         raise HTTPException(404,"Descrição da vaga ausente")
     return {"chat_url":gpt_url,"url":key,"title":payload.title,"company":payload.company,
             "message":"Abra o ChatGPT com o plugin Caçador de Vagas conectado e envie a instrução copiada."}
-
-@app.post("/api/resume/generate")
-def generate_resume(payload: ResumeGenerate, request: Request):
-    """User-triggered CV generation from a persisted JD only.
-    Optional bounded AI uses the existing cache and spend reservation; DOCX
-    contents themselves are never written to the application database.
-    """
-    require_auth(request)
-    key=url_key(payload.url)
-    if not key or len(key)>500:
-        raise HTTPException(400,"URL da vaga inválida")
-    with psycopg.connect(DATABASE,connect_timeout=8) as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT description FROM jh_jd_cache WHERE normalized_url=%s",(key,))
-            row=cur.fetchone()
-    if not row or not row[0]:
-        raise HTTPException(404,"Descrição da vaga não está armazenada; avalie a vaga primeiro.")
-    # Use the real role supplied by the vacancy card; URL slugs can be opaque IDs.
-    title=(payload.title or "").strip() or key.rstrip("/").split("/")[-1].replace("-"," ").title()
-    plan=build_plan(row[0],title)
-    baseline_plan=plan
-    # Serialize identical requests before looking up cache or reserving AI spend.
-    # Scoped to this transaction; no new tables or schema changes needed.
-    with psycopg.connect(DATABASE,connect_timeout=8) as cv_conn:
-        with cv_conn.cursor() as cv_cur:
-            cv_cur.execute("SELECT pg_advisory_xact_lock(hashtext(%s))",
-                           ("cv:"+key+":"+plan["jd_sha256"],))
-            plan,cv_usage=apply_hybrid(cv_cur,key,row[0],plan)
-    # Bind metadata to the response actually used, including cached fallback.
-    plan["cv_mode"]=cv_usage["mode"]
-    plan["cv_build"]=os.getenv("RENDER_GIT_COMMIT","local")[:12]
-    data=render_docx(plan)
-    report=audit(plan,data)
-    quality=evaluate_rendered_resume(plan,data,row[0])
-    # Evaluate the actual reopened DOCX, not only the model's proposal.
-    # Deterministic recovery prevents a personalized document from regressing
-    # behind the current proven baseline on technical quality dimensions.
-    if cv_usage["mode"] in ("hybrid","cached_hybrid"):
-        baseline_data=render_docx(baseline_plan)
-        baseline_quality=evaluate_rendered_resume(baseline_plan,baseline_data,row[0])
-        proposed_evidence=traceable_relevance(plan,row[0],plan["experience"])
-        baseline_evidence=traceable_relevance(baseline_plan,row[0],baseline_plan["experience"])
-        if (not quality["factual_ok"] or
-            quality["technical_score"] < baseline_quality["technical_score"] or
-            proposed_evidence["supported_count"] < baseline_evidence["supported_count"]):
-            cv_usage["mode"]="quality_fallback"
-            plan={**baseline_plan,"cv_mode":"quality_fallback",
-                  "cv_build":plan["cv_build"]}
-            data=render_docx(plan)
-            report=audit(plan,data)
-            quality=evaluate_rendered_resume(plan,data,row[0])
-    from urllib.parse import quote
-    import re as _re
-    company=payload.company or key.split("/")[0].split(".")[0].replace("-"," ").title()
-    role=payload.title or title
-    def safe_name(value):
-        return _re.sub(r"[^\\wÀ-ÿ -]","",value,flags=_re.UNICODE).strip()[:90]
-    filename="Olinto Manso Pereira - "+safe_name(role)+" - "+safe_name(company)+".docx"
-    encoded_filename=quote(filename)
-    headers={"X-Resume-Engine":report["engine"],"X-Document-SHA256":report["document_sha256"],
-             "X-JD-SHA256":report["jd_sha256"],"X-AI-Calls":str(cv_usage["ai_calls"]),"X-AI-Cost-USD":str(cv_usage["cost_usd"]),"X-CV-Mode":cv_usage["mode"],"X-CV-Build":plan["cv_build"],"X-CV-Provenance":"job-hunter-cv-provenance-v1",
-             "X-CV-Structural-Score":str(quality["technical_score"])}
-    return StreamingResponse(io.BytesIO(data),
-        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        headers={**headers,"Content-Disposition":f"attachment; filename*=UTF-8''{encoded_filename}"})
-
 
 # GPT Actions CV bridge: no OpenAI API calls and no application credentials exposed.
 # Requires independently provisioned CV_ACTION_TOKEN via Render secret settings.

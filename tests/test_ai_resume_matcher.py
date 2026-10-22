@@ -164,4 +164,42 @@ class AIResumeMatcherTests(unittest.TestCase):
                     url="https://example.com/job/1",title="Senior Product Manager"),Mock())
         settled.assert_called_once_with(unittest.mock.ANY,25,estimate_cost(usage),False)
 
+class ShortlistTests(unittest.TestCase):
+    def test_http_shortlist_rejects_oversized_batch(self):
+        from unittest.mock import Mock
+        from app import ranking_shortlist, ShortlistRequest
+        from fastapi import HTTPException
+        with patch('app.require_auth'):
+            with self.assertRaises(HTTPException) as error:
+                ranking_shortlist(Mock(),ShortlistRequest(jobs=[{}]*2501,roles='Product Manager'))
+        self.assertEqual(error.exception.status_code,400)
+
+    def test_endpoint_never_calls_paid_ai(self):
+        from unittest.mock import Mock
+        from app import ranking_shortlist, ShortlistRequest
+        with patch('app.require_auth'),patch('ai_resume_matcher._ask',side_effect=AssertionError('Unexpected paid AI')):
+            result=ranking_shortlist(Mock(),ShortlistRequest(
+                jobs=[{'url':'https://example.org/v', 'title':'Product Manager'}],
+                roles='Product Manager',limit=10))
+        self.assertEqual(result['urls'],['https://example.org/v'])
+        self.assertEqual(result['ai_calls'],0)
+
+    def test_global_relevance_and_diversity_without_tokens(self):
+        from ai_resume_matcher import shortlist_jobs
+        rows = [dict(url=f'https://example.org/jobs/{i}', title='Office Assistant') for i in range(150)]
+        rows.append(dict(url='https://example.org/jobs/best', title='Senior Product Manager',
+                         description='roadmap product strategy backlog agile stakeholder ' * 25))
+        rows.append(dict(url='https://example.org/jobs/project', title='Project Manager'))
+        chosen = shortlist_jobs(rows, 'Product Manager, Project Manager', 10)
+        self.assertIn('https://example.org/jobs/best', chosen[:2])
+        self.assertIn('https://example.org/jobs/project', chosen[:2])
+        self.assertEqual(len(chosen), 10)
+
+    def test_global_shortlist_excludes_unverified_and_duplicates(self):
+        from ai_resume_matcher import shortlist_jobs
+        rows = [dict(url='https://a.com/a', title='Product Manager', needs_verification=['pais']),
+                dict(url='https://b.com/b', title='Product Manager', source='indeed'),
+                dict(url='https://b.com/b', title='Product Manager', source='ashby')]
+        self.assertEqual(shortlist_jobs(rows, 'Product Manager'), ['https://b.com/b'])
+
 if __name__=="__main__":unittest.main()

@@ -23,6 +23,39 @@ TTL_DAYS=7
 PER_BATCH_LIMIT=10
 MAX_JD_CHARS=90000
 
+def valid_listing_jd(value):
+    """Reject empty, navigation-only and obvious challenge pages before caching."""
+    if not isinstance(value,str):return False
+    plain=re.sub(r'<[^>]*>',' ',value)
+    plain=re.sub(r'\s+',' ',plain).strip()
+    if len(plain)<300 or len(plain.split())<45:return False
+    if re.search(r'(?i)(access denied|verify you are human|enable javascript to continue|captcha required)',plain[:500]):return False
+    return True
+
+def persist_listing_jds(cursor, raw_jobs, eligible_jobs, url_key):
+    """Keep real collector JDs before the filter intentionally strips response payloads."""
+    eligible={url_key(j.get('url','')) for j in eligible_jobs}
+    rows={}
+    by_source={}
+    for job in raw_jobs:
+        key=url_key(job.get('url',''))
+        if key not in eligible:continue
+        source=str(job.get('source') or 'unknown').lower()
+        stats=by_source.setdefault(source,{'eligible':0,'jd_valid':0,'jd_missing':0})
+        stats['eligible']+=1
+        description=job.get('description') or ''
+        if valid_listing_jd(description):
+            stats['jd_valid']+=1
+            rows[key]=(key,description[:MAX_JD_CHARS],hashlib.sha256(description[:MAX_JD_CHARS].encode()).hexdigest(),source[:64])
+        else:stats['jd_missing']+=1
+    if rows:
+        cursor.executemany("""INSERT INTO jh_jd_cache(normalized_url,description,content_hash,fetched_at,source)
+            VALUES(%s,%s,%s,NOW(),%s) ON CONFLICT(normalized_url) DO UPDATE SET
+            description=EXCLUDED.description,content_hash=EXCLUDED.content_hash,
+            fetched_at=NOW(),source=EXCLUDED.source
+            WHERE length(EXCLUDED.description)>=length(jh_jd_cache.description)""",list(rows.values()))
+    return by_source
+
 def greenhouse_detail_url(job):
     source=str(job.get("source") or "").lower()
     if source not in ("greenhouse","greenhouse_eu"):return None

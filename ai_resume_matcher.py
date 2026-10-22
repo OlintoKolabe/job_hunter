@@ -11,7 +11,7 @@ import re
 import unicodedata
 import urllib.request
 
-from resume_engine import EXPERIENCE
+from resume_engine import EXPERIENCE, relevant_jd_text
 
 MODEL_DEFAULT = "gpt-4.1-mini"
 MAX_JD_CHARS = 16000
@@ -31,7 +31,8 @@ def evidence_catalog():
 def _ask(task, jd, title, company=""):
     if os.getenv("JH_AI_ENABLED") != "1" or not os.getenv("OPENAI_API_KEY"):
         raise AIUnavailable("IA indisponível: ative JH_AI_ENABLED e OPENAI_API_KEY no Render")
-    if len(jd.strip()) < 100:
+    jd_clean=relevant_jd_text(jd)
+    if len(jd_clean.strip()) < 100:
         raise ValueError("Descrição da vaga insuficiente para avaliar com IA")
     if task not in ("evaluate", "cv"):
         raise ValueError("Tarefa inválida")
@@ -52,7 +53,7 @@ def _ask(task, jd, title, company=""):
       "Prefer an accurate, specific CV over keyword stuffing. "
     )
     body = {"task":task,"job":{"title":title[:150],"company":company[:150],
-                                   "description":jd[:MAX_JD_CHARS]},
+                                   "description":jd_clean[:MAX_JD_CHARS]},
             "facts":catalog}
     payload={"model":os.getenv("JH_RESUME_AI_MODEL",MODEL_DEFAULT),
              "messages":[{"role":"system","content":instructions},
@@ -87,7 +88,7 @@ def evaluate(jd,title,company=""):
         value=unicodedata.normalize("NFKD",str(text).casefold())
         value="".join(c for c in value if not unicodedata.combining(c))
         return set(re.findall(r"[a-z0-9]{3,}",value))
-    jd_terms=lex(jd)
+    jd_terms=lex(relevant_jd_text(jd))
     supported=[]
     for row in answer.get("requirements",[])[:20]:
         if not isinstance(row,dict): continue

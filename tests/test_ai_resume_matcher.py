@@ -49,4 +49,56 @@ class AIResumeMatcherTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 tailored_plan(JD,"Senior Product Manager")
 
+    def test_post_filter_hydration_uses_ai_fit_and_existing_budget(self):
+        from datetime import datetime,timezone
+        from unittest.mock import Mock
+        from jd_enrichment import hydrate_jobs
+        url="https://example.com/job/1"
+        cursor=Mock()
+        cursor.fetchall.return_value=[(url,JD,datetime.now(timezone.utc))]
+        ai={"score":68,"requirements":[{"name":"product roadmaps","mandatory":True,
+             "match":"direct","evidence_ids":["1:0"]}],
+             "reasoning":"Documented roadmaps","usage":{"prompt_tokens":100,"completion_tokens":80}}
+        with patch.dict(os.environ,{"JH_AI_ENABLED":"1","OPENAI_API_KEY":"test-only","DATABASE_URL":"fake"}), \\
+             patch("jd_enrichment.get_cached",return_value=None), \\
+             patch("jd_enrichment.evaluate_ai",return_value=ai) as called, \\
+             patch("jd_enrichment.reserve",return_value=9), \\
+             patch("jd_enrichment.settle") as settled, \\
+             patch("jd_enrichment.save") as saved, \\
+             patch("jd_enrichment.psycopg.connect") as conn:
+            result,_=hydrate_jobs(cursor,[{"url":url,"title":"Senior Product Manager",
+                                           "description":JD}],"Product Manager",lambda x:x)
+        self.assertEqual(result[0]["ranking"]["score"],68)
+        self.assertEqual(result[0]["ranking"]["ai_evidence_source"],"resume_matcher_methodology")
+        called.assert_called_once()
+        settled.assert_called_once()
+        saved.assert_called_once()
+        self.assertEqual(result[0]["ai_status"],"interpreted")
+
+    def test_authenticated_route_returns_actual_docx_not_chatgpt_url(self):
+        import asyncio
+        from unittest.mock import Mock
+        import app as service
+        class RequestStub:
+            async def json(self):
+                return {"url":"https://example.com/job/1","title":"Senior Product Manager",
+                        "company":"Example"}
+        result={"selected_fact_ids":["1:0","1:1","1:2","4:1","4:2"],
+                "summary":"Experiência comprovada em produtos, roadmaps e gestão de equipes."}
+        async def run():
+            with patch.dict(os.environ,{"JH_AI_ENABLED":"1","OPENAI_API_KEY":"test-only"}), \\
+                 patch("app.require_auth"), patch("app._cv_source",return_value=("example.com/job/1",JD)), \\
+                 patch("score_repository.reserve",return_value=23), \\
+                 patch("score_repository.settle"),patch("app.psycopg.connect"), \\
+                 patch("ai_resume_matcher._ask",return_value=result):
+                response=await service.ai_resume_download(RequestStub())
+                document=b"".join([part async for part in response.body_iterator])
+                return response, document
+        response,document=asyncio.run(run())
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(document[:2],b"PK")
+        self.assertIn("wordprocessingml",response.media_type)
+        self.assertIn("AI=ai_resume_matcher_evidence_v1",
+                      Document(io.BytesIO(document)).core_properties.keywords)
+
 if __name__=="__main__":unittest.main()

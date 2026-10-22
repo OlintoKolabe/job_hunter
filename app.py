@@ -39,6 +39,50 @@ PASSWORD = os.environ.get("APP_PASSWORD", "")
 DATABASE = os.environ.get("DATABASE_URL", "")
 serializer = URLSafeTimedSerializer(SECRET) if SECRET else None
 
+from contextlib import asynccontextmanager
+from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
+
+cv_mcp=FastMCP("Cacador de Vagas CV", stateless_http=True,
+    transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False))
+
+@cv_mcp.tool()
+def fetch_cv_job(url:str,title:str="",access_token:str="")->dict:
+    """Read a selected vacancy JD and the verified evidence IDs."""
+    if not os.environ.get("CV_ACTION_TOKEN") or not secrets.compare_digest(access_token,os.environ["CV_ACTION_TOKEN"]):
+        raise ValueError("Not authorized")
+    from resume_engine import EXPERIENCE,EDUCATION
+    key,jd=_cv_source(url)
+    return {"url":key,"title":title,"jd":jd[:24000],
+            "evidence":[{"id":f"{i}:{j}","company":e["company"],"role":e["role"],"fact":fact}
+                for i,e in enumerate(EXPERIENCE) for j,fact in enumerate(e["facts"])],
+            "education":EDUCATION}
+
+@cv_mcp.tool()
+def prepare_verified_cv(url:str, fact_ids:list[str], title:str="",company:str="",access_token:str="")->dict:
+    """Create a signed 15-minute DOCX download ticket from existing verified evidence IDs only."""
+    if not os.environ.get("CV_ACTION_TOKEN") or not secrets.compare_digest(access_token,os.environ["CV_ACTION_TOKEN"]):
+        raise ValueError("Not authorized")
+    from resume_engine import EXPERIENCE
+    key,jd=_cv_source(url)
+    allowed={f"{i}:{j}" for i,e in enumerate(EXPERIENCE) for j,_ in enumerate(e["facts"])}
+    if not 1<=len(fact_ids)<=24 or len(set(fact_ids))!=len(fact_ids) or not set(fact_ids)<=allowed:
+        raise ValueError("Invalid evidence selection")
+    if not serializer:raise ValueError("Signing unavailable")
+    packed={"url":key,"title":title[:120],"company":company[:100],"ids":fact_ids,
+            "jd_hash":hashlib.sha256(jd.encode()).hexdigest()}
+    ticket=serializer.dumps(packed,salt="cv-action-download-v1")
+    return {"download_url":"https://olinto-job-hunter.onrender.com/api/gpt-action/download?ticket="+urllib.parse.quote(ticket),
+            "expires_in_seconds":900}
+
+@asynccontextmanager
+async def cv_lifespan(app):
+    async with cv_mcp.session_manager.run():
+        yield
+
+app.router.lifespan_context=cv_lifespan
+app.mount("/cv-mcp",cv_mcp.streamable_http_app(streamable_http_path="/"))
+
 @app.on_event("startup")
 def bootstrap_catalog_if_requested():
     maybe_start(DATABASE)

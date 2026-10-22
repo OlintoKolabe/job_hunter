@@ -202,4 +202,31 @@ class ShortlistTests(unittest.TestCase):
                 dict(url='https://b.com/b', title='Product Manager', source='ashby')]
         self.assertEqual(shortlist_jobs(rows, 'Product Manager'), ['https://b.com/b'])
 
+class ShortlistedJDTests(unittest.TestCase):
+    def test_indeed_ranking_reuses_existing_exact_jobspy_jd(self):
+        from jd_enrichment import fallback_public_jd
+        job={'url':'https://br.indeed.com/viewjob?jk=ed26935acd1ff08e',
+             'title':'Product Manager','company':'Empresa'}
+        full='Responsible for product discovery and roadmaps. '*12
+        with patch('indeed_provider.description_for_job',return_value=full) as spy, \
+             patch('jd_enrichment.extract_public_jd',side_effect=AssertionError('unnecessary scraper')):
+            self.assertEqual(fallback_public_jd(job),full)
+        spy.assert_called_once_with(job['url'],job['title'],job['company'])
+
+    def test_failed_indeed_jobspy_can_fall_back_to_public_html(self):
+        from jd_enrichment import fallback_public_jd
+        job={'url':'https://br.indeed.com/viewjob?jk=e41955656030e3b2',
+             'title':'Product Manager','company':'Empresa'}
+        with patch('indeed_provider.description_for_job',return_value=None), \
+             patch('jd_enrichment.extract_public_jd',return_value='public JD') as html_reader:
+            self.assertEqual(fallback_public_jd(job),'public JD')
+        html_reader.assert_called_once_with(job['url'])
+
+    def test_other_sources_do_not_run_indeed_search(self):
+        from jd_enrichment import fallback_public_jd
+        job={'url':'https://boards.greenhouse.io/example/jobs/123','title':'Product Manager'}
+        with patch('indeed_provider.description_for_job',side_effect=AssertionError('Indeed only')), \
+             patch('jd_enrichment.extract_public_jd',return_value='generic JD'):
+            self.assertEqual(fallback_public_jd(job),'generic JD')
+
 if __name__=="__main__":unittest.main()

@@ -1,18 +1,19 @@
 import React,{useState,useEffect,useRef} from 'react';
 const defaultRoles='Product Manager, Product Owner, Project Manager, Gerente de Projetos, Product Marketing, Marketing, Growth, Business Analyst, Analista de Negócios, PMO';
 const initialCountries=[{value:'LATAM',label:'América Latina'},{value:'BR',label:'Brasil'}];
-function DecisionActions({job,pending,onDecision}){
+function DecisionActions({job,pending,cvPending,cvError,onDecision,onGenerateCv}){
  const shared={borderRadius:7,padding:'7px 10px',fontWeight:700,cursor:pending?'wait':'pointer',color:'#fff'};
- return <div style={{display:'flex',justifyContent:'flex-end',gap:8}}>
+ return <div><div style={{display:'flex',justifyContent:'flex-end',gap:8}}>
   <button type="button" disabled={pending} onClick={()=>onDecision(job,'Candidatado')} style={{...shared,background:'#16803c',border:'1px solid #16803c'}}>Candidatado</button>
   <button type="button" disabled={pending} onClick={()=>onDecision(job,'Descartado')} style={{...shared,background:'#b91c1c',border:'1px solid #b91c1c'}}>Descartado</button>
- </div>;
+  <button type="button" disabled={cvPending} onClick={()=>onGenerateCv(job)} style={{...shared,background:'#2563eb',border:'1px solid #2563eb'}}>{cvPending?'Gerando DOCX com IA…':'Gerar currículo ATS'}</button>
+ </div>{cvError&&<small role="alert" style={{display:'block',color:'#b91c1c',whiteSpace:'normal',maxWidth:330,marginTop:5}}>{cvError}</small>}</div>;
 }
 export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{}}){
  const decidedUrlsRef=useRef(new Set());
  const visibleUndecided=jobs=>jobs.filter(j=>!decidedUrlsRef.current.has(j.url));
  const [onlyNew,setOnlyNew]=useState(false),[searchedQuery,setSearchedQuery]=useState(''),[source,setSource]=useState('all'),[sources,setSources]=useState([{value:'all',label:'Todas as fontes'},{value:'inhire',label:'inHire'},{value:'quickin',label:'Quickin'},{value:'gupy',label:'Gupy'}]),[roles,setRoles]=useState(defaultRoles),[days,setDays]=useState('0'),[country,setCountry]=useState('BR'),[countries,setCountries]=useState(initialCountries),[mode,setMode]=useState('remote'),[sort,setSort]=useState('score');
- const [sourceStats,setSourceStats]=useState({}),[reviews,setReviews]=useState([]),[excluded,setExcluded]=useState([]),[filterStats,setFilterStats]=useState({}),[rawScanned,setRawScanned]=useState(0),[busy,setBusy]=useState(false),[results,setResults]=useState([]),[message,setMessage]=useState(''),[error,setError]=useState(''),[checked,setChecked]=useState(0),[counts,setCounts]=useState({new:0,total:0}),[completed,setCompleted]=useState(false),[visibleCount,setVisibleCount]=useState(10),[evaluated,setEvaluated]=useState(0),[evaluationTotal,setEvaluationTotal]=useState(0),[scoringNow,setScoringNow]=useState([]),[scoringFailed,setScoringFailed]=useState([]),[scoringAttempted,setScoringAttempted]=useState([]);
+ const [sourceStats,setSourceStats]=useState({}),[reviews,setReviews]=useState([]),[excluded,setExcluded]=useState([]),[filterStats,setFilterStats]=useState({}),[rawScanned,setRawScanned]=useState(0),[busy,setBusy]=useState(false),[results,setResults]=useState([]),[message,setMessage]=useState(''),[error,setError]=useState(''),[cvErrors,setCvErrors]=useState({}),[checked,setChecked]=useState(0),[counts,setCounts]=useState({new:0,total:0}),[completed,setCompleted]=useState(false),[visibleCount,setVisibleCount]=useState(10),[evaluated,setEvaluated]=useState(0),[evaluationTotal,setEvaluationTotal]=useState(0),[scoringNow,setScoringNow]=useState([]),[scoringFailed,setScoringFailed]=useState([]),[scoringAttempted,setScoringAttempted]=useState([]);
  useEffect(()=>{fetch('/api/search-filters',{cache:'no-store'}).then(r=>{if(!r.ok)throw Error('HTTP '+r.status);return r.json()}).then(d=>{if(d?.countries)setCountries(d.countries);if(!Array.isArray(d?.sources)||d.sources.length<4)throw Error('Lista de fontes incompleta');setSources(d.sources);}).catch(()=>setError('Não foi possível carregar a lista completa de fontes. Atualize a página; se persistir, consulte o serviço.'))},[]);
  const query=()=>new URLSearchParams({roles,country,mode,days,sort,source}).toString();
  const changeSource=value=>{setSource(value);setResults([]);setReviews([]);setExcluded([]);setChecked(0);setCompleted(false);setMessage("Fonte alterada. Clique em Buscar oportunidades para executar a nova seleção.");setError("");};
@@ -25,11 +26,12 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{}}){
 
    (d.items||[]).forEach(j=>all.set(j.url,j));record(d);count+=d.total||0;
    setResults(visibleUndecided([...all.values()]));setCounts({new:all.size,total:count});
-   // Score incomplete JDs as each batch arrives rather than waiting for the entire catalog.
+   // Select from the entire discovery universe before spending any AI tokens.
    const scoredOrAttempted=new Set();
    let resolved=0;
-   async function enrichAvailable(){
-     const candidates=[...all.values()].filter(j=>!scoredOrAttempted.has(j.url) &&
+   async function enrichAvailable(selectedUrls){
+     const selected=new Set(selectedUrls);
+     const candidates=[...all.values()].filter(j=>selected.has(j.url)&&!scoredOrAttempted.has(j.url) &&
        j.ranking?.score==null);
      const waiting=[...new Map(candidates.map(j=>[j.url,j])).values()];
      if(!waiting.length)return;
@@ -57,8 +59,21 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{}}){
        }
      }
    }
-   await enrichAvailable();
-   if(['himalayas','remotive','remoteok'].includes(source)){
+   async function rankEntireCollection(){
+     if(!all.size)return;
+     setMessage('Selecionando as melhores candidatas de '+all.size+' vagas antes da avaliação por IA…');
+     const response=await fetch('/api/ranking/shortlist',{method:'POST',headers:{'Content-Type':'application/json'},
+       signal:AbortSignal.timeout(15000),body:JSON.stringify({jobs:[...all.values()].map(j=>({url:j.url,title:j.title,description:(j.description||'').slice(0,1500),ranking:j.ranking,needs_verification:j.needs_verification})),roles,limit:40})});
+     if(!response.ok)throw Error('Triagem global indisponível (HTTP '+response.status+'); nenhuma avaliação paga foi iniciada.');
+     const selection=await response.json();
+     if(!Array.isArray(selection.urls))throw Error('Resposta inválida da triagem global');
+     setMessage('Triagem de '+all.size+' vagas concluída. Avaliando até '+selection.urls.length+' candidatas prioritárias com IA…');
+     await enrichAvailable(selection.urls);
+   }
+   // Indeed is an on-demand provider, not a catalog board. A catalog scan
+   // with source=indeed always returns 400 and can flood the UI with retries.
+   if(['himalayas','remotive','remoteok','indeed'].includes(source)){
+     await rankEntireCollection();
      setCompleted(true);
      setMessage('Consulta à fonte '+source+' concluída; vagas apresentadas após filtros e exclusões do Histórico.');
      return;
@@ -69,11 +84,11 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{}}){
     let batch;try{batch=await requestJson('/api/catalog/scan?offset='+offset+'&limit=4&'+qs)}catch(err){skipped++;offset+=4;setMessage('Alguns quadros falharam; continuando os demais. Falhas: '+skipped);continue}
     (batch.items||[]).filter(j=>source==='all'||j.source?.toLowerCase()===source||(source==='greenhouse'&&j.source?.toLowerCase()==='greenhouse_eu')).forEach(j=>{const old=all.get(j.url);all.set(j.url,old&&(old.ranking?.score!=null||scoredOrAttempted.has(j.url))?old:j)});record(batch);
     offset=batch.next_offset;if(!Number.isFinite(offset))throw Error('Paginação inválida');
-    count+=batch.found||0;setResults(visibleUndecided([...all.values()]));await enrichAvailable();setChecked(x=>x+(batch.details||[]).length);setCounts({new:all.size,total:count});
+    count+=batch.found||0;setResults(visibleUndecided([...all.values()]));setChecked(x=>x+(batch.details||[]).length);setCounts({new:all.size,total:count});
     if(batch.complete){completedAll=true;break}
     if(!(batch.details||[]).length)break;
    }
-   await enrichAvailable();
+   await rankEntireCollection();
    setCompleted(completedAll);
    setMessage(completedAll&&!skipped&&!Object.values(sourceTotals).some(v=>v.erros)?'Busca concluída.':('Busca com fontes indisponíveis: '+(skipped+Object.values(sourceTotals).reduce((n,v)=>n+v.erros,0))+' falhas registradas. Zero resultado não significa zero vagas. Confira Fontes.'));
   }catch(e){setError(e.message);setMessage('Busca parcial — os resultados encontrados continuam disponíveis.')}
@@ -94,6 +109,7 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{}}){
    }catch(e){setScoringFailed(prev=>[...prev,job.url]);setError(e.message)}
    finally{setScoringNow([]);setScoringAttempted(prev=>[...prev,job.url])}
  }
+ const [cvNow,setCvNow]=useState([]);
  const [decisionNow,setDecisionNow]=useState([]),[hiddenDecisions,setHiddenDecisions]=useState([]);
  async function markDecision(job,state){
    if(decisionNow.includes(job.url))return;
@@ -115,22 +131,40 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{}}){
    }catch(e){setError('Não foi possível marcar “'+job.title+'” como '+state+': '+(e.name==='TimeoutError'?'servidor demorou a responder; confira o Histórico antes de tentar novamente.':e.message))}
    finally{setDecisionNow(prev=>prev.filter(x=>x!==job.url))}
  }
- const [cvNow,setCvNow]=useState([]);
  async function generateCv(job){
-   setCvNow(prev=>[...prev,job.url]);setError('');
+   // AI-only one-click flow: never silently substitute the old deterministic engine.
+   if(cvNow.includes(job.url))return;
+   setError('');setCvErrors(v=>({...v,[job.url]:''}));setCvNow(v=>[...v,job.url]);setMessage('IA analisando a vaga e preparando currículo ATS…');
    try{
-     const response=await fetch('/api/resume/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:job.url,title:job.title,company:job.company})});
-     if(!response.ok){const error=await response.json().catch(()=>null);throw Error(error?.detail||'Falha ao gerar currículo')}
-     const cvMode=response.headers.get('X-CV-Mode')||'deterministic';
-     const aiCalls=Number(response.headers.get('X-AI-Calls')||0);
-     const aiCost=Number(response.headers.get('X-AI-Cost-USD')||0);
-     const modes={hybrid:'Resumo refinado por IA',cached_hybrid:'Resumo IA reutilizado do cache',deterministic:'Currículo determinístico',fallback:'IA não validada; entregue versão determinística',cached_fallback:'Versão determinística recuperada do cache'};
-     const cvBuild=response.headers.get('X-CV-Build')||'não identificado';
-     setMessage((modes[cvMode]||'Currículo gerado')+' • Versão '+cvBuild+' • Modo '+cvMode+' • '+aiCalls+' chamada(s) • US$ '+aiCost.toFixed(6)+' nesta geração. A versão e o modo também ficam gravados nas propriedades do DOCX.');
-     const file=await response.blob();const fileUrl=URL.createObjectURL(file);
-     const a=document.createElement('a');a.href=fileUrl;a.download=['Olinto Manso Pereira',job.title,job.company].map(x=>String(x||'').replace(/[\\/:*?\"<>|]/g,'').trim()).join(' - ')+'.docx';a.click();setTimeout(()=>URL.revokeObjectURL(fileUrl),1000);
-   }catch(error){setError(error.message)}finally{setCvNow(prev=>prev.filter(x=>x!==job.url))}
+     const response=await fetch('/api/resume/ai-download',{
+       method:'POST',credentials:'same-origin',
+       headers:{'Content-Type':'application/json'},
+       signal:AbortSignal.timeout(65000),
+       body:JSON.stringify({url:job.url,title:job.title,company:job.company||'',description:job.description||''})});
+     if(!response.ok){
+       const error=await response.json().catch(()=>({}));
+       throw Error(error.detail||('Erro HTTP '+response.status));
+     }
+     if(!(response.headers.get('content-type')||'').includes('wordprocessingml')){
+       throw Error('O servidor não devolveu um DOCX');
+     }
+     const content=await response.blob();
+     const disposition=response.headers.get('Content-Disposition')||'';
+     const found=disposition.match(/filename\\*=UTF-8''([^;]+)/i);
+     const filename=found?decodeURIComponent(found[1]):('Olinto Manso Pereira - '+(job.title||'Vaga')+'.docx');
+     const blobUrl=URL.createObjectURL(content);
+     const anchor=document.createElement('a');
+     anchor.href=blobUrl;anchor.download=filename;document.body.appendChild(anchor);
+     anchor.click();anchor.remove();
+     setTimeout(()=>URL.revokeObjectURL(blobUrl),30000);
+     setMessage('Currículo personalizado por IA, auditado e disponível para download.');
+   }catch(e){
+     setMessage('');
+     setError('Currículo não gerado: '+e.message);
+     setCvErrors(v=>({...v,[job.url]:'Currículo não gerado: '+e.message}));
+   }finally{setCvNow(v=>v.filter(x=>x!==job.url));}
  }
+
  const currentMatches=searchedQuery!==''&&searchedQuery===query();
  const sourceKey=v=>String(v||'').toLowerCase().replace(/[^a-z0-9]/g,'');
  const visibleReviews=(currentMatches?reviews:[]).filter(v=>(source==='all'||sourceKey(v.source)===sourceKey(source)||source==='greenhouse'&&sourceKey(v.source)==='greenhouseeu'));
@@ -206,9 +240,9 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{}}){
   {currentMatches&&(results.length>0||reviews.length>0||completed)&&<><div className="history-stats"><span>{onlyNew?"Vagas novas nesta busca":"Oportunidades para avaliar"}: <b>{ordered.length}</b></span><span>Confirmadas: <b>{results.length}</b></span><span>Precisam de confirmação: <b>{visibleReviews.filter(v=>!results.some(r=>r.url===v.url)).length}</b></span><span>Anúncios analisados: <b>{rawScanned}</b></span><span>Quadros consultados: <b>{checked}</b></span>{mode!=='all'&&<span>Modalidade a confirmar: <b>{unknownModeCount}</b></span>}{country!=='GLOBAL'&&<span>País a confirmar: <b>{unknownCountryCount}</b></span>}</div>
   {ordered.length===0?<p>{onlyNew?"Nenhuma vaga inédita e sem nota nesta pesquisa. Desmarque o filtro para conferir os demais resultados e abra Fontes para verificar os quadros consultados.":"Nenhuma vaga correspondente foi identificada nos quadros consultados. Abra Fontes e Auditoria dos filtros para ver falhas e exclusões."}</p>:
   <><p>Panorama de vagas relacionadas aos cargos selecionados. A marcação "A confirmar" significa que faltam provas de modalidade, país ou data — não é uma confirmação de elegibilidade.</p>
-  <div className="table-wrap"><table><thead><tr><th>Nota / evidências</th><th>Cargo e situação</th><th>Empresa</th><th>Local informado</th><th>Data</th><th>Modalidade detectada</th><th>Fonte</th><th style={{textAlign:'right'}}>Ações</th></tr></thead><tbody>{ordered.slice(0,visibleCount).map(v=><tr key={v.url}><td>{scoreDisplay(v)}<small style={{display:'block'}}>{scoreExplanation(v)}</small><details><summary>Como foi avaliada?</summary><p>{v.ranking?.reason||'Sem análise'}</p>{v.ranking?.application_recommendation&&<p><strong>Recomendação de candidatura:</strong> {v.ranking.application_recommendation.score==null?'A confirmar':v.ranking.application_recommendation.score+'/100'} — {v.ranking.application_recommendation.reason} {v.ranking.application_recommendation.factors?.join(' · ')}</p>}{v.ranking?.match_summary&&<p><strong>Comparação profissional:</strong> {v.ranking.match_summary.direct} diretas · {v.ranking.match_summary.transferable} transferíveis · {v.ranking.match_summary.unproven} sem evidência documentada</p>}<small>Requisitos identificados: {v.ranking?.evaluated_requirements??0} · Obrigatórios: {v.ranking?.mandatory_count??0} · Desejáveis analisados: {v.ranking?.desirable_count??0} · Não comprovados: {v.ranking?.unverified_count??0} · Não interpretados: {v.ranking?.uninterpreted_count??0} · Cobertura: {v.ranking?.coverage_pct??0}%</small>{v.ranking?.requirements?.map((r,i)=><p key={i}><b>{r.type}: {r.name}</b> — {r.match_level==='direta'?'Correspondência direta':r.match_level==='transferivel'?'Experiência transferível':r.status==='nao_interpretado'?'Não interpretado':'Sem evidência comprovada'}{r.evidence?' · Evidência: '+r.evidence:''}{r.explanation?' · '+r.explanation:''}</p>)}<p>Prioridade (fora da nota): {v.ranking?.priority?.remote?'Remoto':'Modalidade não remota/indefinida'} · {v.ranking?.priority?.salary_informed?'Salário informado':'Salário não informado'} · Setor: {v.ranking?.priority?.sector||'não identificado'}</p></details></td><td><a href={v.url} target="_blank" rel="noopener noreferrer">{v.title}</a>{v.is_new&&v.ranking?.score==null&&<span title="Vaga descoberta pela primeira vez pelo Caçador" style={{display:'inline-flex',verticalAlign:'middle',marginLeft:8,background:'#ffedd5',color:'#9a3412',border:'1px solid #fdba74',borderRadius:999,padding:'2px 8px',fontWeight:800,fontSize:11}}>Novo!</span>}{v.ranking?.score!=null&&<button type="button" style={{display:'block',marginTop:6}} disabled={cvNow.includes(v.url)} onClick={()=>generateCv(v)}>{cvNow.includes(v.url)?'Gerando currículo…':'Gerar currículo ATS (DOCX)'}</button>}<small style={{display:'block',fontWeight:600,marginTop:4}}> {v.confirmed?'Confirmada':'A confirmar: '+(v.needs_verification||[]).join(', ')}</small>{v.jd_evidence?.family_evidence?.length>0&&<small style={{display:'block',opacity:.75}}>JD: {v.jd_evidence.family_evidence.flatMap(e=>e.evidence).slice(0,2).join(' / ')}</small>}</td><td>{v.company||'Não informada'}{v.already_known&&<small style={{display:'block',opacity:.65}}>Já conhecida</small>}</td><td>{v.location||'Não informada'}</td><td>{v.published?String(v.published).slice(0,10):'—'}</td><td>{({remote:'Remoto',hybrid:'Híbrido',onsite:'Presencial'})[v.detected_mode]||'Não identificada'}</td><td>{v.source||'—'}{v.board_slug&&<small style={{display:'block',opacity:.76}}>Quadro: {v.board_slug}</small>}</td><td style={{textAlign:'right',whiteSpace:'nowrap'}}><DecisionActions job={v} pending={decisionNow.includes(v.url)} onDecision={markDecision}/></td></tr>)}</tbody></table></div>{ordered.length>visibleCount&&<button type="button" className="import-btn" onClick={()=>setVisibleCount(v=>v+10)}>Mostrar mais 10 resultados ({Math.min(visibleCount,ordered.length)} de {ordered.length})</button>}</>}
-  {(unknownModeCount>0||unknownCountryCount>0)&&<details className="catalog-diagnostics"><summary>Vagas não confirmadas pelos filtros ({reviews.filter(v=>(v.needs_verification||[]).includes('pais')||(v.needs_verification||[]).includes('modalidade')).length})</summary><p>Essas vagas não foram incluídas entre as elegíveis. País ou modalidade precisam ser comprovados.</p><div className="table-wrap"><table><thead><tr><th>Vaga</th><th>Fonte</th><th>Motivo</th><th>Nota</th></tr></thead><tbody>{reviews.filter(v=>(v.needs_verification||[]).includes('pais')||(v.needs_verification||[]).includes('modalidade')).map(v=><tr key={v.url}><td><a href={v.url} target="_blank" rel="noopener noreferrer">{v.title}</a></td><td>{v.source||'—'}</td><td>{(v.needs_verification||[]).join(', ')}</td><td>{scoreDisplay(v)} <button type="button" disabled={scoringNow.includes(v.url)} onClick={()=>evaluateManually(v)}>Avaliar esta vaga</button> <DecisionActions job={v} pending={decisionNow.includes(v.url)} onDecision={markDecision}/></td></tr>)}</tbody></table></div></details>}
-  {excluded.length>0&&<details className="catalog-diagnostics"><summary>Fora dos filtros — decidir manualmente ({excluded.length} nesta amostra)</summary><p>Esses anúncios não passaram nos critérios selecionados. Não são considerados elegíveis. Mostramos até 25 por lote e 300 nesta busca, sem repetir vagas já decididas.</p><div className="table-wrap"><table><thead><tr><th>Vaga</th><th>Empresa</th><th>Fonte</th><th>Motivo da exclusão</th><th>Ações</th></tr></thead><tbody>{excluded.filter(v=>!hiddenDecisions.includes(v.url)).sort((a,b)=>geoPriority(a)-geoPriority(b)).map(v=><tr key={v.url}><td><a href={v.url} target="_blank" rel="noopener noreferrer">{v.title}</a></td><td>{v.company||'Não informada'}</td><td>{v.source||'—'}</td><td>{({cargo:'Cargo',pais:'País',modalidade:'Modalidade',data:'Data',espanhol_obrigatorio:'Espanhol obrigatório'})[v.excluded_reason]||v.excluded_reason}</td><td><DecisionActions job={v} pending={decisionNow.includes(v.url)} onDecision={markDecision}/></td></tr>)}</tbody></table></div></details>}
+  <div className="table-wrap"><table><thead><tr><th>Nota / evidências</th><th>Cargo e situação</th><th>Empresa</th><th>Local informado</th><th>Data</th><th>Modalidade detectada</th><th>Fonte</th><th style={{textAlign:'right'}}>Ações</th></tr></thead><tbody>{ordered.slice(0,visibleCount).map(v=><tr key={v.url}><td>{scoreDisplay(v)}<small style={{display:'block'}}>{scoreExplanation(v)}</small><details><summary>Como foi avaliada?</summary><p>{v.ranking?.reason||'Sem análise'}</p>{v.ranking?.application_recommendation&&<p><strong>Recomendação de candidatura:</strong> {v.ranking.application_recommendation.score==null?'A confirmar':v.ranking.application_recommendation.score+'/100'} — {v.ranking.application_recommendation.reason} {v.ranking.application_recommendation.factors?.join(' · ')}</p>}{v.ranking?.match_summary&&<p><strong>Comparação profissional:</strong> {v.ranking.match_summary.direct} diretas · {v.ranking.match_summary.transferable} transferíveis · {v.ranking.match_summary.unproven} sem evidência documentada</p>}<small>Requisitos identificados: {v.ranking?.evaluated_requirements??0} · Obrigatórios: {v.ranking?.mandatory_count??0} · Desejáveis analisados: {v.ranking?.desirable_count??0} · Não comprovados: {v.ranking?.unverified_count??0} · Não interpretados: {v.ranking?.uninterpreted_count??0} · Cobertura: {v.ranking?.coverage_pct??0}%</small>{v.ranking?.requirements?.map((r,i)=><p key={i}><b>{r.type}: {r.name}</b> — {r.match_level==='direta'?'Correspondência direta':r.match_level==='transferivel'?'Experiência transferível':r.status==='nao_interpretado'?'Não interpretado':'Sem evidência comprovada'}{r.evidence?' · Evidência: '+r.evidence:''}{r.explanation?' · '+r.explanation:''}</p>)}<p>Prioridade (fora da nota): {v.ranking?.priority?.remote?'Remoto':'Modalidade não remota/indefinida'} · {v.ranking?.priority?.salary_informed?'Salário informado':'Salário não informado'} · Setor: {v.ranking?.priority?.sector||'não identificado'}</p></details></td><td><a href={v.url} target="_blank" rel="noopener noreferrer">{v.title}</a>{v.is_new&&v.ranking?.score==null&&<span title="Vaga descoberta pela primeira vez pelo Caçador" style={{display:'inline-flex',verticalAlign:'middle',marginLeft:8,background:'#ffedd5',color:'#9a3412',border:'1px solid #fdba74',borderRadius:999,padding:'2px 8px',fontWeight:800,fontSize:11}}>Novo!</span>}<small style={{display:'block',fontWeight:600,marginTop:4}}> {v.confirmed?'Confirmada':'A confirmar: '+(v.needs_verification||[]).join(', ')}</small>{v.jd_evidence?.family_evidence?.length>0&&<small style={{display:'block',opacity:.75}}>JD: {v.jd_evidence.family_evidence.flatMap(e=>e.evidence).slice(0,2).join(' / ')}</small>}</td><td>{v.company||'Não informada'}{v.already_known&&<small style={{display:'block',opacity:.65}}>Já conhecida</small>}</td><td>{v.location||'Não informada'}</td><td>{v.published?String(v.published).slice(0,10):'—'}</td><td>{({remote:'Remoto',hybrid:'Híbrido',onsite:'Presencial'})[v.detected_mode]||'Não identificada'}</td><td>{v.source||'—'}{v.board_slug&&<small style={{display:'block',opacity:.76}}>Quadro: {v.board_slug}</small>}</td><td style={{textAlign:'right',whiteSpace:'nowrap'}}><DecisionActions job={v} pending={decisionNow.includes(v.url)} onDecision={markDecision} onGenerateCv={generateCv} cvPending={cvNow.includes(v.url)} cvError={cvErrors[v.url]}/></td></tr>)}</tbody></table></div>{ordered.length>visibleCount&&<button type="button" className="import-btn" onClick={()=>setVisibleCount(v=>v+10)}>Mostrar mais 10 resultados ({Math.min(visibleCount,ordered.length)} de {ordered.length})</button>}</>}
+  {(unknownModeCount>0||unknownCountryCount>0)&&<details className="catalog-diagnostics"><summary>Vagas não confirmadas pelos filtros ({reviews.filter(v=>(v.needs_verification||[]).includes('pais')||(v.needs_verification||[]).includes('modalidade')).length})</summary><p>Essas vagas não foram incluídas entre as elegíveis. País ou modalidade precisam ser comprovados.</p><div className="table-wrap"><table><thead><tr><th>Vaga</th><th>Fonte</th><th>Motivo</th><th>Nota</th></tr></thead><tbody>{reviews.filter(v=>(v.needs_verification||[]).includes('pais')||(v.needs_verification||[]).includes('modalidade')).map(v=><tr key={v.url}><td><a href={v.url} target="_blank" rel="noopener noreferrer">{v.title}</a></td><td>{v.source||'—'}</td><td>{(v.needs_verification||[]).join(', ')}</td><td>{scoreDisplay(v)} <button type="button" disabled={scoringNow.includes(v.url)} onClick={()=>evaluateManually(v)}>Avaliar esta vaga</button> <DecisionActions job={v} pending={decisionNow.includes(v.url)} onDecision={markDecision} onGenerateCv={generateCv} cvPending={cvNow.includes(v.url)} cvError={cvErrors[v.url]}/></td></tr>)}</tbody></table></div></details>}
+  {excluded.length>0&&<details className="catalog-diagnostics"><summary>Fora dos filtros — decidir manualmente ({excluded.length} nesta amostra)</summary><p>Esses anúncios não passaram nos critérios selecionados. Não são considerados elegíveis. Mostramos até 25 por lote e 300 nesta busca, sem repetir vagas já decididas.</p><div className="table-wrap"><table><thead><tr><th>Vaga</th><th>Empresa</th><th>Fonte</th><th>Motivo da exclusão</th><th>Ações</th></tr></thead><tbody>{excluded.filter(v=>!hiddenDecisions.includes(v.url)).sort((a,b)=>geoPriority(a)-geoPriority(b)).map(v=><tr key={v.url}><td><a href={v.url} target="_blank" rel="noopener noreferrer">{v.title}</a></td><td>{v.company||'Não informada'}</td><td>{v.source||'—'}</td><td>{({cargo:'Cargo',pais:'País',modalidade:'Modalidade',data:'Data',espanhol_obrigatorio:'Espanhol obrigatório'})[v.excluded_reason]||v.excluded_reason}</td><td><DecisionActions job={v} pending={decisionNow.includes(v.url)} onDecision={markDecision} onGenerateCv={generateCv} cvPending={cvNow.includes(v.url)} cvError={cvErrors[v.url]}/></td></tr>)}</tbody></table></div></details>}
   <details className="catalog-diagnostics"><summary>Fontes consultadas nesta busca</summary><div className="table-wrap"><table><thead><tr><th>Fonte</th><th>Consultas</th><th>Anúncios brutos</th><th>Pendências</th></tr></thead><tbody>{Object.entries(sourceStats).sort((a,b)=>b[1].recebidas-a[1].recebidas).map(([source,v])=><tr key={source}><td>{source}</td><td>{v.consultas}</td><td>{v.recebidas}</td><td>{v.erros}</td></tr>)}</tbody></table></div></details>
   <details className="catalog-diagnostics"><summary>Auditoria dos filtros</summary><p>Total bruto analisado: {rawScanned}. As exclusões são contadas por motivo, antes da deduplicação com o histórico.</p>{Object.entries(filterStats).map(([reason,n])=><p key={reason}>{reason}: <b>{n}</b></p>)}</details>
   </>}

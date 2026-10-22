@@ -158,7 +158,8 @@ EXPERIENCE.append({"role":"Professor de MBA","company":"Estácio",
     "dates":"jun 2016 – out 2016",
     "facts":["Atuação como professor de MBA em pós-graduação de Recursos Humanos."]})
 
-EDUCATION = ["MBA em Marketing — Universidade de São Paulo (2015–2016)",
+EDUCATION = ["Graduação — Universidade de São Paulo (USP)",
+             "MBA em Marketing — Universidade de São Paulo (2015–2016)",
              "MBA em Administração e Gestão — Fundação Getulio Vargas (2001–2003)",
              "Professional Scrum Product Owner I (PSPO I)"]
 STOP={"the","and","with","for","that","from","have","will","are","this","your","our",

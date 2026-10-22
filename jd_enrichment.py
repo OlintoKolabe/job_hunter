@@ -13,7 +13,8 @@ from jd_signals import signals
 from block4_score import score_job,merge_semantic_requirements,hard_role_mismatch,recommend_application
 from jd_retrieval import extract_public_jd
 from score_repository import get_cached,get_previous_semantic,save,reserve,settle,PROFILE_VERSION,RUBRIC_VERSION,key_for
-from ai_interpreter import interpret
+from ai_resume_matcher import (evaluate as evaluate_ai, to_ranking, estimate_cost,
+                               reset_billable_usage, billable_usage)
 import os
 import psycopg
 from search_filters import detect_work_mode
@@ -45,6 +46,39 @@ def remote_detail(job):
     if gh:return gh,None
     return inhire_detail(job)
 
+def fallback_public_jd(job):
+    """Single full-JD reader shared by ranking and CV creation.
+
+    Prefer a provider's existing public detail API where available. For Indeed
+    the exact requisition key must match before JobSpy content is accepted.
+    """
+    url=str(job.get('url') or '')
+    detail=remote_detail(job)
+    if detail:
+        try:
+            endpoint,headers=detail
+            result=fetch_json(endpoint,headers) if headers else fetch_json(endpoint)
+            value=(result.get('jobPage') or result.get('page') or result) if isinstance(result,dict) else {}
+            if isinstance(value,dict):
+                content=value.get('content') or value.get('description') or value.get('jobDescription') or ''
+                if not content and isinstance(value.get('job'),dict):
+                    content=value['job'].get('description') or ''
+                # Preserve even short provider responses in the JD cache; the
+                # evaluator separately rejects JDs too sparse for scoring.
+                if isinstance(content,str) and content.strip():
+                    return content[:MAX_JD_CHARS]
+        except Exception:
+            pass
+    if urlsplit(url).hostname in ('br.indeed.com','www.indeed.com','indeed.com'):
+        try:
+            from indeed_provider import description_for_job
+            content=description_for_job(url,str(job.get('title') or ''),str(job.get('company') or ''))
+            if content and len(content.strip())>=300:
+                return content[:MAX_JD_CHARS]
+        except Exception:
+            pass
+    return extract_public_jd(url)
+
 def hydrate_jobs(cursor,jobs,roles,url_key,limit=PER_BATCH_LIMIT):
     """Return scored public dictionaries and coverage counts. Cursor is request-scoped.
     Only up to limit fresh remote requests, cached hits are unrestricted.
@@ -67,18 +101,7 @@ def hydrate_jobs(cursor,jobs,roles,url_key,limit=PER_BATCH_LIMIT):
             pending.append((key,j))
     def fetch(pair):
         key,job=pair
-        try:
-            detail=remote_detail(job)
-            if not detail:return key,extract_public_jd(str(job.get('url') or ''))
-            endpoint,headers=detail
-            result=fetch_json(endpoint,headers) if headers else fetch_json(endpoint)
-            value=(result.get("jobPage") or result.get("page") or result) if isinstance(result,dict) else {}
-            if not isinstance(value,dict):return key,extract_public_jd(str(job.get("url") or ""))
-            content=value.get("content") or value.get("description") or value.get("jobDescription") or ""
-            if not content and isinstance(value.get("job"),dict):content=value["job"].get("description") or ""
-            if not isinstance(content,str) or not content.strip():return key,extract_public_jd(str(job.get('url') or ''))
-            return key,content[:MAX_JD_CHARS]
-        except Exception:return key,extract_public_jd(str(job.get('url') or ''))
+        return key,fallback_public_jd(job)
     fetched=0
     with ThreadPoolExecutor(max_workers=4) as pool:
         for future in as_completed([pool.submit(fetch,p) for p in pending[:limit]]):
@@ -115,49 +138,46 @@ def hydrate_jobs(cursor,jobs,roles,url_key,limit=PER_BATCH_LIMIT):
                    "reason":"Cargo de desenvolvimento ou QA técnico, sem experiência profissional comprovada nessa função; não é um julgamento da capacidade de aprendizado."})
                 model='hard_exclusion'
                 ai_status='not_needed'
-            # Re-grade previously paid AI extraction before considering another API request.
-            previous=get_previous_semantic(cursor,key,jd_hash,roles) if description and not is_technical_role else None
-            if previous and len(previous)<4:previous=None
-            if previous:
-                evaluation=merge_semantic_requirements(evaluation,previous)
-                evaluation['ai_interpreted']=True
-                evaluation['regraded_from_cache']=True
-                model='hybrid'
-                ai_status='cache'
-            # Only new or truly changed descriptions may require paid interpretation.
-            if description and not previous and not is_technical_role and os.getenv('JH_AI_ENABLED')=='1' and os.getenv('OPENAI_API_KEY'):
+            # Resume Matcher-inspired, evidence-grounded AI replaces the legacy
+            # extraction + deterministic grading on opt-in; one paid call per JD.
+            if description and not is_technical_role and os.getenv('JH_AI_ENABLED')=='1' and os.getenv('OPENAI_API_KEY'):
                 with psycopg.connect(os.environ['DATABASE_URL'],connect_timeout=7) as budget_conn:
                     with budget_conn.cursor() as budget_cur:
-                        usage_id=reserve(budget_cur,key)
+                        usage_id=reserve(budget_cur,key,amount=0.015)
                 if usage_id is not None:
-                    ai_status='attempted'
-                    extracted=None; actual=0.002
+                    successful=False
+                    reset_billable_usage()
                     try:
-                        extracted=interpret(description)
-                        if extracted:
-                            usage=extracted.get('usage',{})
-                            actual=(usage.get('prompt_tokens',0)*0.20+usage.get('completion_tokens',0)*1.20)/1000000
+                        result=evaluate_ai(description,str(complete.get('title') or ''),
+                                           str(complete.get('company') or ''))
+                        evaluation=to_ranking(complete,roles,result)
+                        model='ai_matcher'
+                        ai_status='interpreted'
+                        successful=True
                     except Exception as exc:
                         ai_status='failed'
-                        print('JH_AI_INTERPRET_FAILURE',type(exc).__name__,flush=True)
+                        # Surface only the exception class and a bounded diagnostic;
+                        # never log the JD, evidence catalog, key, or model output.
+                        diagnostic=str(exc)[:100] if isinstance(exc,ValueError) else ''
+                        print('JH_AI_MATCHER_FAILURE',type(exc).__name__,repr(diagnostic),flush=True)
+                        evaluation.update({'score':None,'fit':None,'confidence':'ai_error',
+                           'reason':'Análise por IA não concluída; nenhuma nota substituta foi inventada'})
+                        model='ai_error'
                     finally:
+                        # As in the CV flow, failed validation after a provider
+                        # response is billable, but never assume full reservation.
+                        actual=min(0.015,estimate_cost(billable_usage()))
                         with psycopg.connect(os.environ['DATABASE_URL'],connect_timeout=7) as budget_conn:
                             with budget_conn.cursor() as budget_cur:
-                                settle(budget_cur,usage_id,actual,bool(extracted and extracted.get("requirements")))
-                    if ai_status=='failed' or not extracted or not extracted.get('requirements'):
-                        ai_status='failed'
-                        evaluation['_ai_failed']=True
-                        model='ai_error'
-                    if extracted and extracted.get('requirements'):
-                        evaluation=merge_semantic_requirements(evaluation,extracted['requirements'])
-                        evaluation['ai_interpreted']=True
-                        model='hybrid'
-                        ai_status='interpreted'
+                                settle(budget_cur,usage_id,actual,successful)
                 else:
                     ai_status='budget_exhausted'
-            elif description and not previous and not is_technical_role:
+                    evaluation.update({'score':None,'fit':None,'confidence':'ai_budget_exhausted'})
+            elif description and not is_technical_role:
                 ai_status='disabled'
-            if description and (evaluation.get('score') is not None or model in ('hybrid','ai_error','hard_exclusion')):save(cursor,key,jd_hash,roles,evaluation,model)
+                evaluation.update({'score':None,'fit':None,'confidence':'ai_disabled',
+                                   'reason':'IA desligada: é necessária a chave OpenAI e JH_AI_ENABLED=1'})
+            if description and (evaluation.get('score') is not None or model=='hard_exclusion'):save(cursor,key,jd_hash,roles,evaluation,model)
         recommendation=recommend_application(complete,evaluation)
         # Persist the secondary judgment alongside an existing score without
         # changing the score key, spending API credits or changing the model.

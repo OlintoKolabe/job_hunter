@@ -6,22 +6,22 @@ from datetime import datetime,timezone,timedelta
 from psycopg.types.json import Jsonb
 from block4_score import SKILLS
 PROFILE_VERSION="profile-oct-2026"
-RUBRIC_VERSION="block4.1-v5-professional-core"
+RUBRIC_VERSION="resume-matcher-evidence-v1"
 MONTHLY_CAP_USD=5.0
-MAX_REQUEST_USD=0.002
+MAX_REQUEST_USD=0.015
 def key_for(roles):return hashlib.sha256(roles.encode()).hexdigest()
 def get_cached(cur,url,jd_hash,roles):
     require_hybrid=os.getenv('JH_AI_ENABLED')=='1' and bool(os.getenv('OPENAI_API_KEY'))
     cur.execute("""SELECT result,model,created_at FROM jh_score_cache WHERE normalized_url=%s AND jd_hash=%s
         AND profile_version=%s AND rubric_version=%s AND roles_hash=%s
-        AND (%s=FALSE OR model IN ('hybrid','ai_error','hard_exclusion'))""",
+        AND (%s=FALSE OR model IN ('ai_matcher','ai_error','hard_exclusion'))""",
         (url,jd_hash,PROFILE_VERSION,RUBRIC_VERSION,key_for(roles),require_hybrid))
     item=cur.fetchone()
     if not item:return None
     result=item[0]
     if not isinstance(result,dict):return None
     if item[1]=='ai_error':return result
-    return result if result.get('score') is not None or (require_hybrid and item[1]=='hybrid') else None
+    return result if result.get('score') is not None or (require_hybrid and item[1]=='ai_matcher') else None
 def get_previous_semantic(cur,url,jd_hash,roles):
     """Re-score already paid-for extraction after a rubric change; never call AI."""
     cur.execute("""SELECT result FROM jh_score_cache WHERE normalized_url=%s AND jd_hash=%s

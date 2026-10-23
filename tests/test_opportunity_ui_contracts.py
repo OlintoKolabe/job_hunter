@@ -55,7 +55,7 @@ class OpportunityUIContracts(unittest.TestCase):
         self.assertIn("v.jd_available===true&&<button",s)
         self.assertIn("if(v.jd_available===false)return 'no_jd'",s)
         self.assertIn("'JD indisponível'",s)
-        self.assertIn('Estimativa local',s)
+        self.assertIn('Aderência local estimada',s)
 
     def test_intermediate_batches_can_score_without_waiting_180(self):
         s=Path('src/Opportunities.jsx').read_text()

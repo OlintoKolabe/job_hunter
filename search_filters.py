@@ -217,6 +217,18 @@ def classify(job,terms,country,mode,days):
     from jd_signals import signals
     evidence=signals(job,", ".join(terms))
     if evidence["spanish_required"]:return "excluded","espanhol_obrigatorio"
+    # Generic family aliases such as "marketing"/"acquisition" must not
+    # admit engineering roles or HR recruitment into an executive search.
+    # Protect explicitly named PM/PO/BA/project/marketing management roles,
+    # including e.g. "Technical Product Manager - Engineering".
+    explicit_target=any(phrase in title for phrase in (
+        "product manager", "product owner", "project manager", "program manager",
+        "business analyst", "marketing manager", "growth manager", "product marketing manager",
+        "gerente de produto", "gerente de projetos", "analista de negocios",
+        "gerente de marketing"))
+    if NON_TARGET_TITLE.search(title) and not explicit_target:return "excluded","cargo"
+    if "talent acquisition" in title and not any("talent acquisition" in term for term in terms):
+        return "excluded","cargo"
     # Match the requested role before applying generic negative title tokens.
     # E.g. "Product Manager, Engineering" is a product leadership vacancy.
     title_matches=role_match(title,terms)
@@ -226,8 +238,11 @@ def classify(job,terms,country,mode,days):
     # Missing JDs on adjacent management roles deserve a review queue, not
     # silent exclusion. They are never confirmed automatically.
     adjacent=bool(re.search(r"\b(?:operations|operacoes|strategy|estrategia|transformation|transformacao|program|delivery|commercial|comercial)\b",title)) and bool(re.search(r"\b(?:lead|manager|head|director|gerente|coordenador|coordenadora|especialista)\b",title))
-    uncertain_role=not title_matches and not evidence["family_evidence"] and adjacent
-    if not title_matches and not evidence["family_evidence"] and not uncertain_role:return "excluded","cargo"
+    # JD vocabulary describes collaboration as well as the role itself.
+    # A technical lead or designer may mention product roadmaps many times;
+    # JD keywords alone must not turn such a title into a PM opening.
+    uncertain_role=not title_matches and adjacent
+    if not title_matches and not adjacent:return "excluded","cargo"
     loc=fold(job.get("location",""))
     structured_geo=fold(" ".join(str(job.get(k) or "") for k in ("country","countryCode","countryName","city","state","region","eligibleLocations","remoteRegions")))
     loc=(loc+" "+structured_geo).strip()

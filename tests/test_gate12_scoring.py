@@ -86,6 +86,20 @@ class Gate12Scoring(unittest.TestCase):
              "description":"Head of Marketing — Remote (EMEA). Applicants must be in the region."}
         self.assertEqual(classify(job,terms,"BR","remote",0),("excluded","pais"))
 
+    def test_explicit_foreign_locations_fail_brazil_filter(self):
+        terms=search_terms("Product Manager, Project Manager")
+        for location in ("Germany", "Boston", "London", "India", "Australia", "France"):
+            with self.subTest(location=location):
+                self.assertEqual(classify({"title":"Product Manager", "location":location,
+                    "source":"remoteok", "workplaceType":"remote"},terms,"BR","remote",0),
+                    ("excluded","pais"))
+
+    def test_unknown_location_remains_in_review_not_confirmed(self):
+        terms=search_terms("Product Manager")
+        self.assertEqual(classify({"title":"Product Manager", "location":"",
+            "workplaceType":"remote"},terms,"BR","remote",0),
+            ("review","pais"))
+
     def test_internship_requires_explicit_search_intent(self):
         job={"title":"Product Manager Internship","source":"himalayas","location":"Worldwide"}
         self.assertEqual(classify(job,search_terms("Product Manager"),"BR","remote",0),

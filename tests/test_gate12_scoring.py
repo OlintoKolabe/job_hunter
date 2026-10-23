@@ -58,6 +58,28 @@ class Gate12Scoring(unittest.TestCase):
              "workplaceType":"Onsite"}
         self.assertEqual(classify(job,terms,"BR","remote",0)[0],"excluded")
 
+    def test_jd_product_words_do_not_confirm_non_target_titles(self):
+        terms=search_terms("Product Manager, Product Owner, Business Analyst")
+        text=("Responsibilities include product roadmap, stakeholder management, "
+              "product discovery, agile delivery and backlog prioritization. "*6)
+        for title in ("Technical Lead (hands on)", "Estágio em Design",
+                      "Frontend Manager Software Engineer (Hands-On) | Partners Acquisition",
+                      "AI Native Engineer, Growth Marketing", "Talent Acquisition Analyst"):
+            job={"title":title,"description":text,"location":"Brazil - Remote",
+                 "published":(datetime.now(timezone.utc)-timedelta(days=1)).isoformat()}
+            self.assertEqual(classify(job,terms,"BR","remote",7),("excluded","cargo"),title)
+
+    def test_adjacent_program_management_title_remains_reviewable(self):
+        terms=search_terms("Product Manager")
+        job={"title":"Program Delivery Lead", "location":"Brazil - Remote"}
+        self.assertEqual(classify(job,terms,"BR","remote",0),
+                         ("review","cargo_a_confirmar"))
+
+    def test_technical_product_manager_is_not_filtered_as_engineer(self):
+        terms=search_terms("Product Manager")
+        job={"title":"Technical Product Manager - Engineering", "location":"Brazil - Remote"}
+        self.assertEqual(classify(job,terms,"BR","remote",0),("confirmed",""))
+
     def test_ui_separates_score_from_eligibility_and_keeps_no_jd_gate(self):
         ui = Path("src/Opportunities.jsx").read_text(encoding="utf-8")
         self.assertIn("'Aderência local estimada'", ui)

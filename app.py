@@ -331,7 +331,10 @@ def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:
                 except Exception as exc:
                     sources.append({"source":feed,"state":"error","received":0,"error":type(exc).__name__})
     raw_count=len(items)
+    original_items=list(items)
     items,eligibility_fetch=enrich_inhire_before_filter(items,roles)
+    from eligibility_enrichment import eligibility_audit
+    eligibility_quality=eligibility_audit(original_items,items,roles,country,mode,days)
     raw_jobs=list(items)
     try: items,review,filter_stats=analyze_filters(cached_jds_for_filter(items,url_key,DATABASE),roles,country,mode,days,sort)
     except ValueError as e: raise HTTPException(400,str(e))
@@ -372,7 +375,7 @@ def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:
     # Pending eligibility is not automatically enriched or scored.
     fresh_count=len(visible)
     return {"source":"Multifuente","queried":len(sources),"total":len(items),
-        "new":fresh_count,"duplicates":history_excluded,"jd_coverage":coverage,"source_jd_stats":source_jd_stats,"eligibility_fetch":eligibility_fetch,"flow_stats":{"raw":raw_count,"classified_confirmed":len(items),"classified_review":len(review),"history_excluded":history_excluded,"display_confirmed":len(visible),"display_review":len(pending)},"items":visible[:100],"review_items":pending[:150],"filter_stats":filter_stats,"raw_count":raw_count,"details":sources,
+        "new":fresh_count,"duplicates":history_excluded,"jd_coverage":coverage,"source_jd_stats":source_jd_stats,"eligibility_fetch":eligibility_fetch,"eligibility_quality":eligibility_quality,"flow_stats":{"raw":raw_count,"classified_confirmed":len(items),"classified_review":len(review),"history_excluded":history_excluded,"display_confirmed":len(visible),"display_review":len(pending)},"items":visible[:100],"review_items":pending[:150],"filter_stats":filter_stats,"raw_count":raw_count,"details":sources,
         "notice":"Vagas coletadas, ainda sem triagem de elegibilidade Brasil/remoto ou score."}
 
 
@@ -515,7 +518,10 @@ def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False
     # openings, offices or requisition IDs and must not discard jobs here.
     unique=unique_jobs_by_url(found)
     raw_count=len(unique)
-    prepared,eligibility_fetch=enrich_inhire_before_filter(list(unique.values()),roles)
+    original_items=list(unique.values())
+    prepared,eligibility_fetch=enrich_inhire_before_filter(original_items,roles)
+    from eligibility_enrichment import eligibility_audit
+    eligibility_quality=eligibility_audit(original_items,prepared,roles,country,mode,days)
     raw_jobs=list(prepared)
     try: items,review,filter_stats=analyze_filters(cached_jds_for_filter(prepared,url_key,DATABASE),roles,country,mode,days,sort)
     except ValueError as e:raise HTTPException(400,str(e))
@@ -572,7 +578,7 @@ def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False
     fresh_count=len(visible)
     return {"total_sources":len(tasks),"due_only":due_only,"offset":offset,"next_offset":offset+len(batch),
             "complete":offset+len(batch)>=len(tasks),"details":details,
-            "found":len(items),"new":fresh_count,"duplicates":history_excluded,"raw_count":raw_count,"filter_stats":filter_stats,"eligibility_fetch":eligibility_fetch,"flow_stats":{"raw":raw_count,"classified_confirmed":len(items),"classified_review":len(review),"history_excluded":history_excluded,"display_confirmed":len(visible),"display_review":len(pending)},
+            "found":len(items),"new":fresh_count,"duplicates":history_excluded,"raw_count":raw_count,"filter_stats":filter_stats,"eligibility_fetch":eligibility_fetch,"eligibility_quality":eligibility_quality,"flow_stats":{"raw":raw_count,"classified_confirmed":len(items),"classified_review":len(review),"history_excluded":history_excluded,"display_confirmed":len(visible),"display_review":len(pending)},
             "jd_coverage":coverage,"source_jd_stats":source_jd_stats,"review_items":pending[:150],"excluded_items":rejected,"items":visible[:80],"notice":"Vagas candidatas: remoto/Brasil e requisitos ainda aguardam análise completa."}
 
 class JDRequest(BaseModel):

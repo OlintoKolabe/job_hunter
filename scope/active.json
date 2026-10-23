@@ -1,22 +1,22 @@
 {
-  "id": "JOB-HUNTER-ELIGIBILITY-JD-SCORING-CANARY",
+  "id": "JOB-HUNTER-CANARY-SEARCH-TIMEOUT-GATE9-20261023",
   "kind": "bugfix",
   "status": "active",
-  "base_ref": "a3d0b46",
+  "base_ref": "d3da19e45c3b3168f2002f9b1ac638981e8b4e59",
   "production_ref": "feat/phase1-web-foundation",
   "feature_ref": "feat/resume-matcher-ai-evaluation-cv",
-  "objective": "Integrate existing collectors, cached JDs, eligibility and current scoring with distinct UI states and bounded zero-cost analysis for uncertain eligibility.",
-  "allowed_paths": ["app.py", "collectors.py", "source_extensions.py", "search_filters.py", "jd_enrichment.py", "ai_resume_matcher.py", "src/Opportunities.jsx", "tests/test_ai_resume_matcher.py", "tests/test_opportunity_ui_contracts.py", "tests/test_search_500_regression.py", "tests/test_cross_source_eligibility.py", "tests/test_source_coverage.py", "tests/test_block4_1.py", "tests/test_resume_engine.py"],
+  "objective": "Repair six evidenced failure modes in the canary job search: initial-request timeout, slow-source isolation, bounded metadata hydration, failed-batch recovery, UI progress and real end-to-end validation.",
+  "allowed_paths": ["app.py", "collectors.py", "eligibility_enrichment.py", "src/Opportunities.jsx", "tests/test_opportunity_ui_contracts.py", "tests/test_metadata_recovery_gate9.py", "tests/test_search_timeout_gate9.py", "Dockerfile", "GATE_009_METADATA_EVIDENCE.md", "GATE_009_SEARCH_TIMEOUT_EVIDENCE.md"],
   "allowed_changes": [
-    "Preserve existing structured work mode and country metadata from collectors and use conservative eligibility checks without guessing unknowns",
-    "Distinguish absent JD, pending, failure, scored and eligibility-unconfirmed states; hide CV generation for invalid JD",
-    "Score valid cached JDs locally at zero API cost when eligibility is unconfirmed",
-    "Queue only confirmed eligible candidates for existing paid AI evaluation with current budget and persisted scores",
-    "Start bounded confirmed eligible scoring during discovery, retaining deduplication and global candidate selection",
-    "Reuse existing JD cache, scorer, CV engine and collectors; test before/after, cost, filters, UI and performance"
+    "Instrument actual request latency before changing time budgets or source behavior",
+    "Allow catalog batches to run independently of the initial aggregator and retain all real partial results",
+    "Bound and attribute catalog and per-source failures, avoid duplicate expensive retries and preserve consistent pagination",
+    "Use only validated country, mode and publication evidence from existing listing and detail APIs",
+    "Display accurate search status and per-source quality/latency evidence in the existing UI",
+    "Add regression and real-data tests, build the UI and deploy only to the existing isolated canary"
   ],
   "forbidden_changes": [
-    "scoring formula, profile facts, CV generation engine or templates",
+    "scoring formula, profile facts, CV generation engine or templates, persistence schema",
     "new services, dependencies, database tables, schedulers or collectors",
     "paid AI calls for unconfirmed eligibility or invalid JD",
     "assuming missing country or work mode implies eligibility",
@@ -25,12 +25,12 @@
     "hardcoded credentials"
   ],
   "acceptance": [
-    "Unconfirmed vacancies stay unconfirmed; valid JD allows zero-cost local scoring",
-    "Missing or invalid JD never triggers scoring or CV button",
-    "Only confirmed eligible vacancies with valid JD enter paid AI scoring; caching prevents duplicate charges",
-    "First confirmed candidates score before full catalog scan while total work remains bounded",
-    "Twenty real sampled search-matching jobs and cached JDs verify coverage, time, quality and no regressions",
-    "Scope gate and relevant tests pass; canary UI verified before release; main untouched"
+    "Failures in initial aggregation do not prevent actual catalog jobs from reaching the UI",
+    "Timeouts and skipped batches are visible with source attribution, and recovery does not duplicate jobs",
+    "Country, mode, date and history still exclude invalid postings; no mock reaches production",
+    "Twenty or more real sampled searches confirm completion behavior and relative latency where authenticated access is available",
+    "Every targeted regression fails on the previous canary and passes on the new code",
+    "Scope gate, tests, UI build, real canary deployment and end-to-end checks succeed; main stays untouched"
   ],
   "deployment": "Canary only; no main merge without explicit user approval"
 }

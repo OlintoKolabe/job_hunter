@@ -13,9 +13,9 @@ class PublicationPeriodTests(unittest.TestCase):
              patch("search_filters.geo_verdict",return_value="eligible"):
             return classify(job,["product manager"],"BR","remote",days)
 
-    def test_missing_date_excluded_from_period(self):
+    def test_missing_date_is_visible_for_verification_not_confirmed(self):
         for days in (1,3,7,15,30,60,90):
-            self.assertEqual(self.check("",days),("excluded","data"))
+            self.assertEqual(self.check("",days),("review","data"))
         self.assertEqual(self.check("",0),("confirmed",""))
 
     def test_old_date_excluded_and_recent_accepted(self):
@@ -29,7 +29,7 @@ class PublicationPeriodTests(unittest.TestCase):
         self.assertEqual(self.check(future,30),("excluded","data"))
 
     def test_invalid_date_excluded_only_when_period_selected(self):
-        self.assertEqual(self.check("unknown",7),("excluded","data"))
+        self.assertEqual(self.check("unknown",7),("review","data"))
         self.assertEqual(self.check("unknown",0),("confirmed",""))
 
 if __name__=="__main__":unittest.main()

@@ -41,7 +41,7 @@ class Gate12Scoring(unittest.TestCase):
             recent = (datetime.now(timezone.utc) - timedelta(days=2)).isoformat()
             job = {"title":"Product Manager", "location":"Brazil - Remote", "published":recent}
             self.assertEqual(classify(job,terms,"BR","remote",days)[0],"confirmed")
-            self.assertEqual(classify({**job,"published":""},terms,"BR","remote",days), ("excluded","data"))
+            self.assertEqual(classify({**job,"published":""},terms,"BR","remote",days), ("review","data"))
 
     def test_himalayas_api_worldwide_is_brazil_remote(self):
         terms=search_terms("Product Manager")

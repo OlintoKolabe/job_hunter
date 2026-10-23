@@ -28,6 +28,7 @@ from first_seen import flag_new_jobs
 from catalog_engine import source_tasks,scan
 from catalog_bootstrap import maybe_start
 from jd_enrichment import hydrate_jobs, persist_listing_jds, cached_jds_for_filter
+from eligibility_enrichment import enrich_inhire_before_filter
 from resume_engine import build_plan, render_docx, audit, evaluate_rendered_resume
 
 app = FastAPI(docs_url=None, redoc_url=None)
@@ -286,7 +287,15 @@ def restore_persisted_scores(cursor, jobs, roles, url_key):
                 output.append({**job, "ranking": result, "jd_status": "cache"})
                 restored += 1
                 continue
-        output.append({**job, "ranking": None, "jd_status": "pendente" if job.get("jd_available") else "indisponivel"})
+        # Do not erase an already evidence-validated local estimate merely
+        # because no paid/cached AI score exists for this exact JD and role.
+        # Such a number is explicitly labelled local in the UI.
+        local=job.get("ranking") if job.get("jd_available") else None
+        if isinstance(local,dict) and isinstance(local.get("score"),(int,float)) and not isinstance(local.get("score"),bool):
+            output.append({**job,"ranking":{**local,"method":"local","cost_usd":0},"jd_status":"avaliacao_local"})
+        else:
+            output.append({**job, "ranking": local if isinstance(local,dict) else None,
+                           "jd_status": "pendente" if job.get("jd_available") else "indisponivel"})
     return output, restored
 
 
@@ -322,6 +331,7 @@ def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:
                 except Exception as exc:
                     sources.append({"source":feed,"state":"error","received":0,"error":type(exc).__name__})
     raw_count=len(items)
+    items,eligibility_fetch=enrich_inhire_before_filter(items,roles)
     raw_jobs=list(items)
     try: items,review,filter_stats=analyze_filters(cached_jds_for_filter(items,url_key,DATABASE),roles,country,mode,days,sort)
     except ValueError as e: raise HTTPException(400,str(e))
@@ -362,7 +372,7 @@ def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:
     # Pending eligibility is not automatically enriched or scored.
     fresh_count=len(visible)
     return {"source":"Multifuente","queried":len(sources),"total":len(items),
-        "new":fresh_count,"duplicates":history_excluded,"jd_coverage":coverage,"source_jd_stats":source_jd_stats,"items":visible[:100],"review_items":pending[:150],"filter_stats":filter_stats,"raw_count":raw_count,"details":sources,
+        "new":fresh_count,"duplicates":history_excluded,"jd_coverage":coverage,"source_jd_stats":source_jd_stats,"eligibility_fetch":eligibility_fetch,"flow_stats":{"raw":raw_count,"classified_confirmed":len(items),"classified_review":len(review),"history_excluded":history_excluded,"display_confirmed":len(visible),"display_review":len(pending)},"items":visible[:100],"review_items":pending[:150],"filter_stats":filter_stats,"raw_count":raw_count,"details":sources,
         "notice":"Vagas coletadas, ainda sem triagem de elegibilidade Brasil/remoto ou score."}
 
 
@@ -505,15 +515,16 @@ def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False
     # openings, offices or requisition IDs and must not discard jobs here.
     unique=unique_jobs_by_url(found)
     raw_count=len(unique)
-    raw_jobs=list(unique.values())
-    try: items,review,filter_stats=analyze_filters(cached_jds_for_filter(list(unique.values()),url_key,DATABASE),roles,country,mode,days,sort)
+    prepared,eligibility_fetch=enrich_inhire_before_filter(list(unique.values()),roles)
+    raw_jobs=list(prepared)
+    try: items,review,filter_stats=analyze_filters(cached_jds_for_filter(prepared,url_key,DATABASE),roles,country,mode,days,sort)
     except ValueError as e:raise HTTPException(400,str(e))
     # Offer out-of-filter vacancies for explicit decisions without treating them
     # as eligible. Bound the response: this is a review sample, not bulk export.
     from search_filters import classify,search_terms
     terms=search_terms(roles)
     rejected=[]
-    for job in unique.values():
+    for job in prepared:
         verdict,reason=classify(job,terms,country,mode,days)
         if verdict=="excluded" and len(rejected)<25:
             rejected.append({k:job.get(k,"") for k in ("url","title","company","source","location","published")}|{"excluded_reason":reason})
@@ -561,7 +572,7 @@ def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False
     fresh_count=len(visible)
     return {"total_sources":len(tasks),"due_only":due_only,"offset":offset,"next_offset":offset+len(batch),
             "complete":offset+len(batch)>=len(tasks),"details":details,
-            "found":len(items),"new":fresh_count,"duplicates":history_excluded,"raw_count":raw_count,"filter_stats":filter_stats,
+            "found":len(items),"new":fresh_count,"duplicates":history_excluded,"raw_count":raw_count,"filter_stats":filter_stats,"eligibility_fetch":eligibility_fetch,"flow_stats":{"raw":raw_count,"classified_confirmed":len(items),"classified_review":len(review),"history_excluded":history_excluded,"display_confirmed":len(visible),"display_review":len(pending)},
             "jd_coverage":coverage,"source_jd_stats":source_jd_stats,"review_items":pending[:150],"excluded_items":rejected,"items":visible[:80],"notice":"Vagas candidatas: remoto/Brasil e requisitos ainda aguardam análise completa."}
 
 class JDRequest(BaseModel):
@@ -670,7 +681,7 @@ def history_date_filters(from_date="", to_date="", dates=""):
     for value in [from_date,to_date,*choices]:
         if value:
             try:
-                if not re.fullmatch(r"\\d{4}-\\d{2}-\\d{2}",value):raise ValueError()
+                if not re.fullmatch(r"\d{4}-\d{2}-\d{2}",value):raise ValueError()
                 calendar_date.fromisoformat(value)
             except ValueError:raise HTTPException(400,"Data inválida; use AAAA-MM-DD")
     if from_date and to_date and from_date>to_date:raise HTTPException(400,"Período invertido")
@@ -727,8 +738,11 @@ def history_stats(request: Request):
     require_auth(request)
     with psycopg.connect(DATABASE,connect_timeout=8) as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT estado,COUNT(*) FROM jh_history GROUP BY estado")
-            counts=dict(cur.fetchall())
+            cur.execute("SELECT lower(trim(estado)),COUNT(*) FROM jh_history GROUP BY lower(trim(estado))")
+            raw=dict(cur.fetchall())
+            counts={"Candidatado":raw.pop("candidatado",0),
+                    "Descartado":raw.pop("descartado",0)+raw.pop("descartada",0)}
+            counts.update(raw)
     return {"total":sum(counts.values()),"states":counts}
 
 @app.post("/api/history-import")

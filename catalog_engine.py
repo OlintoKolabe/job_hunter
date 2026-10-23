@@ -53,9 +53,9 @@ def quickin_detail(url):
     prefix=body[:420]
     city=r"(?:S[aã]o Paulo|SP|Rio de Janeiro|RJ|Belo Horizonte|Bras[ií]lia|Curitiba|Goi[aâ]nia|Brasil|Brazil)"
     mode=r"(?:Remote|Remoto|Remota|Hybrid|H[ií]brido|On-site|Onsite|Presencial)"
-    match=re.search(r"(?<!\\w)"+city+r"(?:\\s*[,/\\-]\\s*|\\s+)"+mode+r"(?!\\w)",prefix,re.I)
+    match=re.search(r"(?<!\w)"+city+r"(?:\s*[,/\-]\s*|\s+)"+mode+r"(?!\w)",prefix,re.I)
     location=match.group(0) if match else ""
-    if location and re.match(r"^(?:SP|RJ)\\b",location,re.I):
+    if location and re.match(r"^(?:SP|RJ)\b",location,re.I):
         location=("São Paulo" if location[:2].upper()=="SP" else "Rio de Janeiro")+location[2:]
     return location,body
 

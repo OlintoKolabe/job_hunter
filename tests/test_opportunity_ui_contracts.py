@@ -7,6 +7,7 @@ class OpportunityUIContracts(unittest.TestCase):
         s=Path("src/Opportunities.jsx").read_text()
         self.assertNotIn("visibleReviews.forEach(v=>{if(!combined.has(v.url))combined.set(v.url,{...v,confirmed:false})})",s)
         self.assertIn('Vagas não confirmadas pelos filtros',s)
+        self.assertIn('const reviewDiagnostics=visibleReviews.filter(v=>v.needs_verification?.length)',s)
         self.assertIn('const combined=new Map();(currentMatches?results:[]).filter(v=>!v.needs_verification?.length)',s)
     def test_shared_action_buttons_in_all_three_sections(self):
         s=Path("src/Opportunities.jsx").read_text()

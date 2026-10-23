@@ -92,13 +92,8 @@ def greenhouse_detail_url(job):
     return "https://boards-api.greenhouse.io/v1/boards/"+board+"/jobs/"+match.group(1)
 
 def inhire_detail(job):
-    url=urlsplit(str(job.get("url") or ""))
-    if url.scheme!="https" or not re.fullmatch(r"[a-z0-9-]+\.inhire\.app",url.hostname or ""):
-        return None
-    match=re.match(r"/vagas/([a-zA-Z0-9_-]+)(?:/|$)",url.path)
-    if not match:return None
-    tenant=url.hostname.split(".")[0]
-    return ("https://api.inhire.app/job-posts/public/pages/"+quote(match.group(1)),{"X-Tenant":tenant})
+    from collectors import inhire_detail as shared_inhire_detail
+    return shared_inhire_detail(job)
 
 def remote_detail(job):
     gh=greenhouse_detail_url(job)

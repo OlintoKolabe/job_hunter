@@ -93,13 +93,17 @@ def role_match(title,terms):
     title=fold(title)
     terms=[fold(t) for t in terms]
     if not terms:return True
-    families=requested_families(terms)
-    # A recognizable selected role remains relevant even when a title also
-    # contains words such as engineering, design or research.
-    if any(alias in title for fam in families for alias in ROLE_FAMILIES[fam]):return True
+    # An explicitly selected title must not silently mean its entire family.
+    # E.g. Product Manager is not Product Analyst or Head of Product.
+    for term in terms:
+        aliases=TITLE_ALIASES.get(term,(term,))
+        if term=="product manager":
+            aliases=("product manager","gerente de produto","gestor de produto")
+        elif term=="product owner":
+            aliases=("product owner","dono de produto","product ownership")
+        if any(contains_phrase(title,alias) for alias in aliases):return True
     if NON_TARGET_TITLE.search(title):return False
-    # Any custom free-text role the user typed still matches literally.
-    return any(len(t)>=3 and t in title for t in terms)
+    return any(len(t)>=3 and contains_phrase(title,t) for t in terms)
 # Small bilingual discovery set per selected family, not the entire synonym lexicon.
 DISCOVERY={
  "product":("product manager","product owner","gerente de produto","especialista de produtos"),
@@ -207,8 +211,10 @@ def geo_verdict(job,country,evidence=None):
         if country in ("BR","LATAM"):return "excluded"
     if country=="BR" and any(contains_phrase(loc+" "+jd_text,p) for p in BRAZIL_EXCLUSIONS):
         return "excluded"
+    has_br_location=any(contains_phrase(loc,p) for p in ("brazil","brasil","br")) or any(contains_phrase(loc,p) for p in BR_CITIES)
+    has_latam_location=any(contains_phrase(loc,p) for p in LATAM_MARKERS)
     if country in ("BR","LATAM") and not any(contains_phrase(loc,p) for p in GLOBAL_MARKERS):
-        if any(contains_phrase(loc,p) for p in OTHER_FOREIGN_COUNTRIES+FOREIGN_CITY_ONLY):
+        if not (has_br_location or has_latam_location) and any(contains_phrase(loc,p) for p in OTHER_FOREIGN_COUNTRIES+FOREIGN_CITY_ONLY):
             return "excluded"
     # A bare "US"/"USA" is an explicit US job location, not unknown Brazil eligibility.
     us_only=any(contains_phrase(loc,p) for p in ("us","usa","united states","u.s.","united states of america"))
@@ -224,11 +230,13 @@ def geo_verdict(job,country,evidence=None):
     if country=="BR":
         if us_only and not (br or regional or global_eligible):return "excluded"
         if br or regional or global_eligible:return "eligible"
+        if any(contains_phrase(loc,p) for p in OTHER_FOREIGN_COUNTRIES+FOREIGN_CITY_ONLY):return "excluded"
         # If the vacancy explicitly names a different country but not BR/LATAM, don't silently confirm Brazil.
         if codes and "BR" not in codes:return "excluded"
         return "unknown"
     if country=="LATAM":
         if us_only and not (regional or global_eligible or bool(codes & LATAM_CODES)):return "excluded"
+        if not (regional or global_eligible or bool(codes & LATAM_CODES)) and any(contains_phrase(loc,p) for p in OTHER_FOREIGN_COUNTRIES+FOREIGN_CITY_ONLY):return "excluded"
         return "eligible" if regional or global_eligible or bool(codes & LATAM_CODES) else "unknown"
     if any(contains_phrase(loc,p) for p in TOKENS.get(country,())) or global_eligible:
         return "eligible"
@@ -287,12 +295,13 @@ def classify(job,terms,country,mode,days):
     # A requested publication window requires an actual, verifiable date.
     # Undated listings are available only under "Qualquer período".
     now=datetime.now(timezone.utc)
-    if days and (published is None or not now-timedelta(days=days)<=published<=now):
+    if days and published is not None and not now-timedelta(days=days)<=published<=now:
         return "excluded","data"
     unknown=[]
     if uncertain_role:unknown.append("cargo_a_confirmar")
     if not mode_ok:unknown.append("modalidade")
     if not country_ok:unknown.append("pais")
+    if days and published is None:unknown.append("data")
     if unknown:return "review",",".join(unknown)
     return "confirmed",""
 

@@ -295,4 +295,30 @@ class ShortlistedJDTests(unittest.TestCase):
              patch('jd_enrichment.extract_public_jd',return_value='generic JD'):
             self.assertEqual(fallback_public_jd(job),'generic JD')
 
+    def test_filter_does_not_destroy_collector_jd_before_cache(self):
+        from jd_enrichment import persist_listing_jds
+        from search_filters import analyze_filters
+        from unittest.mock import Mock
+        jd='Product strategy, roadmap, discovery, requirements and stakeholder leadership. '*12
+        job={'url':'https://example.com/product/1','title':'Senior Product Manager',
+             'company':'Example','location':'Remote Brazil','remote':True,
+             'source':'ashby','published':'2026-10-22','description':jd}
+        confirmed,review,_=analyze_filters([job],'Product Manager','BR','remote',3,'newest')
+        self.assertEqual(len(confirmed),1)
+        self.assertEqual(confirmed[0]['description'],'')
+        cur=Mock()
+        stats=persist_listing_jds(cur,[job],confirmed+review,lambda u:u)
+        self.assertEqual(stats['ashby']['jd_valid'],1)
+        self.assertEqual(cur.executemany.call_args.args[1][0][1],jd)
+
+    def test_missing_or_challenge_jd_never_enters_cache(self):
+        from jd_enrichment import valid_listing_jd,persist_listing_jds
+        from unittest.mock import Mock
+        self.assertFalse(valid_listing_jd('Verify you are human. '*90))
+        job={'url':'https://example.com/product/2','source':'inhire','description':''}
+        cur=Mock()
+        stats=persist_listing_jds(cur,[job],[job],lambda u:u)
+        self.assertEqual(stats['inhire']['jd_missing'],1)
+        cur.executemany.assert_not_called()
+
 if __name__=="__main__":unittest.main()

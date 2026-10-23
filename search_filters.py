@@ -147,6 +147,11 @@ def detect_work_mode(job,evidence=None):
     # False does not establish onsite: it can also mean hybrid or unspecified.
     if job.get("remote") is True:return "remote"
     if "remote" in jd:return "remote"
+    # These endpoints are documented remote-only job feeds. The adapter has
+    # already selected a remote opportunity, although its generic listing
+    # lacks a separate work-mode field. Do not infer this for arbitrary ATS.
+    if fold(job.get("source", "")) in ("himalayas", "remotive", "remoteok"):
+        return "remote"
     return None
 
 
@@ -187,6 +192,10 @@ def geo_verdict(job,country,evidence=None):
     br=any(contains_phrase(loc,p) for p in ("brazil","brasil","br")) or any(contains_phrase(loc,p) for p in BR_CITIES) or "brazil" in jd_geo
     regional=any(contains_phrase(loc,p) for p in LATAM_MARKERS)
     global_eligible=any(contains_phrase(loc,p) for p in GLOBAL_MARKERS)
+    # Himalayas uses exactly "Worldwide" when locationRestrictions is empty.
+    # Only this feed-specific, explicit API convention proves BR eligibility.
+    if fold(job.get("source", "")) == "himalayas" and loc.strip() == "worldwide":
+        global_eligible=True
     codes={code for code,aliases in TOKENS.items() if any(contains_phrase(loc,p) for p in aliases)}
     if br:codes.add("BR")
     if country=="BR":

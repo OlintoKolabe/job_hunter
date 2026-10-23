@@ -17,21 +17,28 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{}}){
  const [flowTrace,setFlowTrace]=useState({raw:0,classified_confirmed:0,classified_review:0,history_excluded:0,display_confirmed:0,display_review:0});
  const [eligibilityTrace,setEligibilityTrace]=useState({eligible_for_detail:0,attempted:0,complete:0,failed:0,deferred:0});
  const [qualityTrace,setQualityTrace]=useState({raw:0,confirmed_before:0,confirmed_after:0,recovered_confirmed:0,lost_confirmed:0,still_review:0,missing_date_before:0,missing_date_after:0,unknown_mode_before:0,unknown_mode_after:0,unknown_country_before:0,unknown_country_after:0,by_source:{}});
+ const [requestPerf,setRequestPerf]=useState({completed:0,max_ms:0,total_ms:0});
  useEffect(()=>{fetch('/api/search-filters',{cache:'no-store'}).then(r=>{if(!r.ok)throw Error('HTTP '+r.status);return r.json()}).then(d=>{if(d?.countries)setCountries(d.countries);if(!Array.isArray(d?.sources)||d.sources.length<4)throw Error('Lista de fontes incompleta');setSources(d.sources);}).catch(()=>setError('Não foi possível carregar a lista completa de fontes. Atualize a página; se persistir, consulte o serviço.'))},[]);
  const query=()=>new URLSearchParams({roles,country,mode,days,sort,source}).toString();
  const changeSource=value=>{setSource(value);setResults([]);setReviews([]);setExcluded([]);setChecked(0);setCompleted(false);setMessage("Fonte alterada. Clique em Buscar oportunidades para executar a nova seleção.");setError("");};
  async function search(){
   setFlowTrace({raw:0,classified_confirmed:0,classified_review:0,history_excluded:0,display_confirmed:0,display_review:0});setEligibilityTrace({eligible_for_detail:0,attempted:0,complete:0,failed:0,deferred:0});
   setQualityTrace({raw:0,confirmed_before:0,confirmed_after:0,recovered_confirmed:0,lost_confirmed:0,still_review:0,missing_date_before:0,missing_date_after:0,unknown_mode_before:0,unknown_mode_after:0,unknown_country_before:0,unknown_country_after:0,by_source:{}});
+  setRequestPerf({completed:0,max_ms:0,total_ms:0});
   setVisibleCount(10);setEvaluated(0);setEvaluationTotal(0);setScoringNow([]);setScoringFailed([]);setScoringAttempted([]);setBusy(true);setSearchedQuery(query());setError('');setResults([]);setReviews([]);setExcluded([]);setSourceStats({});setFilterStats({});setRawScanned(0);setChecked(0);setCompleted(false);setMessage('Consultando '+(sources.find(x=>x.value===source)?.label||source)+'…');
   const mergeQuality=d=>{if(!d.eligibility_quality)return;setQualityTrace(old=>{const next={...old,by_source:{...old.by_source}};for(const [key,value] of Object.entries(d.eligibility_quality)){if(key==='by_source'){for(const [src,counters] of Object.entries(value)){const merged={...(next.by_source[src]||{})};for(const [metric,n] of Object.entries(counters))merged[metric]=(merged[metric]||0)+n;next.by_source[src]=merged}}else if(typeof value==='number')next[key]=(next[key]||0)+value}return next})};
-  const qs=query();const all=new Map();const uncertain=new Map();const outOfFilter=new Map();const totals={};const sourceTotals={};let inspected=0;const record=(d)=>{setFlowTrace(old=>Object.fromEntries(Object.keys(old).map(k=>[k,old[k]+(d.flow_stats?.[k]||0)])));setEligibilityTrace(old=>Object.fromEntries(Object.keys(old).map(k=>[k,old[k]+(d.eligibility_fetch?.[k]||0)])));(d.details||[]).forEach(x=>{const src=(x.source||'desconhecida').toLowerCase();const n=sourceTotals[src]||{consultas:0,recebidas:0,erros:0,jdValidos:0,jdAusentes:0};n.consultas++;n.recebidas+=x.received||0;if(x.status==='error'||x.state==='pendente')n.erros++;sourceTotals[src]=n});for(const [src,v] of Object.entries(d.source_jd_stats||{})){const key=src.toLowerCase();const n=sourceTotals[key]||{consultas:0,recebidas:0,erros:0,jdValidos:0,jdAusentes:0};n.jdValidos+=(v.jd_valid||0);n.jdAusentes+=(v.jd_missing||0);sourceTotals[key]=n}setSourceStats({...sourceTotals});(d.review_items||[]).forEach(j=>uncertain.set(j.url,j));(d.excluded_items||[]).forEach(j=>{if(outOfFilter.size<300)outOfFilter.set(j.url,j)});setExcluded(visibleUndecided([...outOfFilter.values()]));for(const [key,n] of Object.entries(d.filter_stats||{})){totals[key]=(totals[key]||0)+n}inspected+=d.raw_count||0;setReviews(visibleUndecided([...uncertain.values()]));setFilterStats({...totals});setRawScanned(inspected)};let count=0;let completedAll=false;
+  const qs=query();const all=new Map();const uncertain=new Map();const outOfFilter=new Map();const totals={};const sourceTotals={};let inspected=0;const record=(d)=>{if(Number.isFinite(d._request_ms))setRequestPerf(old=>({completed:old.completed+1,max_ms:Math.max(old.max_ms,d._request_ms),total_ms:old.total_ms+d._request_ms}));setFlowTrace(old=>Object.fromEntries(Object.keys(old).map(k=>[k,old[k]+(d.flow_stats?.[k]||0)])));setEligibilityTrace(old=>Object.fromEntries(Object.keys(old).map(k=>[k,old[k]+(d.eligibility_fetch?.[k]||0)])));(d.details||[]).forEach(x=>{const src=(x.source||'desconhecida').toLowerCase();const n=sourceTotals[src]||{consultas:0,recebidas:0,erros:0,jdValidos:0,jdAusentes:0};n.consultas++;n.recebidas+=x.received||0;if(x.status==='error'||x.state==='pendente')n.erros++;sourceTotals[src]=n});for(const [src,v] of Object.entries(d.source_jd_stats||{})){const key=src.toLowerCase();const n=sourceTotals[key]||{consultas:0,recebidas:0,erros:0,jdValidos:0,jdAusentes:0};n.jdValidos+=(v.jd_valid||0);n.jdAusentes+=(v.jd_missing||0);sourceTotals[key]=n}setSourceStats({...sourceTotals});(d.review_items||[]).forEach(j=>uncertain.set(j.url,j));(d.excluded_items||[]).forEach(j=>{if(outOfFilter.size<300)outOfFilter.set(j.url,j)});setExcluded(visibleUndecided([...outOfFilter.values()]));for(const [key,n] of Object.entries(d.filter_stats||{})){totals[key]=(totals[key]||0)+n}inspected+=d.raw_count||0;setReviews(visibleUndecided([...uncertain.values()]));setFilterStats({...totals});setRawScanned(inspected)};let count=0;let completedAll=false;
   try{
-   const requestJson=async url=>{let problem;for(let retry=0;retry<2;retry++){try{const r=await fetch(url,{method:'POST',signal:AbortSignal.timeout(30000)});const ct=r.headers.get('content-type')||'';if(!ct.includes('application/json'))throw Error('Servidor retornou HTML ('+r.status+'); lote não processado');const d=await r.json();if(!r.ok)throw Error(typeof d.detail==='string'?d.detail:('Erro HTTP '+r.status+' ao consultar vagas'));return d}catch(err){problem=err}}throw problem};
-   const d=await requestJson('/api/search-jobs?'+qs);
-
-   (d.items||[]).forEach(j=>all.set(j.url,j));record(d);mergeQuality(d);count+=d.total||0;
-   setResults(visibleUndecided([...all.values()]));setCounts({new:all.size,total:count});
+   // A slow initial aggregator must never stop catalog discovery. Each board
+   // is independently recoverable; do not repeat timed-out writes blindly.
+   const requestJson=async url=>{const started=performance.now();const r=await fetch(url,{method:'POST',signal:AbortSignal.timeout(30000)});const ct=r.headers.get('content-type')||'';if(!ct.includes('application/json'))throw Error('Servidor retornou HTML ('+r.status+'); lote não processado');const d=await r.json();if(!r.ok)throw Error(typeof d.detail==='string'?d.detail:('Erro HTTP '+r.status+' ao consultar vagas'));return {...d,_request_ms:Math.round(performance.now()-started)}};
+   let initialFailure='';
+   const initialPromise=requestJson('/api/search-jobs?'+qs).then(d=>{
+     (d.items||[]).forEach(j=>{const old=all.get(j.url);all.set(j.url,old&&(old.ranking?.score!=null)?old:j)});
+     record(d);mergeQuality(d);count+=d.total||0;
+     setResults(visibleUndecided([...all.values()]));setCounts({new:all.size,total:count});
+     return d;
+   }).catch(err=>{initialFailure=err.message||String(err);setMessage('Consulta inicial falhou; o catálogo continua sendo consultado. '+initialFailure);return null});
    // Select from the entire discovery universe before spending any AI tokens.
    const scoredOrAttempted=new Set();
    let resolved=0;
@@ -80,24 +87,26 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{}}){
    // Surface an initial, tightly bounded set of real scores while the slower
    // multi-board catalog continues scanning. Leave six slots for the complete
    // collection; never re-evaluate a URL or silently use mock scores.
-   const earlyRanking=rankEntireCollection(4).catch(err=>{
+   const earlyRanking=initialPromise.then(()=>rankEntireCollection(4)).catch(err=>{
      setScoringFailed(prev=>[...prev,'shortlist-initial']);
      setMessage('Triagem inicial indisponível; continuando a busca de vagas. '+err.message);
    });
    // Indeed is an on-demand provider, not a catalog board. A catalog scan
    // with source=indeed always returns 400 and can flood the UI with retries.
    if(['himalayas','remotive','remoteok','indeed'].includes(source)){
+     await initialPromise;
      await earlyRanking;
      await rankEntireCollection(Math.max(0,10-scoredOrAttempted.size));
      setCompleted(true);
-     setMessage('Consulta à fonte '+source+' concluída; vagas apresentadas após filtros e exclusões do Histórico.');
+     setMessage(initialFailure?'Consulta à fonte falhou: '+initialFailure:'Consulta à fonte '+source+' concluída; vagas apresentadas após filtros e exclusões do Histórico.');
      return;
    }
    let offset=0;
    let skipped=0;
+   const failedOffsets=[];
    let nextIntermediateRanking=12;
    for(let n=0;n<180;n++){
-    let batch;try{batch=await requestJson('/api/catalog/scan?offset='+offset+'&limit=4&'+qs)}catch(err){skipped++;offset+=4;setMessage('Alguns quadros falharam; continuando os demais. Falhas: '+skipped);continue}
+    let batch;try{batch=await requestJson('/api/catalog/scan?offset='+offset+'&limit=4&'+qs)}catch(err){skipped++;failedOffsets.push({offset,error:err.message||String(err)});offset+=4;setMessage('Catálogo em andamento: '+skipped+' lote(s) pendente(s). Outros quadros continuam sendo consultados.');continue}
     (batch.items||[]).filter(j=>source==='all'||j.source?.toLowerCase()===source||(source==='greenhouse'&&j.source?.toLowerCase()==='greenhouse_eu')).forEach(j=>{const old=all.get(j.url);all.set(j.url,old&&(old.ranking?.score!=null||scoredOrAttempted.has(j.url))?old:j)});record(batch);mergeQuality(batch);
     offset=batch.next_offset;if(!Number.isFinite(offset))throw Error('Paginação inválida');
     count+=batch.found||0;setResults(visibleUndecided([...all.values()]));setChecked(x=>x+(batch.details||[]).length);setCounts({new:all.size,total:count});
@@ -109,10 +118,22 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{}}){
     if(batch.complete){completedAll=true;break}
     if(!(batch.details||[]).length)break;
    }
+   // A failed request must not silently erase its four source boards.
+   // Replay bounded, idempotent batches once after the normal traversal.
+   for(const failed of failedOffsets.slice(0,8)){
+     try{
+       const recovered=await requestJson('/api/catalog/scan?offset='+failed.offset+'&limit=4&'+qs);
+       (recovered.items||[]).forEach(j=>{const old=all.get(j.url);all.set(j.url,old&&(old.ranking?.score!=null||scoredOrAttempted.has(j.url))?old:j)});
+       record(recovered);mergeQuality(recovered);count+=recovered.found||0;
+       setResults(visibleUndecided([...all.values()]));setCounts({new:all.size,total:count});
+       skipped--;
+     }catch(err){setMessage('Lote '+failed.offset+' indisponível mesmo após nova tentativa; resultados de outras fontes preservados.');}
+   }
+   await initialPromise;
    await earlyRanking;
    await rankEntireCollection(Math.max(0,10-scoredOrAttempted.size));
    setCompleted(completedAll);
-   setMessage(completedAll&&!skipped&&!Object.values(sourceTotals).some(v=>v.erros)?'Busca concluída.':('Busca com fontes indisponíveis: '+(skipped+Object.values(sourceTotals).reduce((n,v)=>n+v.erros,0))+' falhas registradas. Zero resultado não significa zero vagas. Confira Fontes.'));
+   setMessage(completedAll&&!initialFailure&&!skipped&&!Object.values(sourceTotals).some(v=>v.erros)?'Busca concluída.':('Busca parcial: '+(skipped+Object.values(sourceTotals).reduce((n,v)=>n+v.erros,0))+' lotes/fontes falharam'+(initialFailure?'; consulta inicial: '+initialFailure:'')+'. Os resultados recebidos permanecem disponíveis.'));
   }catch(e){setError(e.message);setMessage('Busca parcial — os resultados encontrados continuam disponíveis.')}
   finally{setBusy(false)}
  }
@@ -281,6 +302,7 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{}}){
   <details className="catalog-diagnostics"><summary>Fontes consultadas nesta busca</summary><p>JDs válidos e ausentes: somente vagas elegíveis ou em revisão, antes da análise paga. Não representam todos os anúncios brutos.</p><div className="table-wrap"><table><thead><tr><th>Fonte</th><th>Consultas</th><th>Anúncios brutos</th><th>JDs válidos</th><th>JDs ausentes</th><th>Pendências</th></tr></thead><tbody>{Object.entries(sourceStats).sort((a,b)=>b[1].recebidas-a[1].recebidas).map(([source,v])=><tr key={source}><td>{source}</td><td>{v.consultas}</td><td>{v.recebidas}</td><td>{v.jdValidos||0}</td><td>{v.jdAusentes||0}</td><td>{v.erros}</td></tr>)}</tbody></table></div></details>
   <details className="catalog-diagnostics"><summary>Auditoria dos filtros</summary><p>Total bruto analisado: {rawScanned}. As exclusões são contadas por motivo, antes da deduplicação com o histórico.</p>{Object.entries(filterStats).map(([reason,n])=><p key={reason}>{reason}: <b>{n}</b></p>)}</details>
   <details className="catalog-diagnostics" open><summary>Qualidade dos metadados — antes e depois da recuperação (Gate 9)</summary>
+   <p>Requisições concluídas: <b>{requestPerf.completed}</b> · maior tempo: <b>{(requestPerf.max_ms/1000).toFixed(1)} s</b> · tempo médio: <b>{requestPerf.completed?(requestPerf.total_ms/requestPerf.completed/1000).toFixed(1):'—'} s</b>. Falhas de timeout são informadas na mensagem da busca.</p>
    <p>Vagas reais analisadas: <b>{qualityTrace.raw}</b>. Elegíveis comprovadas antes: <b>{qualityTrace.confirmed_before}</b> · após: <b>{qualityTrace.confirmed_after}</b> · recuperadas: <b>{qualityTrace.recovered_confirmed}</b> · anteriormente elegíveis que deixaram de passar: <b>{qualityTrace.lost_confirmed}</b>.</p>
    <p>Sem data verificável: <b>{qualityTrace.missing_date_before} → {qualityTrace.missing_date_after}</b> · modalidade não comprovada: <b>{qualityTrace.unknown_mode_before} → {qualityTrace.unknown_mode_after}</b> · país não comprovado: <b>{qualityTrace.unknown_country_before} → {qualityTrace.unknown_country_after}</b>. Permanecem a confirmar: <b>{qualityTrace.still_review}</b>.</p>
    <p>As contagens são por lote e podem repetir URLs de consultas diferentes; a lista de vagas elimina duplicidades. Campos ausentes não são presumidos como Brasil, remoto ou publicação recente.</p>

@@ -10,6 +10,9 @@ import io
 import io
 import hashlib
 import unicodedata
+import logging
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import urlsplit
 
 from pathlib import Path
@@ -32,6 +35,23 @@ from eligibility_enrichment import enrich_inhire_before_filter
 from resume_engine import build_plan, render_docx, audit, evaluate_rendered_resume
 
 app = FastAPI(docs_url=None, redoc_url=None)
+
+@app.middleware("http")
+async def search_latency_evidence(request: Request, call_next):
+    """Gate 9: stage-neutral server duration, including error responses."""
+    tracked=request.url.path in ("/api/search-jobs", "/api/catalog/scan")
+    started=time.monotonic()
+    try:
+        response=await call_next(request)
+    except Exception:
+        if tracked:
+            logging.exception("JH_SEARCH_REQUEST_FAILED path=%s elapsed_ms=%d",request.url.path,int((time.monotonic()-started)*1000))
+        raise
+    if tracked:
+        elapsed=int((time.monotonic()-started)*1000)
+        logging.warning("JH_SEARCH_REQUEST path=%s elapsed_ms=%d status=%d",request.url.path,elapsed,response.status_code)
+        response.headers["Server-Timing"]=f"search;dur={elapsed}"
+    return response
 DIST = Path(__file__).resolve().parent / "dist"
 COOKIE = "jh_session"
 SECRET = os.environ.get("APP_SECRET", "")
@@ -301,6 +321,7 @@ def restore_persisted_scores(cursor, jobs, roles, url_key):
 
 @app.post("/api/search-jobs")
 def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:str="remote",days:int=30,sort:str="newest",source:str="all"):
+    started=time.monotonic()
     require_auth(request)
     allowed_sources={"all","inhire","quickin","gupy","greenhouse","ashby","lever","bamboohr","dynamite","linkedin_guest","jobgether","workable","himalayas","remotive","remoteok","indeed"}
     if source not in allowed_sources:raise HTTPException(400,"Fonte não reconhecida")
@@ -321,18 +342,31 @@ def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:
             raise HTTPException(502,"Fonte "+source+" indisponível: "+type(exc).__name__) from exc
         sources=[{"source":source,"state":"validado","received":len(items)}]
     else:
-        items,sources=collect(discovery_queries(roles),country,source) if source in ("all","jobgether","workable") else ([],[])
+        items,sources=([],[])
         if source=="all":
-            for feed in ("himalayas","remotive","remoteok"):
-                try:
-                    added=fetch_public_remote(feed,roles,country)
-                    items.extend(added)
-                    sources.append({"source":feed,"state":"validado","received":len(added)})
-                except Exception as exc:
-                    sources.append({"source":feed,"state":"error","received":0,"error":type(exc).__name__})
+            # Measured on the public sources: the legacy sequential collect
+            # took 24.12s, followed by Himalayas at 7.08s, before DB/filter.
+            # Run existing independent providers concurrently; never turn a
+            # failed source into an invented zero-vacancy success.
+            with ThreadPoolExecutor(max_workers=4) as pool:
+                futures={pool.submit(collect,discovery_queries(roles),country,"all"):"catalog_initial"}
+                futures.update({pool.submit(fetch_public_remote,feed,roles,country):feed
+                                for feed in ("himalayas","remotive","remoteok")})
+                for future in as_completed(futures):
+                    feed=futures[future]
+                    try:
+                        if feed=="catalog_initial":
+                            original,details=future.result();items.extend(original);sources.extend(details)
+                        else:
+                            added=future.result();items.extend(added)
+                            sources.append({"source":feed,"state":"validado","received":len(added)})
+                    except Exception as exc:
+                        sources.append({"source":feed,"state":"error","received":0,"error":type(exc).__name__})
+        elif source in ("jobgether","workable"):
+            items,sources=collect(discovery_queries(roles),country,source)
     raw_count=len(items)
     original_items=list(items)
-    items,eligibility_fetch=enrich_inhire_before_filter(items,roles)
+    items,eligibility_fetch=enrich_inhire_before_filter(items,roles,remaining_budget_s=18-(time.monotonic()-started))
     from eligibility_enrichment import eligibility_audit
     eligibility_quality=eligibility_audit(original_items,items,roles,country,mode,days)
     raw_jobs=list(items)
@@ -490,6 +524,7 @@ def unique_jobs_by_url(found):
 
 @app.post("/api/catalog/scan")
 def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False,roles:str=DEFAULT_ROLES,country:str="BR",mode:str="remote",days:int=30,sort:str="newest",source:str="all"):
+    started=time.monotonic()
     require_auth(request)
     if source not in {"all","inhire","quickin","gupy","greenhouse","ashby","lever","bamboohr","dynamite","linkedin_guest","jobgether","workable","himalayas","remotive","remoteok"}:raise HTTPException(400,"Fonte não reconhecida")
     tasks=active_source_tasks()
@@ -519,7 +554,7 @@ def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False
     unique=unique_jobs_by_url(found)
     raw_count=len(unique)
     original_items=list(unique.values())
-    prepared,eligibility_fetch=enrich_inhire_before_filter(original_items,roles)
+    prepared,eligibility_fetch=enrich_inhire_before_filter(original_items,roles,remaining_budget_s=18-(time.monotonic()-started))
     from eligibility_enrichment import eligibility_audit
     eligibility_quality=eligibility_audit(original_items,prepared,roles,country,mode,days)
     raw_jobs=list(prepared)

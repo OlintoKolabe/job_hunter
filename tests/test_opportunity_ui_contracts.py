@@ -48,9 +48,17 @@ class OpportunityUIContracts(unittest.TestCase):
 
     def test_initial_scoring_starts_before_full_catalog_scan_with_ten_job_cap(self):
         s=Path("src/Opportunities.jsx").read_text()
-        self.assertLess(s.index("const earlyRanking=rankEntireCollection(4)"),s.index("for(let n=0;n<180;n++)"))
+        self.assertLess(s.index("const earlyRanking=initialPromise.then(()=>rankEntireCollection(4))"),s.index("for(let n=0;n<180;n++)"))
         self.assertIn("rankEntireCollection(Math.max(0,10-scoredOrAttempted.size))",s)
         self.assertIn("filter(j=>!scoredOrAttempted.has(j.url)&&j.jd_available===true",s)
+
+    def test_slow_initial_search_does_not_block_catalog_and_is_reported(self):
+        s=Path("src/Opportunities.jsx").read_text()
+        self.assertLess(s.index("const initialPromise=requestJson("),s.index("for(let n=0;n<180;n++)"))
+        catalog=s[s.index("let offset=0;"):s.index("await initialPromise;\n   await earlyRanking;")]
+        self.assertNotIn("await initialPromise;",catalog)
+        self.assertIn("initialFailure=err.message",s)
+        self.assertIn("Os resultados recebidos permanecem disponíveis",s)
 
     def test_missing_jd_hides_cv_and_manual_scoring_and_has_clear_state(self):
         s=Path('src/Opportunities.jsx').read_text()

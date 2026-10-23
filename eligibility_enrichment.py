@@ -43,7 +43,7 @@ def eligibility_audit(before, after, roles, country, mode, days):
     return result
 
 
-def enrich_inhire_before_filter(jobs, roles, limit=16):
+def enrich_inhire_before_filter(jobs, roles, limit=16, remaining_budget_s=None):
     """Fetch complete listing metadata only for role-relevant inHire jobs.
 
     Unfetched/failed records retain their original missing metadata. They must
@@ -55,6 +55,12 @@ def enrich_inhire_before_filter(jobs, roles, limit=16):
                 and (not parse_date(j.get("published")) or not j.get("description"))
                 and role_match(j.get("title",""),terms)
                 and inhire_detail(j)]
+    # Radix real sample (23 Oct): 8 public details took 7.21s. If upstream
+    # discovery already used the request budget, defer hydration to the next
+    # catalog batch rather than hiding every result behind a browser timeout.
+    if remaining_budget_s is not None:
+        if remaining_budget_s<9:limit=0
+        elif remaining_budget_s<18:limit=min(limit,8)
     selected=candidates[:max(0,limit)]
     metrics={"eligible_for_detail":len(candidates),"attempted":len(selected),
              "complete":0,"failed":0,"deferred":len(candidates)-len(selected)}

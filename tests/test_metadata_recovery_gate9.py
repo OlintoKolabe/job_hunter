@@ -61,6 +61,21 @@ class MetadataRecoveryGate9(unittest.TestCase):
         self.assertEqual(metrics["deferred"],17)
         self.assertEqual(enriched,raw)
 
+    def test_elapsed_request_defers_details_without_inventing_eligibility(self):
+        raw=[listing()]
+        with patch("eligibility_enrichment.fetch_json") as fetch:
+            enriched,metrics=enrich_inhire_before_filter(raw,ROLE,remaining_budget_s=2)
+        fetch.assert_not_called()
+        self.assertEqual(metrics["deferred"],1)
+        self.assertEqual(enriched,raw)
+
+    def test_moderate_time_budget_limits_detail_calls_to_one_wave(self):
+        raw=[listing(url=URL.replace("12345678",str(i).zfill(8))) for i in range(20)]
+        with patch("eligibility_enrichment.fetch_json",return_value={"description":"Actual public detail"}) as fetch:
+            _,metrics=enrich_inhire_before_filter(raw,ROLE,remaining_budget_s=12)
+        self.assertEqual(fetch.call_count,8)
+        self.assertEqual(metrics["deferred"],12)
+
     def test_other_sources_never_trigger_inhire_detail_calls(self):
         raw=[listing(source="Greenhouse")]
         with patch("eligibility_enrichment.fetch_json") as fetch:

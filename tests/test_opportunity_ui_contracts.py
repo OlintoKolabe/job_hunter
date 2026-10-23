@@ -3,9 +3,12 @@ import unittest
 from pathlib import Path
 
 class OpportunityUIContracts(unittest.TestCase):
-    def test_reviews_in_main_result_map(self):
+    def test_reviews_only_in_collapsed_diagnostics(self):
         s=Path("src/Opportunities.jsx").read_text()
-        self.assertIn("visibleReviews.forEach(v=>{if(!combined.has(v.url))combined.set(v.url,{...v,confirmed:false})})",s)
+        self.assertNotIn("visibleReviews.forEach(v=>{if(!combined.has(v.url))combined.set(v.url,{...v,confirmed:false})})",s)
+        self.assertIn('Vagas não confirmadas pelos filtros',s)
+        self.assertIn('const reviewDiagnostics=visibleReviews.filter(v=>v.needs_verification?.length)',s)
+        self.assertIn('const combined=new Map();(currentMatches?results:[]).filter(v=>!v.needs_verification?.length)',s)
     def test_shared_action_buttons_in_all_three_sections(self):
         s=Path("src/Opportunities.jsx").read_text()
         self.assertEqual(s.count("<DecisionActions job={v} pending={decisionNow.includes(v.url)} onDecision={markDecision} onGenerateCv={generateCv} cvPending={cvNow.includes(v.url)} cvError={cvErrors[v.url]}/>"),3)
@@ -55,7 +58,7 @@ class OpportunityUIContracts(unittest.TestCase):
         self.assertIn("v.jd_available===true&&<button",s)
         self.assertIn("if(v.jd_available===false)return 'no_jd'",s)
         self.assertIn("'JD indisponível'",s)
-        self.assertIn('Estimativa local',s)
+        self.assertIn('Aderência local estimada',s)
 
     def test_intermediate_batches_can_score_without_waiting_180(self):
         s=Path('src/Opportunities.jsx').read_text()

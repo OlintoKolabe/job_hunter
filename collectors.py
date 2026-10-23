@@ -6,6 +6,17 @@ import urllib.request
 from datetime import datetime, timezone
 from html import unescape
 import re
+from urllib.parse import urlsplit,quote
+
+def inhire_detail(job):
+    """Existing public per-job endpoint shared by filtering, ranking and CV."""
+    url=urlsplit(str(job.get("url") or ""))
+    if url.scheme!="https" or not re.fullmatch(r"[a-z0-9-]+\.inhire\.app",url.hostname or ""):
+        return None
+    match=re.match(r"/vagas/([a-zA-Z0-9_-]+)(?:/|$)",url.path)
+    if not match:return None
+    tenant=url.hostname.split(".")[0]
+    return ("https://api.inhire.app/job-posts/public/pages/"+quote(match.group(1)),{"X-Tenant":tenant})
 
 TERMS=("product manager","product owner","project manager","marketing","growth")
 BOARDS={
@@ -37,6 +48,12 @@ def as_list(payload):
 
 def item(company,title,url,location,source,published="",description=""):
     if not isinstance(url,str) or not url.startswith(("https://","http://")) or not title:return None
+    if isinstance(published,(int,float)) or (isinstance(published,str) and published.isdigit()):
+        try:
+            seconds=float(published)
+            if seconds>100_000_000_000:seconds/=1000
+            published=datetime.fromtimestamp(seconds,timezone.utc).isoformat()
+        except (ValueError,OverflowError,OSError):published=""
     return {"company":str(company or "")[:200],"title":str(title)[:300],"url":url[:2000],
             "location":str(location or "")[:200],"published":str(published or "")[:80],"source":source,"description":str(description or "")[:18000]}
 

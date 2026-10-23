@@ -157,12 +157,18 @@ def score_job(job,roles):
     uninterpreted=sum(r["status"]=="nao_interpretado" for r in requirements)
     coverage=round(100*len(interpreted)/len(requirements)) if requirements else 0
     if coverage<60 or len(requirements)<4 or len(str(jd_raw).strip())<300:fit=None
+    # A perfect score is a claim about *all* identified requirements, not just
+    # the subset the deterministic extractor knows how to match. A single
+    # uninterpreted line (or a JD with no mandatory requirements) invalidates
+    # that claim, without changing the weighting formula for usable scores.
+    perfect_score_unsubstantiated = fit == 100 and (uninterpreted > 0 or not mandatory)
+    if perfect_score_unsubstantiated:fit=None
     priority={
         "remote":detect_work_mode(job,signals(job,roles))=="remote",
         "salary_informed":any(bool(job.get(k)) for k in ("salary","salaryRange","compensation")),
         "sector":next((name for name,_,phrases in AXES if any(p in title+" "+jd for p in phrases)),None),
     }
-    confidence=("sem_base" if not available else ("cobertura_insuficiente" if coverage<60 else ("amostra_limitada" if len(requirements)<4 else "requisitos_extraidos")))
+    confidence=("sem_base" if not available else ("cobertura_insuficiente" if coverage<60 or perfect_score_unsubstantiated else ("amostra_limitada" if len(requirements)<4 else "requisitos_extraidos")))
     return {"score":fit,"score_max":100,"confidence":confidence,"evaluated_requirements":len(requirements),
             "fit":fit,"requirements":requirements,"mandatory_count":len(mandatory),
             "desirable_count":len(desirable),"unverified_count":uncertainty,"uninterpreted_count":uninterpreted,"coverage_pct":coverage,

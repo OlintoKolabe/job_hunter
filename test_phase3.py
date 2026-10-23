@@ -173,9 +173,9 @@ class Phase3ContractTests(unittest.TestCase):
             {"title":"Senior Product Manager","location":"Brazil Remote","description":"Required: roadmap. Required: backlog. Preferred: Figma.","published":"2026-10-12"}
         ]
         found,_,_=analyze_filters(rows,"Product Manager","BR","remote",0,"score")
-        self.assertEqual(len(found),2)
-        self.assertEqual(found[0]["title"],"Product Analyst")  # Both lack sufficient JD; date is tie-breaker.
-        self.assertIsNone(found[1]["ranking"]["score"])
+        self.assertEqual(len(found),1)
+        self.assertEqual(found[0]["title"],"Senior Product Manager")
+        self.assertIsNone(found[0]["ranking"]["score"])
 
     def test_discovery_budget_covers_every_selected_family(self):
         from search_filters import discovery_queries,DEFAULT_ROLES
@@ -222,8 +222,9 @@ class Phase3ContractTests(unittest.TestCase):
         from search_filters import analyze_filters
         confirmed,review,counts=analyze_filters([{"title":"Gerente de Produto","url":"https://example.com/job","location":"Brasil","published":""}],"Product Manager","BR","remote",30)
         self.assertEqual(len(confirmed),0)
-        self.assertEqual(len(review),0)
-        self.assertEqual(counts.get("excluded:data"),1)
+        self.assertEqual(len(review),1)
+        self.assertIn("data", review[0]["needs_verification"])
+        self.assertEqual(counts.get("review:modalidade,data"),1)
 
     def test_known_wrong_mode_excluded(self):
         from search_filters import analyze_filters
@@ -312,7 +313,7 @@ class Phase3ContractTests(unittest.TestCase):
          {"title":"Growth Developer","location":"Brasil Remoto","published":""}
         ]
         confirmed,review,why=analyze_filters(rows,country="BR",mode="remote",days=0)
-        self.assertEqual([x["title"] for x in confirmed],["Líder de Produtos","Marketing Ops Manager","Product Manager"])
+        self.assertEqual([x["title"] for x in confirmed],["Marketing Ops Manager","Product Manager"])
         self.assertEqual(review,[])
 
     def test_any_period_does_not_require_publication(self):
@@ -322,7 +323,8 @@ class Phase3ContractTests(unittest.TestCase):
         self.assertEqual(len(confirmed),1)
         recent,review,_=analyze_filters(rows,country="BR",mode="remote",days=30)
         self.assertFalse(recent)
-        self.assertEqual(len(review),0)
+        self.assertEqual(len(review),1)
+        self.assertIn("data",review[0]["needs_verification"])
 
     def test_collectors_preserve_titles_before_relevance(self):
         from collectors import pull
@@ -332,7 +334,7 @@ class Phase3ContractTests(unittest.TestCase):
 
     def test_equivalence_families_in_three_languages(self):
         from search_filters import role_match,search_terms
-        self.assertTrue(role_match("especialista de produtos",search_terms("Product Manager")))
+        self.assertFalse(role_match("especialista de produtos",search_terms("Product Manager")))
         self.assertTrue(role_match("coordenadora de projetos",search_terms("Project Manager")))
         self.assertTrue(role_match("Marketing Ops Manager",search_terms("Marketing")))
         self.assertTrue(role_match("Growth Marketer",search_terms("Growth")))
@@ -357,7 +359,7 @@ class Phase3ContractTests(unittest.TestCase):
          {"title":"Marketing Ops Manager","location":"USA only","workplaceType":"Remoto","published":""}
         ]
         confirmed,review,_=analyze_filters(rows,country="BR",mode="remote",days=0)
-        self.assertEqual(len(confirmed),2)
+        self.assertEqual(len(confirmed),1)
         self.assertFalse(review)
 
     def test_jd_recovers_relevant_unusual_role(self):

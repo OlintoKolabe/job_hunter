@@ -80,6 +80,17 @@ class Gate12Scoring(unittest.TestCase):
         job={"title":"Technical Product Manager - Engineering", "location":"Brazil - Remote"}
         self.assertEqual(classify(job,terms,"BR","remote",0),("confirmed",""))
 
+    def test_worldwide_header_does_not_override_emea_only_jd(self):
+        terms=search_terms("Marketing")
+        job={"title":"Head of Marketing","source":"himalayas","location":"Worldwide",
+             "description":"Head of Marketing — Remote (EMEA). Applicants must be in the region."}
+        self.assertEqual(classify(job,terms,"BR","remote",0),("excluded","pais"))
+
+    def test_internship_requires_explicit_search_intent(self):
+        job={"title":"Product Manager Internship","source":"himalayas","location":"Worldwide"}
+        self.assertEqual(classify(job,search_terms("Product Manager"),"BR","remote",0),
+                         ("excluded","cargo"))
+
     def test_ui_separates_score_from_eligibility_and_keeps_no_jd_gate(self):
         ui = Path("src/Opportunities.jsx").read_text(encoding="utf-8")
         self.assertIn("'Aderência local estimada'", ui)

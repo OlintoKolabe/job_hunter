@@ -183,6 +183,10 @@ def geo_verdict(job,country,evidence=None):
     restricted=restricted or bool(re.search(
         r"\b(?:must|required to|need to)\s+(?:be\s+)?(?:located|based|reside|live)\s+in\s+"
         r"(?:the\s+)?(?:united states|usa|u\.s\.|canada|europe|uk|united kingdom)\b",jd_text))
+    # A global/empty API location never overrides an explicit EMEA-only JD.
+    restricted=restricted or bool(re.search(
+        r"\b(?:remote\s*[(\-:]?\s*emea|emea\s*(?:only|remote)|"
+        r"(?:based|located|reside|live)\s+in\s+emea)\b",jd_text))
     if any(contains_phrase(loc,p) for p in FOREIGN_ONLY_MARKERS) or "foreign_only" in jd_geo or restricted:
         if country in ("BR","LATAM"):return "excluded"
     if country=="BR" and any(contains_phrase(loc+" "+jd_text,p) for p in BRAZIL_EXCLUSIONS):
@@ -217,6 +221,9 @@ def classify(job,terms,country,mode,days):
     from jd_signals import signals
     evidence=signals(job,", ".join(terms))
     if evidence["spanish_required"]:return "excluded","espanhol_obrigatorio"
+    if re.search(r"\b(?:internship|intern|estagio|estagiari[oa])\b",title) and not any(
+        re.search(r"\b(?:internship|intern|estagio|estagiari[oa])\b",term) for term in terms):
+        return "excluded","cargo"
     # Generic family aliases such as "marketing"/"acquisition" must not
     # admit engineering roles or HR recruitment into an executive search.
     # Protect explicitly named PM/PO/BA/project/marketing management roles,
@@ -241,7 +248,11 @@ def classify(job,terms,country,mode,days):
     # JD vocabulary describes collaboration as well as the role itself.
     # A technical lead or designer may mention product roadmaps many times;
     # JD keywords alone must not turn such a title into a PM opening.
-    uncertain_role=not title_matches and adjacent
+    # Preserve established discovery of genuinely adjacent management roles
+    # when the JD supplies >=2 specific signals for the requested family.
+    # A title alone remains a review item; unrelated technical titles above
+    # cannot be rescued by incidental JD vocabulary.
+    uncertain_role=not title_matches and adjacent and not evidence.get("family_evidence")
     if not title_matches and not adjacent:return "excluded","cargo"
     loc=fold(job.get("location",""))
     structured_geo=fold(" ".join(str(job.get(k) or "") for k in ("country","countryCode","countryName","city","state","region","eligibleLocations","remoteRegions")))

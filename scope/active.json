@@ -1,48 +1,36 @@
 {
-  "id": "JOB-HUNTER-RESUME-MATCHER-AI-SINGLE-ENGINE",
+  "id": "JOB-HUNTER-ELIGIBILITY-JD-SCORING-CANARY",
+  "kind": "bugfix",
   "status": "active",
-  "base_ref": "97868f582d76869a0fda782c62061ad3f72e486b",
+  "base_ref": "a3d0b46",
   "production_ref": "feat/phase1-web-foundation",
   "feature_ref": "feat/resume-matcher-ai-evaluation-cv",
-  "objective": "Replace failed vacancy scoring and CV selection with a single evidence-grounded OpenAI-backed engine inspired by Resume Matcher; preserve search, decisions, database and DOCX renderer.",
-  "allowed_files": [
-    "scope/active.json",
-    "app.py",
-    "src/Opportunities.jsx",
-    "ai_resume_matcher.py",
-    "jd_enrichment.py",
-    "score_repository.py",
-    "Dockerfile",
-    "tests/test_ai_resume_matcher.py",
-    "tests/test_opportunity_ui_contracts.py",
-    "tests/test_block4_1.py"
-  ],
-  "forbidden_paths": [
-    ".github/workflows/",
-    "src/Phase2.jsx",
-    "src/Phase3.jsx",
-    "collectors.py",
-    "search_filters.py",
-    "catalog_engine.py",
-    "migrations/"
+  "objective": "Integrate existing collectors, cached JDs, eligibility and current scoring with distinct UI states and bounded zero-cost analysis for uncertain eligibility.",
+  "allowed_paths": ["app.py", "collectors.py", "source_extensions.py", "search_filters.py", "jd_enrichment.py", "ai_resume_matcher.py", "src/Opportunities.jsx", "tests/test_ai_resume_matcher.py", "tests/test_opportunity_ui_contracts.py", "tests/test_search_500_regression.py", "tests/test_cross_source_eligibility.py", "tests/test_source_coverage.py", "tests/test_block4_1.py", "tests/test_resume_engine.py"],
+  "allowed_changes": [
+    "Preserve existing structured work mode and country metadata from collectors and use conservative eligibility checks without guessing unknowns",
+    "Distinguish absent JD, pending, failure, scored and eligibility-unconfirmed states; hide CV generation for invalid JD",
+    "Score valid cached JDs locally at zero API cost when eligibility is unconfirmed",
+    "Queue only confirmed eligible candidates for existing paid AI evaluation with current budget and persisted scores",
+    "Start bounded confirmed eligible scoring during discovery, retaining deduplication and global candidate selection",
+    "Reuse existing JD cache, scorer, CV engine and collectors; test before/after, cost, filters, UI and performance"
   ],
   "forbidden_changes": [
-    "automatic CV generation absent user click",
-    "new database tables or schedulers",
-    "multiple CV generators",
-    "hardcoded API key or leakage",
-    "unsupported factual claims",
-    "changes to job search/filter/decision behavior"
+    "scoring formula, profile facts, CV generation engine or templates",
+    "new services, dependencies, database tables, schedulers or collectors",
+    "paid AI calls for unconfirmed eligibility or invalid JD",
+    "assuming missing country or work mode implies eligibility",
+    "automatic CV generation or application",
+    "main or production changes, GitHub Actions, Vercel or mock substitutions",
+    "hardcoded credentials"
   ],
   "acceptance": [
-    "AI-based professional-fit 0-100 grounded in validated facts and mandatory JD requirements",
-    "Separate professional fit from ATS formatting",
-    "Only one-click CV AI after user requests it",
-    "Reuse existing DOCX renderer and audit bullet factual provenance",
-    "Never silently use deterministic CV when AI fails or is disabled",
-    "Limit monthly API spending with existing reservation mechanism",
-    "No new DB, schedulers or duplicate pipelines",
-    "Pass unit/build/integration tests and inspect branch diff before live deployment"
+    "Unconfirmed vacancies stay unconfirmed; valid JD allows zero-cost local scoring",
+    "Missing or invalid JD never triggers scoring or CV button",
+    "Only confirmed eligible vacancies with valid JD enter paid AI scoring; caching prevents duplicate charges",
+    "First confirmed candidates score before full catalog scan while total work remains bounded",
+    "Twenty real sampled search-matching jobs and cached JDs verify coverage, time, quality and no regressions",
+    "Scope gate and relevant tests pass; canary UI verified before release; main untouched"
   ],
-  "deployment": "Experimental branch only until documented gated tests and live AI+DOCX verification; main requires separate explicit permission."
+  "deployment": "Canary only; no main merge without explicit user approval"
 }

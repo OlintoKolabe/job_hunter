@@ -27,7 +27,7 @@ from search_filters import analyze_filters,apply_filters,search_terms,discovery_
 from first_seen import flag_new_jobs
 from catalog_engine import source_tasks,scan
 from catalog_bootstrap import maybe_start
-from jd_enrichment import hydrate_jobs
+from jd_enrichment import hydrate_jobs, persist_listing_jds, cached_jds_for_filter
 from resume_engine import build_plan, render_docx, audit, evaluate_rendered_resume
 
 app = FastAPI(docs_url=None, redoc_url=None)
@@ -286,7 +286,7 @@ def restore_persisted_scores(cursor, jobs, roles, url_key):
                 output.append({**job, "ranking": result, "jd_status": "cache"})
                 restored += 1
                 continue
-        output.append({**job, "ranking": None, "jd_status": "pendente"})
+        output.append({**job, "ranking": None, "jd_status": "pendente" if job.get("jd_available") else "indisponivel"})
     return output, restored
 
 
@@ -322,10 +322,12 @@ def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:
                 except Exception as exc:
                     sources.append({"source":feed,"state":"error","received":0,"error":type(exc).__name__})
     raw_count=len(items)
-    try: items,review,filter_stats=analyze_filters(items,roles,country,mode,days,sort)
+    raw_jobs=list(items)
+    try: items,review,filter_stats=analyze_filters(cached_jds_for_filter(items,url_key,DATABASE),roles,country,mode,days,sort)
     except ValueError as e: raise HTTPException(400,str(e))
     with psycopg.connect(DATABASE,connect_timeout=8) as conn:
         with conn.cursor() as cur:
+            source_jd_stats=persist_listing_jds(cur,raw_jobs,items+review,url_key)
             keys=[url_key(j["url"]) for j in items+review]
             known_urls=set()
             known_pairs=set()
@@ -356,11 +358,11 @@ def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:
             isinstance(j.get("ranking"), dict) and isinstance(j["ranking"].get("score"), (int, float)),
             float(j["ranking"]["score"]) if isinstance(j.get("ranking"), dict) and isinstance(j["ranking"].get("score"), (int, float)) else -1
         ), reverse=True)
-    pending=[{**j,"ranking":None,"jd_status":"avaliacao_manual"} for j in pending]
+    pending=[{**j,"jd_status":"avaliacao_local" if j.get("jd_available") else "indisponivel"} for j in pending]
     # Pending eligibility is not automatically enriched or scored.
     fresh_count=len(visible)
     return {"source":"Multifuente","queried":len(sources),"total":len(items),
-        "new":fresh_count,"duplicates":history_excluded,"jd_coverage":coverage,"items":visible[:100],"review_items":pending[:150],"filter_stats":filter_stats,"raw_count":raw_count,"details":sources,
+        "new":fresh_count,"duplicates":history_excluded,"jd_coverage":coverage,"source_jd_stats":source_jd_stats,"items":visible[:100],"review_items":pending[:150],"filter_stats":filter_stats,"raw_count":raw_count,"details":sources,
         "notice":"Vagas coletadas, ainda sem triagem de elegibilidade Brasil/remoto ou score."}
 
 
@@ -503,7 +505,8 @@ def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False
     # openings, offices or requisition IDs and must not discard jobs here.
     unique=unique_jobs_by_url(found)
     raw_count=len(unique)
-    try: items,review,filter_stats=analyze_filters(list(unique.values()),roles,country,mode,days,sort)
+    raw_jobs=list(unique.values())
+    try: items,review,filter_stats=analyze_filters(cached_jds_for_filter(list(unique.values()),url_key,DATABASE),roles,country,mode,days,sort)
     except ValueError as e:raise HTTPException(400,str(e))
     # Offer out-of-filter vacancies for explicit decisions without treating them
     # as eligible. Bound the response: this is a review sample, not bulk export.
@@ -519,6 +522,7 @@ def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False
     known_urls=set();known_pairs=set()
     with psycopg.connect(DATABASE,connect_timeout=7) as conn:
         with conn.cursor() as cur:
+            source_jd_stats=persist_listing_jds(cur,raw_jobs,items+review,url_key)
             for entry in details:
                 cur.execute("""INSERT INTO jh_catalog_checks(source,slug,state,received,error)
                     VALUES(%s,%s,%s,%s,%s) ON CONFLICT(source,slug) DO UPDATE SET
@@ -552,13 +556,13 @@ def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False
             isinstance(j.get("ranking"), dict) and isinstance(j["ranking"].get("score"), (int, float)),
             float(j["ranking"]["score"]) if isinstance(j.get("ranking"), dict) and isinstance(j["ranking"].get("score"), (int, float)) else -1
         ), reverse=True)
-    pending=[{**j,"ranking":None,"jd_status":"avaliacao_manual"} for j in pending]
+    pending=[{**j,"jd_status":"avaliacao_local" if j.get("jd_available") else "indisponivel"} for j in pending]
     # Pending eligibility is not automatically enriched or scored.
     fresh_count=len(visible)
     return {"total_sources":len(tasks),"due_only":due_only,"offset":offset,"next_offset":offset+len(batch),
             "complete":offset+len(batch)>=len(tasks),"details":details,
             "found":len(items),"new":fresh_count,"duplicates":history_excluded,"raw_count":raw_count,"filter_stats":filter_stats,
-            "jd_coverage":coverage,"review_items":pending[:150],"excluded_items":rejected,"items":visible[:80],"notice":"Vagas candidatas: remoto/Brasil e requisitos ainda aguardam análise completa."}
+            "jd_coverage":coverage,"source_jd_stats":source_jd_stats,"review_items":pending[:150],"excluded_items":rejected,"items":visible[:80],"notice":"Vagas candidatas: remoto/Brasil e requisitos ainda aguardam análise completa."}
 
 class JDRequest(BaseModel):
     jobs: list[dict]
@@ -587,9 +591,9 @@ def jd_enrich(request: Request, payload: JDRequest):
     if len(payload.roles)>700:raise HTTPException(400,"Filtro inválido")
     rows=[]
     for j in payload.jobs:
+        if not isinstance(j,dict):raise HTTPException(400,"Vaga inválida")
         if not payload.manual and j.get('needs_verification'):
             raise HTTPException(400,'Vaga não confirmada exige avaliação manual')
-        if not isinstance(j,dict):raise HTTPException(400,"Vaga inválida")
         if not str(j.get("url","")).startswith("https://"):raise HTTPException(400,"URL inválida")
         if len(str(j.get("url","")))>2000:raise HTTPException(400,"URL inválida")
         rows.append({k:j.get(k,"") for k in ("url","title","company","source","description","location","published","detected_mode","needs_verification")})
@@ -812,7 +816,8 @@ def ai_resume_download(payload: ResumeAIRequest, request: Request):
             from jd_enrichment import fallback_public_jd
             jd=fallback_public_jd({"url":url,"title":title,"company":company}) or ""
     print(f"JH_CV_STAGE stage=jd_ready length={len(jd)}",flush=True)
-    if len(jd.strip())<100:
+    from jd_enrichment import valid_listing_jd
+    if not valid_listing_jd(jd):
         print("JH_CV_REJECT code=jd_unavailable",flush=True)
         raise HTTPException(422,"Descrição integral indisponível; não é seguro gerar currículo desta vaga")
     if os.getenv("JH_AI_ENABLED")!="1" or not os.getenv("OPENAI_API_KEY"):

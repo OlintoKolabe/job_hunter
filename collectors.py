@@ -40,6 +40,20 @@ def item(company,title,url,location,source,published="",description=""):
     return {"company":str(company or "")[:200],"title":str(title)[:300],"url":url[:2000],
             "location":str(location or "")[:200],"published":str(published or "")[:80],"source":source,"description":str(description or "")[:18000]}
 
+def preserve_eligibility_fields(destination,source):
+    """Keep only published collector metadata, without inferring missing eligibility."""
+    if not destination or not isinstance(source,dict):return destination
+    for field in ("workplaceType","workArrangement","remoteType","workMode","workplace",
+                  "country","countryCode","countryName","city","state","region"):
+        if isinstance(source.get(field),str) and source[field].strip():
+            destination[field]=source[field][:200]
+    for field in ("eligibleLocations","remoteRegions"):
+        if isinstance(source.get(field),list):
+            destination[field]=[value[:200] for value in source[field] if isinstance(value,str)][:30]
+    remote=source.get("isRemote",source.get("remote"))
+    if isinstance(remote,bool):destination["remote"]=remote
+    return destination
+
 def pull(source,slug,location='brazil'):
     jobs=[]
     if source=="Jobgether":
@@ -54,7 +68,7 @@ def pull(source,slug,location='brazil'):
             value=item(c,j.get("title") or j.get("jobTitle") or j.get("position"),
                 j.get("url") or j.get("jobUrl") or j.get("applyUrl") or j.get("hostedUrl"),
                 j.get("location") or j.get("country"),source,j.get("publishedAt") or j.get("createdAt"),j.get("description") or j.get("jobDescription") or j.get("content") or "")
-            if value:jobs.append(value)
+            if value:jobs.append(preserve_eligibility_fields(value,j))
     elif source=="Workable":
         params={"query":slug,"limit":20}
         if location:params["location"]=location
@@ -66,7 +80,7 @@ def pull(source,slug,location='brazil'):
             if isinstance(c,dict):c=c.get("name","")
             value=item(c,j.get("title") or j.get("jobTitle"),j.get("url") or j.get("jobUrl") or j.get("applicationUrl"),
                 j.get("location") or j.get("workplace"),source,j.get("publishedAt"),j.get("descriptionHtml") or j.get("description") or "")
-            if value:jobs.append(value)
+            if value:jobs.append(preserve_eligibility_fields(value,j))
     elif source=="Ashby":
         payload=fetch_json("https://api.ashbyhq.com/posting-api/job-board/"+urllib.parse.quote(slug))
         for j in as_list(payload):
@@ -82,7 +96,7 @@ def pull(source,slug,location='brazil'):
                 for field in ("workplaceType","workArrangement","remoteType","country","countryCode","region"):
                     if isinstance(j.get(field),str):value[field]=j[field]
                 if isinstance(j.get("isRemote"),bool):value["remote"]=j["isRemote"]
-                jobs.append(value)
+                jobs.append(preserve_eligibility_fields(value,j))
     elif source=="Greenhouse":
         endpoint="https://boards-api.greenhouse.io/v1/boards/"+urllib.parse.quote(slug)+"/jobs"
         try:
@@ -96,7 +110,7 @@ def pull(source,slug,location='brazil'):
             location=j.get("location") or {}
             if isinstance(location,dict):location=location.get("name","")
             value=item(slug,j.get("title"),j.get("absolute_url"),location,source,j.get("first_published"),j.get("content") or "")
-            if value:jobs.append(value)
+            if value:jobs.append(preserve_eligibility_fields(value,j))
     elif source=="Lever":
         payload=fetch_json("https://api.lever.co/v0/postings/"+urllib.parse.quote(slug)+"?mode=json"+("&location=Brazil" if slug.casefold()=="jobgether" else ""))
         if isinstance(payload,dict) and payload.get("ok") is False:
@@ -105,7 +119,7 @@ def pull(source,slug,location='brazil'):
             if not isinstance(j,dict):continue
             cats=j.get("categories") or {}
             value=item(slug,j.get("text"),j.get("hostedUrl"),cats.get("location") or "",source,j.get("createdAt"),j.get("descriptionPlain") or j.get("description") or "")
-            if value:jobs.append(value)
+            if value:jobs.append(preserve_eligibility_fields(value,j))
     elif source=="inHire":
         payload=fetch_json("https://api.inhire.app/job-posts/public/pages",{"X-Tenant":slug})
         if isinstance(payload,list):
@@ -133,7 +147,7 @@ def pull(source,slug,location='brazil'):
             value=item(tenant_name,title,url,(str(loc)+" "+str(workplace)).strip(),source,j.get("publishedAt") or j.get("createdAt"),j.get("description") or j.get("jobDescription") or "")
             if value:
                 value["workplaceType"]=workplace
-                jobs.append(value)
+                jobs.append(preserve_eligibility_fields(value,j))
     if source=="inHire" and not jobs:
         raise ValueError("inHire returned no parsed jobs; API response format requires verification")
     # Keep all parsed jobs. Role relevance belongs to search_filters, not the collector.

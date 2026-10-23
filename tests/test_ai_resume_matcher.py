@@ -11,7 +11,10 @@ from resume_engine import audit, render_docx, EXPERIENCE
 JD=("Senior Product Manager required to lead discovery, product roadmaps, stakeholders, "
     "backlog prioritization and Scrum delivery in a regulated business. "
     "Must have proven product ownership and leadership experience. "
-    "Preferred: programming in Python and extensive Power BI dashboards.")
+    "Preferred: programming in Python and extensive Power BI dashboards. "
+    "Own stakeholder alignment across teams, facilitate product discovery, translate "
+    "customer research into roadmaps and collaborate with designers and engineers "
+    "on measurable outcomes and continuous product delivery.")
 
 class AIResumeMatcherTests(unittest.TestCase):
     def test_real_jd_phrasing_is_not_lost_to_strict_word_overlap(self):
@@ -294,5 +297,69 @@ class ShortlistedJDTests(unittest.TestCase):
         with patch('indeed_provider.description_for_job',side_effect=AssertionError('Indeed only')), \
              patch('jd_enrichment.extract_public_jd',return_value='generic JD'):
             self.assertEqual(fallback_public_jd(job),'generic JD')
+
+    def test_filter_does_not_destroy_collector_jd_before_cache(self):
+        from jd_enrichment import persist_listing_jds
+        from search_filters import analyze_filters
+        from unittest.mock import Mock
+        jd='Product strategy, roadmap, discovery, requirements and stakeholder leadership. '*12
+        job={'url':'https://example.com/product/1','title':'Senior Product Manager',
+             'company':'Example','location':'Remote Brazil','remote':True,
+             'source':'ashby','published':'2026-10-22','description':jd}
+        confirmed,review,_=analyze_filters([job],'Product Manager','BR','remote',3,'newest')
+        self.assertEqual(len(confirmed),1)
+        self.assertEqual(confirmed[0]['description'],'')
+        cur=Mock()
+        stats=persist_listing_jds(cur,[job],confirmed+review,lambda u:u)
+        self.assertEqual(stats['ashby']['jd_valid'],1)
+        self.assertEqual(cur.executemany.call_args.args[1][0][1],jd)
+
+    def test_missing_or_challenge_jd_never_enters_cache(self):
+        from jd_enrichment import valid_listing_jd,persist_listing_jds
+        from unittest.mock import Mock
+        self.assertFalse(valid_listing_jd('Verify you are human. '*90))
+        job={'url':'https://example.com/product/2','source':'inhire','description':''}
+        cur=Mock()
+        stats=persist_listing_jds(cur,[job],[job],lambda u:u)
+        self.assertEqual(stats['inhire']['jd_missing'],1)
+        cur.executemany.assert_not_called()
+
+    def test_prefilter_cache_is_off_by_default_and_never_queries(self):
+        from jd_enrichment import cached_jds_for_filter
+        original=[{'url':'https://example.com/1','title':'Product Manager','description':''}]
+        with patch.dict(os.environ,{'JH_PREFILTER_JD_CACHE_ENABLED':'0'}), \
+             patch('jd_enrichment.psycopg.connect',side_effect=AssertionError('cache must stay off')):
+            self.assertIs(cached_jds_for_filter(original,lambda url:url,'unused'),original)
+
+    def test_prefilter_cache_preserves_collector_fields_and_valid_jd(self):
+        from jd_enrichment import cached_jds_for_filter
+        from unittest.mock import MagicMock
+        full='Remote Brazil. The position requires product roadmap ownership and agile delivery. '*10
+        collector='Product leadership, agile delivery and planning with stakeholders. '*10
+        original=[{'url':'https://example.com/1','title':'Product Manager','company':'A',
+                   'location':'Remote Brazil','remote':True,'description':''},
+                  {'url':'https://example.com/2','title':'Project Manager','company':'B',
+                   'location':'Remote Brazil','description':collector}]
+        connection=MagicMock()
+        connection.__enter__.return_value.cursor.return_value.__enter__.return_value.fetchall.return_value=[
+            ('https://example.com/1',full)]
+        with patch.dict(os.environ,{'JH_PREFILTER_JD_CACHE_ENABLED':'1'}), \
+             patch('jd_enrichment.psycopg.connect',return_value=connection):
+            result=cached_jds_for_filter(original,lambda url:url,'unused')
+        self.assertEqual(result[0]['description'],full)
+        self.assertEqual(result[0]['title'],original[0]['title'])
+        self.assertEqual(result[0]['location'],original[0]['location'])
+        self.assertTrue(result[0]['remote'])
+        self.assertEqual(result[1],original[1])
+        self.assertEqual(original[0]['description'],'')
+        self.assertEqual(connection.__enter__.return_value.cursor.return_value.__enter__.return_value.execute.call_count,1)
+
+    def test_prefilter_cache_failure_leaves_filter_input_unchanged(self):
+        from jd_enrichment import cached_jds_for_filter
+        import psycopg
+        original=[{'url':'https://example.com/1','title':'Product Manager','description':''}]
+        with patch.dict(os.environ,{'JH_PREFILTER_JD_CACHE_ENABLED':'1'}), \
+             patch('jd_enrichment.psycopg.connect',side_effect=psycopg.OperationalError('offline')):
+            self.assertIs(cached_jds_for_filter(original,lambda url:url,'unused'),original)
 
 if __name__=="__main__":unittest.main()

@@ -245,6 +245,7 @@ def classify(job,terms,country,mode,days):
 def analyze_filters(jobs,roles=DEFAULT_ROLES,country="BR",mode="remote",days=30,sort="newest"):
     from jd_signals import signals
     from block4_score import score_job
+    from jd_enrichment import valid_listing_jd
     terms=search_terms(roles)
     if len(roles)>700:raise ValueError("Filtros de cargo excessivamente longos")
     if country not in COUNTRY_NAMES:raise ValueError("País desconhecido")
@@ -255,11 +256,22 @@ def analyze_filters(jobs,roles=DEFAULT_ROLES,country="BR",mode="remote",days=30,
     for j in jobs:
         bucket,reason=classify(j,terms,country,mode,days)
         reasons[bucket+(":"+reason if reason else "")]=reasons.get(bucket+(":"+reason if reason else ""),0)+1
-        if bucket=="confirmed":confirmed.append({**j,"detected_mode":detect_work_mode(j,signals(j,roles)),"jd_evidence":signals(j,roles),"ranking":score_job(j,roles),"_listing_jd_hash":hashlib.sha256(str(j.get("description") or "").encode()).hexdigest() if len(str(j.get("description") or ""))>=300 else None,"description":""})
-        elif bucket=="review":review.append({**j,"detected_mode":detect_work_mode(j,signals(j,roles)),"jd_evidence":signals(j,roles),"ranking":score_job(j,roles),"_listing_jd_hash":hashlib.sha256(str(j.get("description") or "").encode()).hexdigest() if len(str(j.get("description") or ""))>=300 else None,"description":"","needs_verification":reason.split(",")})
+        if bucket in ("confirmed","review"):
+            description=str(j.get("description") or "")
+            valid=valid_listing_jd(description)
+            evidence=signals(j,roles)
+            result={**j,"detected_mode":detect_work_mode(j,evidence),"jd_evidence":evidence,
+                    "jd_available":valid,"ranking":score_job(j,roles) if valid else {"score":None,"confidence":"jd_indisponivel"},
+                    "_listing_jd_hash":hashlib.sha256(description.encode()).hexdigest() if valid else None,
+                    "description":""}
+            if bucket=="confirmed":confirmed.append(result)
+            else:
+                result["needs_verification"]=reason.split(",")
+                if valid and result["ranking"]:result["ranking"]={**result["ranking"],"method":"local","cost_usd":0}
+                review.append(result)
     order=lambda j:parse_date(j.get("published")) or datetime.min.replace(tzinfo=timezone.utc)
     if sort in ("score","recommendation"):
-        key=lambda j:(j["ranking"]["score"] is not None,j["ranking"]["score"] if j["ranking"]["score"] is not None else -1,-j["ranking"]["unverified_count"],order(j))
+        key=lambda j:((j.get("ranking") or {}).get("score") is not None,(j.get("ranking") or {}).get("score") if (j.get("ranking") or {}).get("score") is not None else -1,-(j.get("ranking") or {}).get("unverified_count",0),order(j))
         confirmed.sort(key=key,reverse=True)
         review.sort(key=key,reverse=True)
     else:

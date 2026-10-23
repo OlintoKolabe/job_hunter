@@ -32,6 +32,32 @@ def valid_listing_jd(value):
     if re.search(r'(?i)(access denied|verify you are human|enable javascript to continue|captcha required)',plain[:500]):return False
     return True
 
+def cached_jds_for_filter(jobs, url_key, database):
+    """Canary-only prefilter evidence; retain existing collector metadata and rules.
+
+    Disabled or unavailable cache leaves the original filter input untouched.
+    Valid collector JDs always take precedence.
+    """
+    if os.getenv('JH_PREFILTER_JD_CACHE_ENABLED') != '1' or not jobs:
+        return jobs
+    keys=[url_key(job.get('url','')) for job in jobs]
+    missing={key for job,key in zip(jobs,keys)
+             if key and not valid_listing_jd(job.get('description'))}
+    if not missing:
+        return jobs
+    try:
+        with psycopg.connect(database,connect_timeout=5) as conn:
+            with conn.cursor() as cursor:
+                cursor.execute('''SELECT normalized_url,description FROM jh_jd_cache
+                    WHERE normalized_url=ANY(%s) AND length(description)>=300''',(list(missing),))
+                cached={key:description for key,description in cursor.fetchall()
+                        if valid_listing_jd(description)}
+    except psycopg.Error:
+        return jobs
+    return [{**job,'description':cached[key]}
+            if key in cached and not valid_listing_jd(job.get('description')) else job
+            for job,key in zip(jobs,keys)]
+
 def persist_listing_jds(cursor, raw_jobs, eligible_jobs, url_key):
     """Keep real collector JDs before the filter intentionally strips response payloads."""
     eligible={url_key(j.get('url','')) for j in eligible_jobs}

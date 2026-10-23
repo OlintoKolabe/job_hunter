@@ -27,7 +27,7 @@ from search_filters import analyze_filters,apply_filters,search_terms,discovery_
 from first_seen import flag_new_jobs
 from catalog_engine import source_tasks,scan
 from catalog_bootstrap import maybe_start
-from jd_enrichment import hydrate_jobs, persist_listing_jds
+from jd_enrichment import hydrate_jobs, persist_listing_jds, cached_jds_for_filter
 from resume_engine import build_plan, render_docx, audit, evaluate_rendered_resume
 
 app = FastAPI(docs_url=None, redoc_url=None)
@@ -323,7 +323,7 @@ def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:
                     sources.append({"source":feed,"state":"error","received":0,"error":type(exc).__name__})
     raw_count=len(items)
     raw_jobs=list(items)
-    try: items,review,filter_stats=analyze_filters(items,roles,country,mode,days,sort)
+    try: items,review,filter_stats=analyze_filters(cached_jds_for_filter(items,url_key,DATABASE),roles,country,mode,days,sort)
     except ValueError as e: raise HTTPException(400,str(e))
     with psycopg.connect(DATABASE,connect_timeout=8) as conn:
         with conn.cursor() as cur:
@@ -506,7 +506,7 @@ def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False
     unique=unique_jobs_by_url(found)
     raw_count=len(unique)
     raw_jobs=list(unique.values())
-    try: items,review,filter_stats=analyze_filters(list(unique.values()),roles,country,mode,days,sort)
+    try: items,review,filter_stats=analyze_filters(cached_jds_for_filter(list(unique.values()),url_key,DATABASE),roles,country,mode,days,sort)
     except ValueError as e:raise HTTPException(400,str(e))
     # Offer out-of-filter vacancies for explicit decisions without treating them
     # as eligible. Bound the response: this is a review sample, not bulk export.

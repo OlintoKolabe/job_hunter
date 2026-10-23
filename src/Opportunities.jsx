@@ -197,9 +197,9 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{}}){
  };
  const scoreDisplay=v=>{
    const state=scoreStatus(v);
-   if(state==='scored')return <span style={{display:'grid',gap:3}}><strong>Aderência: {v.ranking.score}/100</strong>{v.ranking?.method==='local'&&<small>Estimativa local · sem custo de IA · elegibilidade a confirmar</small>}{v.ranking?.application_recommendation?.score!=null&&<strong>Recomendação: {v.ranking.application_recommendation.score}/100</strong>}<small>{({recomendada:'Vale candidatar-se',avaliar:'Avaliar candidatura',nao_prioritaria:'Baixa prioridade',nao_recomendada:'Não recomendar',confirmar:'Confirmar localização'})[v.ranking?.application_recommendation?.decision]||'Recomendação não calculada'}</small></span>;
+   if(state==='scored')return <span style={{display:'grid',gap:3}}><strong>{v.ranking?.method==='local'?'Aderência local estimada':'Aderência'}: {v.ranking.score}/100</strong>{v.ranking?.method==='local'&&<small>Sem custo de IA · baseada apenas nos requisitos interpretados</small>}{v.needs_verification?.length>0&&<small>Elegibilidade a confirmar: {v.needs_verification.join(', ')}</small>}{v.ranking?.application_recommendation?.score!=null&&<strong>Recomendação: {v.ranking.application_recommendation.score}/100</strong>}<small>{({recomendada:'Vale candidatar-se',avaliar:'Avaliar candidatura',nao_prioritaria:'Baixa prioridade',nao_recomendada:'Não recomendar',confirmar:'Confirmar localização'})[v.ranking?.application_recommendation?.decision]||'Recomendação não calculada'}</small></span>;
    if(state==='waiting'||state==='calculating')return <span role="status" style={{display:'inline-flex',alignItems:'center',gap:6}}><span aria-hidden="true" className="jh-score-spinner"/>{state==='calculating'?'Calculando nota…':'Aguardando avaliação'}</span>;
-   return <strong>{state==='no_jd'?'JD indisponível':state==='failed'?'Falha na avaliação':v.needs_verification?.length?'A confirmar':'Análise inconclusiva'}</strong>;
+   return <strong>{state==='no_jd'?'JD indisponível':state==='failed'?'Falha na avaliação':'Nota inconclusiva'}</strong>;
  };
  const scoreExplanation=v=>{
    const state=scoreStatus(v);
@@ -215,7 +215,7 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{}}){
    if(v.ai_status==='budget_exhausted')return 'Limite mensal de IA atingido';
    if(v.jd_status==='indisponivel')return 'Não foi possível obter a descrição completa da vaga.';
    if(v.jd_status==='pendente')return 'A descrição ainda aguarda avaliação.';
-   return (v.ai_status==='interpreted'||v.ai_status==='cache')?'A IA analisou a descrição, mas os requisitos e as evidências identificados ainda não sustentam uma nota confiável.':v.ranking?.confidence==='cobertura_insuficiente'?'Os requisitos identificados não permitem calcular uma nota confiável.':'Não há evidências suficientes para calcular uma nota confiável.';
+   return (v.ai_status==='interpreted'||v.ai_status==='cache')?'A IA analisou a descrição, mas os requisitos e as evidências identificados ainda não sustentam uma nota confiável.':v.ranking?.confidence==='cobertura_insuficiente'?'JD disponível, mas a extração de requisitos é insuficiente para uma nota confiável.':'JD disponível, mas não há evidências suficientes para uma nota confiável.';
  };
  const geoPriority=v=>{
    const raw=String(v.location||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');

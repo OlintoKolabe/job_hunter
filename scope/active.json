@@ -1,46 +1,36 @@
 {
-  "id": "JOB-HUNTER-JD-PREFILTER-CANARY",
+  "id": "JOB-HUNTER-ELIGIBILITY-JD-SCORING-CANARY",
   "kind": "bugfix",
   "status": "active",
-  "base_ref": "97868f582d76869a0fda782c62061ad3f72e486b",
+  "base_ref": "a3d0b46",
   "production_ref": "feat/phase1-web-foundation",
   "feature_ref": "feat/resume-matcher-ai-evaluation-cv",
-  "objective": "Feed valid existing cached JDs into unchanged eligibility filtering, preserving all collector fields and default production behavior.",
-  "allowed_paths": [
-    "app.py",
-    "jd_enrichment.py",
-    "tests/test_ai_resume_matcher.py",
-    "tests/test_search_500_regression.py"
-  ],
+  "objective": "Integrate existing collectors, cached JDs, eligibility and current scoring with distinct UI states and bounded zero-cost analysis for uncertain eligibility.",
+  "allowed_paths": ["app.py", "collectors.py", "source_extensions.py", "search_filters.py", "jd_enrichment.py", "ai_resume_matcher.py", "src/Opportunities.jsx", "tests/test_ai_resume_matcher.py", "tests/test_opportunity_ui_contracts.py", "tests/test_search_500_regression.py", "tests/test_cross_source_eligibility.py", "tests/test_source_coverage.py", "tests/test_block4_1.py", "tests/test_resume_engine.py"],
   "allowed_changes": [
-    "Canary-only feature flag enables read-only JD cache hydration before existing eligibility filtering in both search endpoints",
-    "Retain all collector metadata and valid original descriptions, failing back if the cache is unavailable",
-    "Add before/after regression tests with no new services, database tables, provider calls or dependencies"
-  ],
-  "forbidden_paths": [
-    ".github/workflows/",
-    "src/Phase2.jsx",
-    "src/Phase3.jsx",
-    "collectors.py",
-    "search_filters.py",
-    "catalog_engine.py",
-    "migrations/"
+    "Preserve existing structured work mode and country metadata from collectors and use conservative eligibility checks without guessing unknowns",
+    "Distinguish absent JD, pending, failure, scored and eligibility-unconfirmed states; hide CV generation for invalid JD",
+    "Score valid cached JDs locally at zero API cost when eligibility is unconfirmed",
+    "Queue only confirmed eligible candidates for existing paid AI evaluation with current budget and persisted scores",
+    "Start bounded confirmed eligible scoring during discovery, retaining deduplication and global candidate selection",
+    "Reuse existing JD cache, scorer, CV engine and collectors; test before/after, cost, filters, UI and performance"
   ],
   "forbidden_changes": [
-    "automatic CV generation absent user click",
-    "ranking, local or AI scoring engines, model providers and score thresholds",
-    "CV generation, templates, profile facts and résumé scoring",
-    "new database tables or schedulers",
-    "multiple CV generators",
-    "hardcoded API key or leakage",
-    "unsupported factual claims",
-    "changes to eligibility criteria, ranker, scoring or CV behavior; production flag must remain off by default"
+    "scoring formula, profile facts, CV generation engine or templates",
+    "new services, dependencies, database tables, schedulers or collectors",
+    "paid AI calls for unconfirmed eligibility or invalid JD",
+    "assuming missing country or work mode implies eligibility",
+    "automatic CV generation or application",
+    "main or production changes, GitHub Actions, Vercel or mock substitutions",
+    "hardcoded credentials"
   ],
   "acceptance": [
-    "Canary optionally supplies existing cached JD text before the current filter",
-    "Previously valid collector data, filter rules, scoring and CV stay unchanged",
-    "Cache failures preserve original filter inputs without crashing searches",
-    "Before/after regressions pass and canary verification is documented, without merge to main"
+    "Unconfirmed vacancies stay unconfirmed; valid JD allows zero-cost local scoring",
+    "Missing or invalid JD never triggers scoring or CV button",
+    "Only confirmed eligible vacancies with valid JD enter paid AI scoring; caching prevents duplicate charges",
+    "First confirmed candidates score before full catalog scan while total work remains bounded",
+    "Twenty real sampled search-matching jobs and cached JDs verify coverage, time, quality and no regressions",
+    "Scope gate and relevant tests pass; canary UI verified before release; main untouched"
   ],
-  "deployment": "Scope contract update must be committed separately from implementation for the immutable-contract gate check; canary validation before production, main requires explicit permission."
+  "deployment": "Canary only; no main merge without explicit user approval"
 }

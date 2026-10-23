@@ -9,6 +9,22 @@ LATAM={"brazil","brasil","argentina","chile","colombia","colômbia","peru","urug
 COUNTRIES=[("LATAM","América Latina"),("BR","Brasil"),("AR","Argentina"),("BO","Bolívia"),("CL","Chile"),("CO","Colômbia"),("CR","Costa Rica"),("EC","Equador"),("GT","Guatemala"),("MX","México"),("PA","Panamá"),("PY","Paraguai"),("PE","Peru"),("DO","República Dominicana"),("UY","Uruguai"),("VE","Venezuela"),("US","Estados Unidos"),("CA","Canadá"),("PT","Portugal"),("ES","Espanha"),("GB","Reino Unido"),("GLOBAL","Global")]
 COUNTRY_NAMES=dict(COUNTRIES)
 TOKENS={"BR":["brazil","brasil"],"AR":["argentina"],"BO":["bolivia"],"CL":["chile"],"CO":["colombia"],"CR":["costa rica"],"EC":["ecuador"],"GT":["guatemala"],"MX":["mexico"],"PA":["panama"],"PY":["paraguay","paraguai"],"PE":["peru"],"DO":["dominican republic","republica dominicana"],"UY":["uruguay","uruguai"],"VE":["venezuela"],"US":["united states","usa","u.s."],"CA":["canada"],"PT":["portugal"],"ES":["spain","espanha"],"GB":["united kingdom","uk","england"]}
+# The UI country selector covers only a subset of world countries. A concrete
+# foreign location must not be classified as geographically unknown merely
+# because its country is absent from TOKENS.
+OTHER_FOREIGN_COUNTRIES=(
+    "germany","deutschland","france","italy","netherlands","belgium","switzerland",
+    "austria","sweden","norway","denmark","finland","poland","ireland",
+    "czech republic","czechia","romania","hungary","greece","ukraine",
+    "india","pakistan","bangladesh","singapore","japan","china","taiwan",
+    "south korea","philippines","indonesia","malaysia","thailand","vietnam",
+    "australia","new zealand","south africa","nigeria","kenya","israel",
+    "united arab emirates","uae","saudi arabia","egypt","turkey",
+)
+# High-confidence foreign city-only locations seen in collector records.
+# Unrecognized cities remain 'unknown', never silently confirmed.
+FOREIGN_CITY_ONLY=("boston","new york","san francisco","los angeles","seattle",
+                   "chicago","austin","london","berlin","munich","paris","amsterdam")
 REMOTE=["remote","remoto","remota","home office","home-office","homeoffice","home based","work from home","work-from-home","work remotely","work remotely from","fully remote","remote first","remote-first","100% remote","100% remoto","full remote","teletrabalho","telecommute","telecommuting","remotely","trabalho remoto","trabalho a distancia","trabalho à distância","trabalho em casa","trabalho de casa","any location","work anywhere","work at home","virtual position","distributed team","anywhere"]
 HYBRID=["hybrid","hibrido","híbrido","flexible hybrid","modelo hibrido","parcialmente presencial"]
 ONSITE=["on-site","onsite","on site","presencial","in-office","in office","office based","office-based","on premises"]
@@ -191,6 +207,9 @@ def geo_verdict(job,country,evidence=None):
         if country in ("BR","LATAM"):return "excluded"
     if country=="BR" and any(contains_phrase(loc+" "+jd_text,p) for p in BRAZIL_EXCLUSIONS):
         return "excluded"
+    if country in ("BR","LATAM") and not any(contains_phrase(loc,p) for p in GLOBAL_MARKERS):
+        if any(contains_phrase(loc,p) for p in OTHER_FOREIGN_COUNTRIES+FOREIGN_CITY_ONLY):
+            return "excluded"
     # A bare "US"/"USA" is an explicit US job location, not unknown Brazil eligibility.
     us_only=any(contains_phrase(loc,p) for p in ("us","usa","united states","u.s.","united states of america"))
     br=any(contains_phrase(loc,p) for p in ("brazil","brasil","br")) or any(contains_phrase(loc,p) for p in BR_CITIES) or "brazil" in jd_geo

@@ -12,4 +12,11 @@ class SearchIsolationTests(unittest.TestCase):
         self.assertIn('"excluded_items":rejected',source)
         self.assertIn("exclude_history_matches([],rejected",source)
 
+    def test_both_existing_search_paths_consult_prefilter_cache(self):
+        for route in (app.search_jobs,app.catalog_scan):
+            source=inspect.getsource(route)
+            self.assertIn('analyze_filters(cached_jds_for_filter(',source)
+            self.assertIn('persist_listing_jds(',source)
+            self.assertLess(source.index('cached_jds_for_filter('),source.index('persist_listing_jds('))
+
 if __name__=="__main__":unittest.main()

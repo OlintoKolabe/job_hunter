@@ -23,11 +23,12 @@ def main():
             source_status[source]={'status':'ok','raw':len(jobs)}
         except Exception as exc:
             source_status[source]={'status':type(exc).__name__,'raw':0}
-    # Use the same first 72 public catalog boards as the observed UI scan.
+    # Extend the observed 72-board scan to find 20 verified opportunities
+    # after excluding misleading titles and region-restricted JDs.
     # A board crawl can be slow, but carries no database writes or AI charges.
-    checks,catalog_jobs=scan(source_tasks()[:72],workers=9)
+    checks,catalog_jobs=scan(source_tasks()[:120],workers=10)
     collected.extend(catalog_jobs)
-    source_status['catalog_72']={'status':'ok','boards':len(checks),'raw':len(catalog_jobs)}
+    source_status['catalog_sample']={'status':'ok','boards':len(checks),'raw':len(catalog_jobs)}
     selected=[]
     recent_count=0
     seen=set()

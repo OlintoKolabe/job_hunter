@@ -165,7 +165,7 @@ def hydrate_jobs(cursor,jobs,roles,url_key,limit=PER_BATCH_LIMIT):
     with ThreadPoolExecutor(max_workers=4) as pool:
         for future in as_completed([pool.submit(fetch,p) for p in pending[:limit]]):
             key,content=future.result()
-            if valid_listing_jd(content):
+            if content:
                 updates[key]=(content,"fetched")
                 cursor.execute("""INSERT INTO jh_jd_cache(normalized_url,description,content_hash,fetched_at,source)
                     VALUES(%s,%s,%s,NOW(),%s)
@@ -186,8 +186,9 @@ def hydrate_jobs(cursor,jobs,roles,url_key,limit=PER_BATCH_LIMIT):
         evaluation=None
         ai_status='cache_or_disabled'
         if not valid:
-            output.append({**j,"ranking":None,"jd_available":False,"jd_evidence":{},
-                           "ai_status":"not_attempted","jd_status":"indisponivel"})
+            output.append({**j,"ranking":{"score":None,"confidence":"jd_indisponivel"},
+                           "jd_available":False,"jd_evidence":{},"ai_status":"not_attempted",
+                           "jd_status":origin if origin=="fetched" else ("pendente" if (key,j) in pending[limit:] else "indisponivel")})
             continue
         # Requires approved migration before deployment.
         if description:

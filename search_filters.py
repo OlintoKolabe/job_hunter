@@ -261,7 +261,7 @@ def analyze_filters(jobs,roles=DEFAULT_ROLES,country="BR",mode="remote",days=30,
             valid=valid_listing_jd(description)
             evidence=signals(j,roles)
             result={**j,"detected_mode":detect_work_mode(j,evidence),"jd_evidence":evidence,
-                    "jd_available":valid,"ranking":score_job(j,roles) if valid else None,
+                    "jd_available":valid,"ranking":score_job(j,roles) if valid else {"score":None,"confidence":"jd_indisponivel"},
                     "_listing_jd_hash":hashlib.sha256(description.encode()).hexdigest() if valid else None,
                     "description":""}
             if bucket=="confirmed":confirmed.append(result)

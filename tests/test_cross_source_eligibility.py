@@ -33,7 +33,7 @@ class CrossSourceEligibility(unittest.TestCase):
         bad=next(j for j in review if not j['jd_available'])
         self.assertEqual(good['ranking']['method'],'local')
         self.assertEqual(good['ranking']['cost_usd'],0)
-        self.assertIsNone(bad['ranking'])
+        self.assertIsNone(bad['ranking']['score'])
         self.assertEqual(good['description'],'')
     def test_all_sources_confirm_brazil_remote(self):
         for source in ("Ashby","Greenhouse","Lever","inHire","Gupy","Quickin"):

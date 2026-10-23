@@ -1,50 +1,36 @@
 {
-  "id": "JOB-HUNTER-JD-COLLECTOR-CACHE-PRESERVATION",
+  "id": "JOB-HUNTER-ELIGIBILITY-JD-SCORING-CANARY",
   "kind": "bugfix",
   "status": "active",
-  "base_ref": "97868f582d76869a0fda782c62061ad3f72e486b",
+  "base_ref": "a3d0b46",
   "production_ref": "feat/phase1-web-foundation",
-  "feature_ref": "fix/jd-preservation-gated-20261022",
-  "objective": "Preserve valid JDs already supplied by job collectors before filtering strips them, persist them in the existing JD cache and report per-source availability without changing ranking or CV generation.",
-  "allowed_paths": [
-    "app.py",
-    "src/Opportunities.jsx",
-    "jd_enrichment.py",
-    "tests/test_ai_resume_matcher.py"
-  ],
+  "feature_ref": "feat/resume-matcher-ai-evaluation-cv",
+  "objective": "Integrate existing collectors, cached JDs, eligibility and current scoring with distinct UI states and bounded zero-cost analysis for uncertain eligibility.",
+  "allowed_paths": ["app.py", "collectors.py", "source_extensions.py", "search_filters.py", "jd_enrichment.py", "ai_resume_matcher.py", "src/Opportunities.jsx", "tests/test_ai_resume_matcher.py", "tests/test_opportunity_ui_contracts.py", "tests/test_search_500_regression.py", "tests/test_cross_source_eligibility.py", "tests/test_source_coverage.py", "tests/test_block4_1.py", "tests/test_resume_engine.py"],
   "allowed_changes": [
-    "Cache full collector JDs for eligible or review jobs before their public payloads are reduced by the existing filters",
-    "Reject obviously invalid collector descriptions and preserve longer cached versions",
-    "Expose per-source collector JD availability through existing search and catalog API responses and existing UI diagnostics",
-    "Add directly related regression tests without new dependencies or schema changes"
-  ],
-  "forbidden_paths": [
-    ".github/workflows/",
-    "src/Phase2.jsx",
-    "src/Phase3.jsx",
-    "collectors.py",
-    "search_filters.py",
-    "catalog_engine.py",
-    "migrations/"
+    "Preserve existing structured work mode and country metadata from collectors and use conservative eligibility checks without guessing unknowns",
+    "Distinguish absent JD, pending, failure, scored and eligibility-unconfirmed states; hide CV generation for invalid JD",
+    "Score valid cached JDs locally at zero API cost when eligibility is unconfirmed",
+    "Queue only confirmed eligible candidates for existing paid AI evaluation with current budget and persisted scores",
+    "Start bounded confirmed eligible scoring during discovery, retaining deduplication and global candidate selection",
+    "Reuse existing JD cache, scorer, CV engine and collectors; test before/after, cost, filters, UI and performance"
   ],
   "forbidden_changes": [
-    "automatic CV generation absent user click",
-    "ranking, local or AI scoring engines, model providers and score thresholds",
-    "CV generation, templates, profile facts and résumé scoring",
-    "search eligibility, filter criteria or candidate decisions",
-    "new database tables or schedulers",
-    "multiple CV generators",
-    "hardcoded API key or leakage",
-    "unsupported factual claims",
-    "changes to job search/filter/decision behavior"
+    "scoring formula, profile facts, CV generation engine or templates",
+    "new services, dependencies, database tables, schedulers or collectors",
+    "paid AI calls for unconfirmed eligibility or invalid JD",
+    "assuming missing country or work mode implies eligibility",
+    "automatic CV generation or application",
+    "main or production changes, GitHub Actions, Vercel or mock substitutions",
+    "hardcoded credentials"
   ],
   "acceptance": [
-    "Valid collector JDs are stored before the existing filter strips descriptions",
-    "Invalid or blocked-page descriptions are not cached",
-    "No new database tables, paid AI calls, schedulers, source collectors or generators",
-    "JD availability counts appear in the existing source diagnostics",
-    "Existing search, ranking, CV and decision flows are unchanged",
-    "Pass regression, UI/build and canary integration checks before production deployment"
+    "Unconfirmed vacancies stay unconfirmed; valid JD allows zero-cost local scoring",
+    "Missing or invalid JD never triggers scoring or CV button",
+    "Only confirmed eligible vacancies with valid JD enter paid AI scoring; caching prevents duplicate charges",
+    "First confirmed candidates score before full catalog scan while total work remains bounded",
+    "Twenty real sampled search-matching jobs and cached JDs verify coverage, time, quality and no regressions",
+    "Scope gate and relevant tests pass; canary UI verified before release; main untouched"
   ],
-  "deployment": "Scope contract update must be committed separately from implementation for the immutable-contract gate check; canary validation before production, main requires explicit permission."
+  "deployment": "Canary only; no main merge without explicit user approval"
 }

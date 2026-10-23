@@ -11,7 +11,10 @@ from resume_engine import audit, render_docx, EXPERIENCE
 JD=("Senior Product Manager required to lead discovery, product roadmaps, stakeholders, "
     "backlog prioritization and Scrum delivery in a regulated business. "
     "Must have proven product ownership and leadership experience. "
-    "Preferred: programming in Python and extensive Power BI dashboards.")
+    "Preferred: programming in Python and extensive Power BI dashboards. "
+    "Own stakeholder alignment across teams, facilitate product discovery, translate "
+    "customer research into roadmaps and collaborate with designers and engineers "
+    "on measurable outcomes and continuous product delivery.")
 
 class AIResumeMatcherTests(unittest.TestCase):
     def test_real_jd_phrasing_is_not_lost_to_strict_word_overlap(self):

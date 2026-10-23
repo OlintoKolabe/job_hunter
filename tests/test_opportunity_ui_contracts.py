@@ -47,6 +47,20 @@ class OpportunityUIContracts(unittest.TestCase):
         s=Path("src/Opportunities.jsx").read_text()
         self.assertLess(s.index("const earlyRanking=rankEntireCollection(4)"),s.index("for(let n=0;n<180;n++)"))
         self.assertIn("rankEntireCollection(Math.max(0,10-scoredOrAttempted.size))",s)
-        self.assertIn("filter(j=>!scoredOrAttempted.has(j.url))",s)
+        self.assertIn("filter(j=>!scoredOrAttempted.has(j.url)&&j.jd_available===true",s)
+
+    def test_missing_jd_hides_cv_and_manual_scoring_and_has_clear_state(self):
+        s=Path('src/Opportunities.jsx').read_text()
+        self.assertIn("job.jd_available===true&&<button",s)
+        self.assertIn("v.jd_available===true&&<button",s)
+        self.assertIn("if(v.jd_available===false)return 'no_jd'",s)
+        self.assertIn("'JD indisponível'",s)
+        self.assertIn('Estimativa local',s)
+
+    def test_intermediate_batches_can_score_without_waiting_180(self):
+        s=Path('src/Opportunities.jsx').read_text()
+        self.assertIn('let nextIntermediateRanking=12',s)
+        self.assertLess(s.index('nextIntermediateRanking=12'),s.index('for(let n=0;n<180;n++)'))
+        self.assertIn('await rankEntireCollection(Math.min(2,10-scoredOrAttempted.size))',s)
 
 if __name__=="__main__":unittest.main()

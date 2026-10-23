@@ -286,7 +286,7 @@ def restore_persisted_scores(cursor, jobs, roles, url_key):
                 output.append({**job, "ranking": result, "jd_status": "cache"})
                 restored += 1
                 continue
-        output.append({**job, "ranking": None, "jd_status": "pendente"})
+        output.append({**job, "ranking": None, "jd_status": "pendente" if job.get("jd_available") else "indisponivel"})
     return output, restored
 
 
@@ -358,7 +358,7 @@ def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:
             isinstance(j.get("ranking"), dict) and isinstance(j["ranking"].get("score"), (int, float)),
             float(j["ranking"]["score"]) if isinstance(j.get("ranking"), dict) and isinstance(j["ranking"].get("score"), (int, float)) else -1
         ), reverse=True)
-    pending=[{**j,"ranking":None,"jd_status":"avaliacao_manual"} for j in pending]
+    pending=[{**j,"jd_status":"avaliacao_local" if j.get("jd_available") else "indisponivel"} for j in pending]
     # Pending eligibility is not automatically enriched or scored.
     fresh_count=len(visible)
     return {"source":"Multifuente","queried":len(sources),"total":len(items),
@@ -556,7 +556,7 @@ def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False
             isinstance(j.get("ranking"), dict) and isinstance(j["ranking"].get("score"), (int, float)),
             float(j["ranking"]["score"]) if isinstance(j.get("ranking"), dict) and isinstance(j["ranking"].get("score"), (int, float)) else -1
         ), reverse=True)
-    pending=[{**j,"ranking":None,"jd_status":"avaliacao_manual"} for j in pending]
+    pending=[{**j,"jd_status":"avaliacao_local" if j.get("jd_available") else "indisponivel"} for j in pending]
     # Pending eligibility is not automatically enriched or scored.
     fresh_count=len(visible)
     return {"total_sources":len(tasks),"due_only":due_only,"offset":offset,"next_offset":offset+len(batch),
@@ -591,9 +591,9 @@ def jd_enrich(request: Request, payload: JDRequest):
     if len(payload.roles)>700:raise HTTPException(400,"Filtro inválido")
     rows=[]
     for j in payload.jobs:
+        if not isinstance(j,dict):raise HTTPException(400,"Vaga inválida")
         if not payload.manual and j.get('needs_verification'):
             raise HTTPException(400,'Vaga não confirmada exige avaliação manual')
-        if not isinstance(j,dict):raise HTTPException(400,"Vaga inválida")
         if not str(j.get("url","")).startswith("https://"):raise HTTPException(400,"URL inválida")
         if len(str(j.get("url","")))>2000:raise HTTPException(400,"URL inválida")
         rows.append({k:j.get(k,"") for k in ("url","title","company","source","description","location","published","detected_mode","needs_verification")})
@@ -816,7 +816,8 @@ def ai_resume_download(payload: ResumeAIRequest, request: Request):
             from jd_enrichment import fallback_public_jd
             jd=fallback_public_jd({"url":url,"title":title,"company":company}) or ""
     print(f"JH_CV_STAGE stage=jd_ready length={len(jd)}",flush=True)
-    if len(jd.strip())<100:
+    from jd_enrichment import valid_listing_jd
+    if not valid_listing_jd(jd):
         print("JH_CV_REJECT code=jd_unavailable",flush=True)
         raise HTTPException(422,"Descrição integral indisponível; não é seguro gerar currículo desta vaga")
     if os.getenv("JH_AI_ENABLED")!="1" or not os.getenv("OPENAI_API_KEY"):

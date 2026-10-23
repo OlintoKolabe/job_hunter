@@ -152,9 +152,9 @@ def hydrate_jobs(cursor,jobs,roles,url_key,limit=PER_BATCH_LIMIT):
     for j,key in zip(jobs,keys):
         existing=str(j.get("description") or "")
         cached_item=cached.get(key)
-        if cached_item and cached_item[1]>=now-timedelta(days=TTL_DAYS):
+        if cached_item and valid_listing_jd(cached_item[0]) and cached_item[1]>=now-timedelta(days=TTL_DAYS):
             updates[key]=(cached_item[0],"cache")
-        elif existing and len(existing)>=300:
+        elif valid_listing_jd(existing):
             updates[key]=(existing,"listing")
         else:
             pending.append((key,j))
@@ -165,7 +165,7 @@ def hydrate_jobs(cursor,jobs,roles,url_key,limit=PER_BATCH_LIMIT):
     with ThreadPoolExecutor(max_workers=4) as pool:
         for future in as_completed([pool.submit(fetch,p) for p in pending[:limit]]):
             key,content=future.result()
-            if content:
+            if valid_listing_jd(content):
                 updates[key]=(content,"fetched")
                 cursor.execute("""INSERT INTO jh_jd_cache(normalized_url,description,content_hash,fetched_at,source)
                     VALUES(%s,%s,%s,NOW(),%s)
@@ -179,11 +179,16 @@ def hydrate_jobs(cursor,jobs,roles,url_key,limit=PER_BATCH_LIMIT):
     for j,key in zip(jobs,keys):
         description,origin=updates.get(key,(j.get("description") or "","listing"))
         if origin=="cache":count["cached"]+=1
-        if not description:count["missing"]+=1
+        valid=valid_listing_jd(description)
+        if not valid:count["missing"]+=1
         complete={**j,"description":description}
-        jd_hash=hashlib.sha256(description.encode()).hexdigest() if description else ''
+        jd_hash=hashlib.sha256(description.encode()).hexdigest() if valid else ''
         evaluation=None
         ai_status='cache_or_disabled'
+        if not valid:
+            output.append({**j,"ranking":None,"jd_available":False,"jd_evidence":{},
+                           "ai_status":"not_attempted","jd_status":"indisponivel"})
+            continue
         # Requires approved migration before deployment.
         if description:
             evaluation=get_cached(cursor,key,jd_hash,roles)
@@ -199,7 +204,7 @@ def hydrate_jobs(cursor,jobs,roles,url_key,limit=PER_BATCH_LIMIT):
                 ai_status='not_needed'
             # Resume Matcher-inspired, evidence-grounded AI replaces the legacy
             # extraction + deterministic grading on opt-in; one paid call per JD.
-            if description and not is_technical_role and os.getenv('JH_AI_ENABLED')=='1' and os.getenv('OPENAI_API_KEY'):
+            if valid and not j.get('needs_verification') and not is_technical_role and os.getenv('JH_AI_ENABLED')=='1' and os.getenv('OPENAI_API_KEY'):
                 with psycopg.connect(os.environ['DATABASE_URL'],connect_timeout=7) as budget_conn:
                     with budget_conn.cursor() as budget_cur:
                         usage_id=reserve(budget_cur,key,amount=0.015)
@@ -232,10 +237,14 @@ def hydrate_jobs(cursor,jobs,roles,url_key,limit=PER_BATCH_LIMIT):
                 else:
                     ai_status='budget_exhausted'
                     evaluation.update({'score':None,'fit':None,'confidence':'ai_budget_exhausted'})
-            elif description and not is_technical_role:
-                ai_status='disabled'
-                evaluation.update({'score':None,'fit':None,'confidence':'ai_disabled',
-                                   'reason':'IA desligada: é necessária a chave OpenAI e JH_AI_ENABLED=1'})
+            elif valid and not is_technical_role:
+                ai_status='local_unconfirmed' if j.get('needs_verification') else 'disabled'
+                if j.get('needs_verification'):
+                    evaluation['method']='local'
+                    evaluation['cost_usd']=0
+                else:
+                    evaluation.update({'score':None,'fit':None,'confidence':'ai_disabled',
+                                       'reason':'IA desligada: é necessária a chave OpenAI e JH_AI_ENABLED=1'})
             if description and (evaluation.get('score') is not None or model=='hard_exclusion'):save(cursor,key,jd_hash,roles,evaluation,model)
         recommendation=recommend_application(complete,evaluation)
         # Persist the secondary judgment alongside an existing score without
@@ -248,6 +257,6 @@ def hydrate_jobs(cursor,jobs,roles,url_key,limit=PER_BATCH_LIMIT):
                   AND rubric_version=%s AND roles_hash=%s""",
                 (Jsonb(recommendation),key,jd_hash,PROFILE_VERSION,RUBRIC_VERSION,key_for(roles)))
         evaluation["application_recommendation"]=recommendation
-        output.append({**j,"ranking":evaluation,"jd_evidence":signals(complete,roles),
+        output.append({**j,"ranking":evaluation,"jd_available":True,"jd_evidence":signals(complete,roles),
                        "ai_status":ai_status,"jd_status":origin if description else ("pendente" if (key,j) in pending[limit:] else "indisponivel")})
     return output,count

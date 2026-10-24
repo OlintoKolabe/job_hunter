@@ -1,15 +1,15 @@
 {
-  "id": "JOB-HUNTER-GEEKHUNTER-NERDIN-20261024",
+  "id": "JOB-HUNTER-SOURCE-DISCOVERY-FILTERS-20261024",
   "kind": "development",
   "status": "active",
-  "objective": "Add GeekHunter and Nerdin as independently verified public job sources to the existing canary catalog, preserving their real job descriptions, publication timestamps and eligibility metadata.",
-  "allowed_paths": ["app.py", "catalog_engine.py", "source_extensions.py", "tests/test_geekhunter_nerdin.py"],
+  "objective": "Fix quality of role-based source discovery, irrelevant inHire matches, transparent seven-day unknown classifications and per-source coverage using the existing catalog and filter engine.",
+  "allowed_paths": ["app.py", "search_filters.py", "source_extensions.py", "src/Opportunities.jsx", "tests/test_discovery_quality.py"],
   "allowed_changes": [
-    "Register exactly two public source adapters, GeekHunter and Nerdin, in the existing catalog and source selector",
-    "Read bounded public listing and per-job JobPosting structured metadata with existing HTTP and parser facilities",
-    "Keep genuine source dates, description, salary, company, location, work mode, eligibility and direct URLs when published",
-    "Deduplicate by URL, classify with unchanged existing filters and expose honest per-source failures",
-    "Add failing-then-passing tests and publish the validated update only on the isolated existing canary"
+    "Use verified GeekHunter searchTerm filter and existing Nerdin search for role-driven bounded catalog tasks",
+    "Prevent adjacent but unrequested inHire or other source roles being confirmed merely by JD vocabulary",
+    "Retain unknown dates, geography and work mode as explicit reviews, with no invented values",
+    "Report per-source filtering outcomes and explain coverage at the existing UI panel",
+    "Add red/green regression tests, verify build and publish only on the existing isolated canary"
   ],
   "forbidden_changes": [
     "main or operational Render service, production Neon, history, candidate applications or authentication",
@@ -18,11 +18,11 @@
     "CV engine, ranking formulas, existing providers, unrelated frontend redesign, GitHub Actions or Vercel"
   ],
   "acceptance": [
-    "Both official public sources are represented in source filters and catalog tasks",
-    "A reproducible real posting from each provider retains verified JD, date and source URL",
-    "Missing data remains unconfirmed and source errors cannot masquerade as zero available jobs",
-    "Scoped regression tests and build pass, with before-after evidence and no change to main",
-    "Existing isolated canary deploy is live and its UI bundle exposes the new providers for human homologation"
+    "User role selection routes to bounded keyword searches on GeekHunter and Nerdin without duplicating infrastructure",
+    "Out-of-role adjacent inHire jobs are not confirmed by incidental JD terms",
+    "Seven-day undated jobs remain review-only with per-source reasons visible",
+    "Scoped regression tests and UI build pass, with evidence and no change to main",
+    "Existing isolated canary deploy is live with coverage diagnostics for human homologation"
   ],
   "deployment": "Use existing source fidelity canary and isolated Neon branch; no main merge without express approval"
 }

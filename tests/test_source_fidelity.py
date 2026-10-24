@@ -6,6 +6,9 @@ from unittest.mock import patch
 from collectors import item, preserve_eligibility_fields
 from eligibility_enrichment import enrich_inhire_before_filter
 from search_filters import classify, search_terms
+from source_extensions import extra
+from catalog_engine import extra_pull
+import json
 
 
 class SourceFidelityTests(unittest.TestCase):
@@ -60,6 +63,28 @@ class SourceFidelityTests(unittest.TestCase):
         self.assertEqual(metrics["absent"],1)
         self.assertEqual(metrics["failed"],0)
         self.assertEqual(result[0]["source_detail_status"],"source_absent")
+
+    def test_gupy_listing_preserves_source_metadata_but_not_creation_as_publication(self):
+        raw={"data":[{"name":"Product Manager","companyName":"Acme",
+                "jobUrl":"https://example.org/gupy/job-1","workplaceType":"remote",
+                "countryCode":"BR","seniority":"Senior","createdAt":"2026-10-24"}]}
+        with patch("source_extensions.fetch_json",return_value=raw):
+            jobs,_,_=extra("gupy","product manager")
+        self.assertEqual(len(jobs),1)
+        self.assertFalse(jobs[0]["published"])
+        self.assertEqual(jobs[0]["countryCode"],"BR")
+        self.assertEqual(jobs[0]["seniority"],"Senior")
+
+    def test_quickin_does_not_relabel_created_at_and_keeps_structured_mode(self):
+        rows=[{"_id":"12","publicate":"published","title":"Product Owner",
+              "career_url":"https://jobs.quickin.io/example/jobs/12","city":"Goiânia",
+              "created_at":"2026-10-24","workplaceType":"remote","countryCode":"BR",
+              "salary":{"min":8500,"currency":"BRL"}}]
+        with patch("catalog_engine.read",return_value=(json.dumps(rows).encode(),200)):
+            jobs,_=extra_pull("quickin","example")
+        self.assertEqual(len(jobs),1)
+        self.assertFalse(jobs[0]["published"])
+        self.assertEqual(jobs[0]["salary"]["min"],8500)
 
 
 if __name__ == "__main__": unittest.main()

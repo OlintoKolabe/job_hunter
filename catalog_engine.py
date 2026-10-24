@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from html.parser import HTMLParser
 from xml.etree import ElementTree
-from collectors import pull, TITLE_RE, item
+from collectors import pull, TITLE_RE, item, preserve_eligibility_fields
 from source_extensions import extra as expanded_pull
 from scrapling_fallback import js_fallback
 
@@ -126,12 +126,12 @@ def extra_pull(source,slug):
                 location=", ".join(text_field(row.get(x)) for x in ("city","region","country") if text_field(row.get(x)))
                 mode=next((text_field(row.get(x)) for x in ("workplaceType","workplace_type","workMode","modality","job_type") if text_field(row.get(x))),"")
                 description=" ".join(text_field(row.get(x)) for x in ("description","requirements"))
-                value=item(name,title,url,location,source,row.get("created_at") or row.get("published_at"),description)
+                value=item(name,title,url,location,source,row.get("published_at"),description)
                 if value:
                     if mode:value["workplaceType"]=mode
                     if isinstance(row.get("remote"),bool):value["remote"]=row["remote"]
                     if isinstance(row.get("isRemote"),bool):value["remote"]=row["isRemote"]
-                    jobs.append(value)
+                    jobs.append(preserve_eligibility_fields(value,row))
             return jobs,"ok"
         except (ValueError,TypeError,KeyError,urllib.error.URLError,TimeoutError,json.JSONDecodeError):
             jobs=[]

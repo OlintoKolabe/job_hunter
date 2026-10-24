@@ -1,29 +1,28 @@
 {
-  "id": "JOB-HUNTER-SOURCE-FIDELITY-20261024",
-  "kind": "bugfix",
+  "id": "JOB-HUNTER-GEEKHUNTER-NERDIN-20261024",
+  "kind": "development",
   "status": "active",
-  "objective": "Recover verifiably available vacancy fields from existing public source adapters before eligibility decisions, preserving source provenance and production isolation.",
-  "allowed_paths": ["collectors.py", "catalog_engine.py", "source_extensions.py", "public_remote_feeds.py", "indeed_provider.py", "eligibility_enrichment.py", "jd_enrichment.py", "search_filters.py", "app.py", "src/Opportunities.jsx", "tests/test_source_fidelity.py", "tests/test_eligibility_enrichment_gate9.py", "tests/test_source_coverage.py", "tests/test_quickin_public_api.py", "tests/test_public_remote_feeds.py", "tests/test_cross_source_eligibility.py"],
+  "objective": "Add GeekHunter and Nerdin as independently verified public job sources to the existing canary catalog, preserving their real job descriptions, publication timestamps and eligibility metadata.",
+  "allowed_paths": ["app.py", "catalog_engine.py", "source_extensions.py", "tests/test_geekhunter_nerdin.py"],
   "allowed_changes": [
-    "Correct demonstrated omissions and incorrect extraction of existing public source data and metadata",
-    "Use existing detail endpoints and cache with bounded zero-paid-API enrichment before final eligibility filtering",
-    "Preserve source-provided structured fields and provenance without inferring missing values",
-    "Distinguish origin absent, pending retrieval, extraction failure and recovered metadata through existing UI and response shapes",
-    "Verify real-source before-and-after coverage, performance and regression tests"
+    "Register exactly two public source adapters, GeekHunter and Nerdin, in the existing catalog and source selector",
+    "Read bounded public listing and per-job JobPosting structured metadata with existing HTTP and parser facilities",
+    "Keep genuine source dates, description, salary, company, location, work mode, eligibility and direct URLs when published",
+    "Deduplicate by URL, classify with unchanged existing filters and expose honest per-source failures",
+    "Add failing-then-passing tests and publish the validated update only on the isolated existing canary"
   ],
   "forbidden_changes": [
-    "main branch, production deployment, production database writes or shared cache writes during tests",
-    "new job engines, schedulers, database tables, paid services, or paid APIs",
-    "CV engine, scoring formulas, user profile, candidate history, applications or authentication",
-    "inventing publication dates, geography, modality, salaries or other absent source fields",
-    "GitHub Actions, Vercel, mock data in production or automatic job applications"
+    "main or operational Render service, production Neon, history, candidate applications or authentication",
+    "new scheduler, database schema, parallel search engine, paid API, external credential, new dependency or paid service",
+    "scraping behind login, bypassing anti-bot protection, guessing unavailable job fields or automatic applications",
+    "CV engine, ranking formulas, existing providers, unrelated frontend redesign, GitHub Actions or Vercel"
   ],
   "acceptance": [
-    "Real source samples prove that recoverable fields are recovered before classification",
-    "Fields truly absent remain unknown with provenance and no false positives",
-    "Relevant tests and scoped diff checks pass",
-    "Isolated canary UI loads against the tested backend with no changes to main or production Neon",
-    "Human homologation link and before-and-after evidence delivered before merge"
+    "Both official public sources are represented in source filters and catalog tasks",
+    "A reproducible real posting from each provider retains verified JD, date and source URL",
+    "Missing data remains unconfirmed and source errors cannot masquerade as zero available jobs",
+    "Scoped regression tests and build pass, with before-after evidence and no change to main",
+    "Existing isolated canary deploy is live and its UI bundle exposes the new providers for human homologation"
   ],
-  "deployment": "Isolated canary only; main merge requires separate explicit user approval"
+  "deployment": "Use existing source fidelity canary and isolated Neon branch; no main merge without express approval"
 }

@@ -1,36 +1,29 @@
 {
-  "id": "JOB-HUNTER-ELIGIBILITY-JD-SCORING-CANARY",
+  "id": "JOB-HUNTER-SOURCE-FIDELITY-20261024",
   "kind": "bugfix",
   "status": "active",
-  "base_ref": "a3d0b46",
-  "production_ref": "feat/phase1-web-foundation",
-  "feature_ref": "feat/resume-matcher-ai-evaluation-cv",
-  "objective": "Integrate existing collectors, cached JDs, eligibility and current scoring with distinct UI states and bounded zero-cost analysis for uncertain eligibility.",
-  "allowed_paths": ["app.py", "collectors.py", "source_extensions.py", "search_filters.py", "jd_enrichment.py", "ai_resume_matcher.py", "src/Opportunities.jsx", "tests/test_ai_resume_matcher.py", "tests/test_opportunity_ui_contracts.py", "tests/test_search_500_regression.py", "tests/test_cross_source_eligibility.py", "tests/test_source_coverage.py", "tests/test_block4_1.py", "tests/test_resume_engine.py"],
+  "objective": "Recover verifiably available vacancy fields from existing public source adapters before eligibility decisions, preserving source provenance and production isolation.",
+  "allowed_paths": ["collectors.py", "catalog_engine.py", "source_extensions.py", "public_remote_feeds.py", "indeed_provider.py", "eligibility_enrichment.py", "jd_enrichment.py", "search_filters.py", "app.py", "src/Opportunities.jsx", "tests/test_source_fidelity.py", "tests/test_eligibility_enrichment_gate9.py", "tests/test_source_coverage.py", "tests/test_quickin_public_api.py", "tests/test_public_remote_feeds.py", "tests/test_cross_source_eligibility.py"],
   "allowed_changes": [
-    "Preserve existing structured work mode and country metadata from collectors and use conservative eligibility checks without guessing unknowns",
-    "Distinguish absent JD, pending, failure, scored and eligibility-unconfirmed states; hide CV generation for invalid JD",
-    "Score valid cached JDs locally at zero API cost when eligibility is unconfirmed",
-    "Queue only confirmed eligible candidates for existing paid AI evaluation with current budget and persisted scores",
-    "Start bounded confirmed eligible scoring during discovery, retaining deduplication and global candidate selection",
-    "Reuse existing JD cache, scorer, CV engine and collectors; test before/after, cost, filters, UI and performance"
+    "Correct demonstrated omissions and incorrect extraction of existing public source data and metadata",
+    "Use existing detail endpoints and cache with bounded zero-paid-API enrichment before final eligibility filtering",
+    "Preserve source-provided structured fields and provenance without inferring missing values",
+    "Distinguish origin absent, pending retrieval, extraction failure and recovered metadata through existing UI and response shapes",
+    "Verify real-source before-and-after coverage, performance and regression tests"
   ],
   "forbidden_changes": [
-    "scoring formula, profile facts, CV generation engine or templates",
-    "new services, dependencies, database tables, schedulers or collectors",
-    "paid AI calls for unconfirmed eligibility or invalid JD",
-    "assuming missing country or work mode implies eligibility",
-    "automatic CV generation or application",
-    "main or production changes, GitHub Actions, Vercel or mock substitutions",
-    "hardcoded credentials"
+    "main branch, production deployment, production database writes or shared cache writes during tests",
+    "new job engines, schedulers, database tables, paid services, or paid APIs",
+    "CV engine, scoring formulas, user profile, candidate history, applications or authentication",
+    "inventing publication dates, geography, modality, salaries or other absent source fields",
+    "GitHub Actions, Vercel, mock data in production or automatic job applications"
   ],
   "acceptance": [
-    "Unconfirmed vacancies stay unconfirmed; valid JD allows zero-cost local scoring",
-    "Missing or invalid JD never triggers scoring or CV button",
-    "Only confirmed eligible vacancies with valid JD enter paid AI scoring; caching prevents duplicate charges",
-    "First confirmed candidates score before full catalog scan while total work remains bounded",
-    "Twenty real sampled search-matching jobs and cached JDs verify coverage, time, quality and no regressions",
-    "Scope gate and relevant tests pass; canary UI verified before release; main untouched"
+    "Real source samples prove that recoverable fields are recovered before classification",
+    "Fields truly absent remain unknown with provenance and no false positives",
+    "Relevant tests and scoped diff checks pass",
+    "Isolated canary UI loads against the tested backend with no changes to main or production Neon",
+    "Human homologation link and before-and-after evidence delivered before merge"
   ],
-  "deployment": "Canary only; no main merge without explicit user approval"
+  "deployment": "Isolated canary only; main merge requires separate explicit user approval"
 }

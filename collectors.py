@@ -59,7 +59,7 @@ def item(company,title,url,location,source,published="",description=""):
 
 def preserve_eligibility_fields(destination,source):
     """Keep only published collector metadata, without inferring missing eligibility."""
-    if not destination or not isinstance(source,dict):return destination
+    if destination is None or not isinstance(source,dict):return destination
     for field in ("workplaceType","workArrangement","remoteType","workMode","workplace",
                   "country","countryCode","countryName","city","state","region"):
         if isinstance(source.get(field),str) and source[field].strip():
@@ -69,7 +69,49 @@ def preserve_eligibility_fields(destination,source):
             destination[field]=[value[:200] for value in source[field] if isinstance(value,str)][:30]
     remote=source.get("isRemote",source.get("remote"))
     if isinstance(remote,bool):destination["remote"]=remote
+    # Preserve published metadata for later ranking and display. Do not
+    # synthesize salary, seniority or a publication date from other fields.
+    for field in ("seniority","seniorityLevel","department","employmentType",
+                  "jobType","contractType","salaryCurrency","salaryRange"):
+        value=source.get(field)
+        if isinstance(value,str) and value.strip():destination[field]=value[:300]
+    for field in ("salary","compensation"):
+        value=source.get(field)
+        if isinstance(value,dict):
+            safe={k:v for k,v in value.items() if isinstance(k,str) and
+                  isinstance(v,(str,int,float,bool)) and len(k)<60}
+            if safe:destination[field]=safe
+        elif isinstance(value,(str,int,float)) and str(value).strip():
+            destination[field]=str(value)[:300]
+    identifier=source.get("jobId") or source.get("id") or source.get("requisitionId")
+    if isinstance(identifier,(str,int)) and str(identifier).strip():
+        destination["source_job_id"]=str(identifier)[:160]
     return destination
+
+def source_field_coverage(jobs):
+    """Count observed source fields, not guessed availability at the origin."""
+    by_source={}
+    for job in jobs:
+        name=str(job.get("source") or "unknown").lower()
+        stats=by_source.setdefault(name,{"total":0,"dated":0,"described":0,
+            "located":0,"mode_explicit":0,"salary_informed":0,
+            "details_recovered":0,"details_pending":0,"details_failed":0,"details_absent":0})
+        stats["total"]+=1
+        if job.get("published"):stats["dated"]+=1
+        if len(str(job.get("description") or "").strip())>=300:stats["described"]+=1
+        if any(job.get(field) for field in ("location","country","countryCode","eligibleLocations")):
+            stats["located"]+=1
+        if job.get("remote") is True or any(job.get(field) for field in
+             ("workplaceType","workArrangement","remoteType","workMode","workplace")):
+            stats["mode_explicit"]+=1
+        if any(job.get(field) for field in ("salary","salaryRange","compensation")):
+            stats["salary_informed"]+=1
+        state=job.get("source_detail_status")
+        if state=="recovered":stats["details_recovered"]+=1
+        elif state=="pending":stats["details_pending"]+=1
+        elif state=="error":stats["details_failed"]+=1
+        elif state=="source_absent":stats["details_absent"]+=1
+    return by_source
 
 def pull(source,slug,location='brazil'):
     jobs=[]
@@ -161,7 +203,7 @@ def pull(source,slug,location='brazil'):
             loc=j.get("location") or ""
             if isinstance(loc,dict):loc=" ".join(str(v) for v in loc.values() if isinstance(v,str))
             workplace=j.get("workplaceType") or ""
-            value=item(tenant_name,title,url,(str(loc)+" "+str(workplace)).strip(),source,j.get("publishedAt") or j.get("createdAt"),j.get("description") or j.get("jobDescription") or "")
+            value=item(tenant_name,title,url,(str(loc)+" "+str(workplace)).strip(),source,j.get("lastPublishedAt") or j.get("publishedAt"),j.get("description") or j.get("jobDescription") or "")
             if value:
                 value["workplaceType"]=workplace
                 jobs.append(preserve_eligibility_fields(value,j))

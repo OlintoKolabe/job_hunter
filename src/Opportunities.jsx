@@ -15,17 +15,30 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{}}){
  const [onlyNew,setOnlyNew]=useState(false),[searchedQuery,setSearchedQuery]=useState(''),[source,setSource]=useState('all'),[sources,setSources]=useState([{value:'all',label:'Todas as fontes'},{value:'inhire',label:'inHire'},{value:'quickin',label:'Quickin'},{value:'gupy',label:'Gupy'}]),[roles,setRoles]=useState(defaultRoles),[days,setDays]=useState('0'),[country,setCountry]=useState('BR'),[countries,setCountries]=useState(initialCountries),[mode,setMode]=useState('remote'),[sort,setSort]=useState('score');
  const [sourceStats,setSourceStats]=useState({}),[reviews,setReviews]=useState([]),[excluded,setExcluded]=useState([]),[filterStats,setFilterStats]=useState({}),[rawScanned,setRawScanned]=useState(0),[busy,setBusy]=useState(false),[results,setResults]=useState([]),[message,setMessage]=useState(''),[error,setError]=useState(''),[cvErrors,setCvErrors]=useState({}),[checked,setChecked]=useState(0),[counts,setCounts]=useState({new:0,total:0}),[completed,setCompleted]=useState(false),[visibleCount,setVisibleCount]=useState(10),[evaluated,setEvaluated]=useState(0),[evaluationTotal,setEvaluationTotal]=useState(0),[scoringNow,setScoringNow]=useState([]),[scoringFailed,setScoringFailed]=useState([]),[scoringAttempted,setScoringAttempted]=useState([]);
  const [flowTrace,setFlowTrace]=useState({raw:0,classified_confirmed:0,classified_review:0,history_excluded:0,display_confirmed:0,display_review:0});
- const [eligibilityTrace,setEligibilityTrace]=useState({eligible_for_detail:0,attempted:0,complete:0,failed:0,deferred:0});
+ const [eligibilityTrace,setEligibilityTrace]=useState({eligible_for_detail:0,attempted:0,complete:0,failed:0,absent:0,deferred:0});
+ const [sourceFieldStats,setSourceFieldStats]=useState({});
  useEffect(()=>{fetch('/api/search-filters',{cache:'no-store'}).then(r=>{if(!r.ok)throw Error('HTTP '+r.status);return r.json()}).then(d=>{if(d?.countries)setCountries(d.countries);if(!Array.isArray(d?.sources)||d.sources.length<4)throw Error('Lista de fontes incompleta');setSources(d.sources);}).catch(()=>setError('Não foi possível carregar a lista completa de fontes. Atualize a página; se persistir, consulte o serviço.'))},[]);
  const query=()=>new URLSearchParams({roles,country,mode,days,sort,source}).toString();
+ const accumulateSourceFields=payload=>{
+  if(!payload?.source_field_stats)return;
+  setSourceFieldStats(previous=>{
+   const next={...previous};
+   Object.entries(payload.source_field_stats).forEach(([name,fields])=>{
+    const current=next[name]||{};
+    next[name]=Object.fromEntries(Object.entries(fields).map(([field,count])=>[field,(current[field]||0)+count]));
+   });
+   return next;
+  });
+ };
  const changeSource=value=>{setSource(value);setResults([]);setReviews([]);setExcluded([]);setChecked(0);setCompleted(false);setMessage("Fonte alterada. Clique em Buscar oportunidades para executar a nova seleção.");setError("");};
  async function search(){
-  setFlowTrace({raw:0,classified_confirmed:0,classified_review:0,history_excluded:0,display_confirmed:0,display_review:0});setEligibilityTrace({eligible_for_detail:0,attempted:0,complete:0,failed:0,deferred:0});
+  setSourceFieldStats({});
+  setFlowTrace({raw:0,classified_confirmed:0,classified_review:0,history_excluded:0,display_confirmed:0,display_review:0});setEligibilityTrace({eligible_for_detail:0,attempted:0,complete:0,failed:0,absent:0,deferred:0});
   setVisibleCount(10);setEvaluated(0);setEvaluationTotal(0);setScoringNow([]);setScoringFailed([]);setScoringAttempted([]);setBusy(true);setSearchedQuery(query());setError('');setResults([]);setReviews([]);setExcluded([]);setSourceStats({});setFilterStats({});setRawScanned(0);setChecked(0);setCompleted(false);setMessage('Consultando '+(sources.find(x=>x.value===source)?.label||source)+'…');
   const qs=query();const all=new Map();const uncertain=new Map();const outOfFilter=new Map();const totals={};const sourceTotals={};let inspected=0;const record=(d)=>{setFlowTrace(old=>Object.fromEntries(Object.keys(old).map(k=>[k,old[k]+(d.flow_stats?.[k]||0)])));setEligibilityTrace(old=>Object.fromEntries(Object.keys(old).map(k=>[k,old[k]+(d.eligibility_fetch?.[k]||0)])));(d.details||[]).forEach(x=>{const src=(x.source||'desconhecida').toLowerCase();const n=sourceTotals[src]||{consultas:0,recebidas:0,erros:0,jdValidos:0,jdAusentes:0};n.consultas++;n.recebidas+=x.received||0;if(x.status==='error'||x.state==='pendente')n.erros++;sourceTotals[src]=n});for(const [src,v] of Object.entries(d.source_jd_stats||{})){const key=src.toLowerCase();const n=sourceTotals[key]||{consultas:0,recebidas:0,erros:0,jdValidos:0,jdAusentes:0};n.jdValidos+=(v.jd_valid||0);n.jdAusentes+=(v.jd_missing||0);sourceTotals[key]=n}setSourceStats({...sourceTotals});(d.review_items||[]).forEach(j=>uncertain.set(j.url,j));(d.excluded_items||[]).forEach(j=>{if(outOfFilter.size<300)outOfFilter.set(j.url,j)});setExcluded(visibleUndecided([...outOfFilter.values()]));for(const [key,n] of Object.entries(d.filter_stats||{})){totals[key]=(totals[key]||0)+n}inspected+=d.raw_count||0;setReviews(visibleUndecided([...uncertain.values()]));setFilterStats({...totals});setRawScanned(inspected)};let count=0;let completedAll=false;
   try{
    const requestJson=async url=>{let problem;for(let retry=0;retry<2;retry++){try{const r=await fetch(url,{method:'POST',signal:AbortSignal.timeout(30000)});const ct=r.headers.get('content-type')||'';if(!ct.includes('application/json'))throw Error('Servidor retornou HTML ('+r.status+'); lote não processado');const d=await r.json();if(!r.ok)throw Error(typeof d.detail==='string'?d.detail:('Erro HTTP '+r.status+' ao consultar vagas'));return d}catch(err){problem=err}}throw problem};
-   const d=await requestJson('/api/search-jobs?'+qs);
+   const d=await requestJson('/api/search-jobs?'+qs);accumulateSourceFields(d);
 
    (d.items||[]).forEach(j=>all.set(j.url,j));record(d);count+=d.total||0;
    setResults(visibleUndecided([...all.values()]));setCounts({new:all.size,total:count});
@@ -94,7 +107,7 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{}}){
    let skipped=0;
    let nextIntermediateRanking=12;
    for(let n=0;n<180;n++){
-    let batch;try{batch=await requestJson('/api/catalog/scan?offset='+offset+'&limit=4&'+qs)}catch(err){skipped++;offset+=4;setMessage('Alguns quadros falharam; continuando os demais. Falhas: '+skipped);continue}
+    let batch;try{batch=await requestJson('/api/catalog/scan?offset='+offset+'&limit=4&'+qs);accumulateSourceFields(batch)}catch(err){skipped++;offset+=4;setMessage('Alguns quadros falharam; continuando os demais. Falhas: '+skipped);continue}
     (batch.items||[]).filter(j=>source==='all'||j.source?.toLowerCase()===source||(source==='greenhouse'&&j.source?.toLowerCase()==='greenhouse_eu')).forEach(j=>{const old=all.get(j.url);all.set(j.url,old&&(old.ranking?.score!=null||scoredOrAttempted.has(j.url))?old:j)});record(batch);
     offset=batch.next_offset;if(!Number.isFinite(offset))throw Error('Paginação inválida');
     count+=batch.found||0;setResults(visibleUndecided([...all.values()]));setChecked(x=>x+(batch.details||[]).length);setCounts({new:all.size,total:count});
@@ -277,10 +290,16 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{}}){
   {excluded.length>0&&<details className="catalog-diagnostics"><summary>Fora dos filtros — decidir manualmente ({excluded.length} nesta amostra)</summary><p>Esses anúncios não passaram nos critérios selecionados. Não são considerados elegíveis. Mostramos até 25 por lote e 300 nesta busca, sem repetir vagas já decididas.</p><div className="table-wrap"><table><thead><tr><th>Vaga</th><th>Empresa</th><th>Fonte</th><th>Motivo da exclusão</th><th>Ações</th></tr></thead><tbody>{excluded.filter(v=>!hiddenDecisions.includes(v.url)).sort((a,b)=>geoPriority(a)-geoPriority(b)).map(v=><tr key={v.url}><td><a href={v.url} target="_blank" rel="noopener noreferrer">{v.title}</a></td><td>{v.company||'Não informada'}</td><td>{v.source||'—'}</td><td>{({cargo:'Cargo',pais:'País',modalidade:'Modalidade',data:'Data',espanhol_obrigatorio:'Espanhol obrigatório'})[v.excluded_reason]||v.excluded_reason}</td><td><DecisionActions job={v} pending={decisionNow.includes(v.url)} onDecision={markDecision} onGenerateCv={generateCv} cvPending={cvNow.includes(v.url)} cvError={cvErrors[v.url]}/></td></tr>)}</tbody></table></div></details>}
   <details className="catalog-diagnostics"><summary>Fontes consultadas nesta busca</summary><p>JDs válidos e ausentes: somente vagas elegíveis ou em revisão, antes da análise paga. Não representam todos os anúncios brutos.</p><div className="table-wrap"><table><thead><tr><th>Fonte</th><th>Consultas</th><th>Anúncios brutos</th><th>JDs válidos</th><th>JDs ausentes</th><th>Pendências</th></tr></thead><tbody>{Object.entries(sourceStats).sort((a,b)=>b[1].recebidas-a[1].recebidas).map(([source,v])=><tr key={source}><td>{source}</td><td>{v.consultas}</td><td>{v.recebidas}</td><td>{v.jdValidos||0}</td><td>{v.jdAusentes||0}</td><td>{v.erros}</td></tr>)}</tbody></table></div></details>
   <details className="catalog-diagnostics"><summary>Auditoria dos filtros</summary><p>Total bruto analisado: {rawScanned}. As exclusões são contadas por motivo, antes da deduplicação com o histórico.</p>{Object.entries(filterStats).map(([reason,n])=><p key={reason}>{reason}: <b>{n}</b></p>)}</details>
+  <details className="catalog-diagnostics"><summary>Integridade dos dados por fonte</summary>
+   <p>Campos efetivamente recebidos nos anúncios brutos, após a recuperação de detalhes disponível. Ausência não prova que o site original não possua a informação.</p>
+   <div className="table-wrap"><table><thead><tr><th>Fonte</th><th>Vagas</th><th>Com data</th><th>Com descrição</th><th>Com localização</th><th>Modalidade explícita</th><th>Salário informado</th><th>Detalhes recuperados</th><th>Pendentes</th><th>Sem dados no detalhe</th><th>Falhas</th></tr></thead><tbody>
+   {Object.entries(sourceFieldStats).sort((a,b)=>b[1].total-a[1].total).map(([name,s])=><tr key={name}><td>{name}</td><td>{s.total}</td><td>{s.dated}</td><td>{s.described}</td><td>{s.located}</td><td>{s.mode_explicit}</td><td>{s.salary_informed}</td><td>{s.details_recovered}</td><td>{s.details_pending}</td><td>{s.details_absent}</td><td>{s.details_failed}</td></tr>)}
+   </tbody></table></div>
+  </details>
   <details className="catalog-diagnostics"><summary>Rastreamento da busca — Gate 9</summary>
    <p>Contagens por lote, antes e depois dos filtros. Registros podem repetir-se entre fontes e lotes; os totais da lista usam URLs únicas.</p>
    <p>Recebidos: <b>{flowTrace.raw}</b> · Confirmados pelos filtros: <b>{flowTrace.classified_confirmed}</b> · A confirmar: <b>{flowTrace.classified_review}</b> · Excluídos pelo histórico: <b>{flowTrace.history_excluded}</b> · Confirmados após histórico: <b>{flowTrace.display_confirmed}</b> · A confirmar após histórico: <b>{flowTrace.display_review}</b>.</p>
-   <p>inHire — vagas pertinentes para consultar detalhes: <b>{eligibilityTrace.eligible_for_detail}</b> · Consultas tentadas: <b>{eligibilityTrace.attempted}</b> · Com dados recuperados: <b>{eligibilityTrace.complete}</b> · Falhas: <b>{eligibilityTrace.failed}</b> · Adiadas pelo limite: <b>{eligibilityTrace.deferred}</b>.</p>
+   <p>inHire — vagas pertinentes para consultar detalhes: <b>{eligibilityTrace.eligible_for_detail}</b> · Consultas tentadas: <b>{eligibilityTrace.attempted}</b> · Com dados recuperados: <b>{eligibilityTrace.complete}</b> · Sem metadados no endpoint: <b>{eligibilityTrace.absent}</b> · Falhas de extração: <b>{eligibilityTrace.failed}</b> · Adiadas pelo limite: <b>{eligibilityTrace.deferred}</b>.</p>
    <p>Uma data desconhecida nunca prova publicação recente. Essas vagas não são confirmadas nem recebem avaliação paga.</p>
   </details>
   </>}

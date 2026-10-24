@@ -22,7 +22,7 @@ import psycopg
 from psycopg.types.json import Jsonb
 from public_remote_feeds import fetch as fetch_public_remote
 from indeed_provider import search as indeed_search, enabled as indeed_enabled
-from collectors import collect
+from collectors import collect,source_field_coverage
 from search_filters import analyze_filters,apply_filters,search_terms,discovery_queries,DEFAULT_ROLES,COUNTRIES
 from first_seen import flag_new_jobs
 from catalog_engine import source_tasks,scan
@@ -333,6 +333,7 @@ def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:
     raw_count=len(items)
     items,eligibility_fetch=enrich_inhire_before_filter(items,roles)
     raw_jobs=list(items)
+    field_coverage=source_field_coverage(raw_jobs)
     try: items,review,filter_stats=analyze_filters(cached_jds_for_filter(items,url_key,DATABASE),roles,country,mode,days,sort)
     except ValueError as e: raise HTTPException(400,str(e))
     with psycopg.connect(DATABASE,connect_timeout=8) as conn:
@@ -372,7 +373,7 @@ def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:
     # Pending eligibility is not automatically enriched or scored.
     fresh_count=len(visible)
     return {"source":"Multifuente","queried":len(sources),"total":len(items),
-        "new":fresh_count,"duplicates":history_excluded,"jd_coverage":coverage,"source_jd_stats":source_jd_stats,"eligibility_fetch":eligibility_fetch,"flow_stats":{"raw":raw_count,"classified_confirmed":len(items),"classified_review":len(review),"history_excluded":history_excluded,"display_confirmed":len(visible),"display_review":len(pending)},"items":visible[:100],"review_items":pending[:150],"filter_stats":filter_stats,"raw_count":raw_count,"details":sources,
+        "new":fresh_count,"duplicates":history_excluded,"jd_coverage":coverage,"source_jd_stats":source_jd_stats,"source_field_stats":field_coverage,"eligibility_fetch":eligibility_fetch,"flow_stats":{"raw":raw_count,"classified_confirmed":len(items),"classified_review":len(review),"history_excluded":history_excluded,"display_confirmed":len(visible),"display_review":len(pending)},"items":visible[:100],"review_items":pending[:150],"filter_stats":filter_stats,"raw_count":raw_count,"details":sources,
         "notice":"Vagas coletadas, ainda sem triagem de elegibilidade Brasil/remoto ou score."}
 
 
@@ -517,6 +518,7 @@ def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False
     raw_count=len(unique)
     prepared,eligibility_fetch=enrich_inhire_before_filter(list(unique.values()),roles)
     raw_jobs=list(prepared)
+    field_coverage=source_field_coverage(raw_jobs)
     try: items,review,filter_stats=analyze_filters(cached_jds_for_filter(prepared,url_key,DATABASE),roles,country,mode,days,sort)
     except ValueError as e:raise HTTPException(400,str(e))
     # Offer out-of-filter vacancies for explicit decisions without treating them
@@ -573,7 +575,7 @@ def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False
     return {"total_sources":len(tasks),"due_only":due_only,"offset":offset,"next_offset":offset+len(batch),
             "complete":offset+len(batch)>=len(tasks),"details":details,
             "found":len(items),"new":fresh_count,"duplicates":history_excluded,"raw_count":raw_count,"filter_stats":filter_stats,"eligibility_fetch":eligibility_fetch,"flow_stats":{"raw":raw_count,"classified_confirmed":len(items),"classified_review":len(review),"history_excluded":history_excluded,"display_confirmed":len(visible),"display_review":len(pending)},
-            "jd_coverage":coverage,"source_jd_stats":source_jd_stats,"review_items":pending[:150],"excluded_items":rejected,"items":visible[:80],"notice":"Vagas candidatas: remoto/Brasil e requisitos ainda aguardam análise completa."}
+            "jd_coverage":coverage,"source_jd_stats":source_jd_stats,"source_field_stats":field_coverage,"review_items":pending[:150],"excluded_items":rejected,"items":visible[:80],"notice":"Vagas candidatas: remoto/Brasil e requisitos ainda aguardam análise completa."}
 
 class JDRequest(BaseModel):
     jobs: list[dict]

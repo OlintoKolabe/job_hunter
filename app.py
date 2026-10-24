@@ -23,7 +23,7 @@ from psycopg.types.json import Jsonb
 from public_remote_feeds import fetch as fetch_public_remote
 from indeed_provider import search as indeed_search, enabled as indeed_enabled
 from collectors import collect,source_field_coverage
-from search_filters import analyze_filters,apply_filters,search_terms,discovery_queries,DEFAULT_ROLES,COUNTRIES
+from search_filters import analyze_filters,apply_filters,search_terms,discovery_queries,requested_families,DEFAULT_ROLES,COUNTRIES
 from first_seen import flag_new_jobs
 from catalog_engine import source_tasks,scan
 from catalog_bootstrap import maybe_start
@@ -334,6 +334,7 @@ def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:
     items,eligibility_fetch=enrich_inhire_before_filter(items,roles)
     raw_jobs=list(items)
     field_coverage=source_field_coverage(raw_jobs)
+    filter_quality=source_filter_quality(raw_jobs,roles,country,mode,days)
     try: items,review,filter_stats=analyze_filters(cached_jds_for_filter(items,url_key,DATABASE),roles,country,mode,days,sort)
     except ValueError as e: raise HTTPException(400,str(e))
     with psycopg.connect(DATABASE,connect_timeout=8) as conn:
@@ -373,7 +374,7 @@ def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:
     # Pending eligibility is not automatically enriched or scored.
     fresh_count=len(visible)
     return {"source":"Multifuente","queried":len(sources),"total":len(items),
-        "new":fresh_count,"duplicates":history_excluded,"jd_coverage":coverage,"source_jd_stats":source_jd_stats,"source_field_stats":field_coverage,"eligibility_fetch":eligibility_fetch,"flow_stats":{"raw":raw_count,"classified_confirmed":len(items),"classified_review":len(review),"history_excluded":history_excluded,"display_confirmed":len(visible),"display_review":len(pending)},"items":visible[:100],"review_items":pending[:150],"filter_stats":filter_stats,"raw_count":raw_count,"details":sources,
+        "new":fresh_count,"duplicates":history_excluded,"jd_coverage":coverage,"source_jd_stats":source_jd_stats,"source_field_stats":field_coverage,"source_filter_quality":filter_quality,"eligibility_fetch":eligibility_fetch,"flow_stats":{"raw":raw_count,"classified_confirmed":len(items),"classified_review":len(review),"history_excluded":history_excluded,"display_confirmed":len(visible),"display_review":len(pending)},"items":visible[:100],"review_items":pending[:150],"filter_stats":filter_stats,"raw_count":raw_count,"details":sources,
         "notice":"Vagas coletadas, ainda sem triagem de elegibilidade Brasil/remoto ou score."}
 
 
@@ -392,19 +393,60 @@ def source_freshness(source, checked_at):
     return {"interval_days":days,"due":next_time<=datetime.now(timezone.utc),
             "next_check":next_time.isoformat()}
 
-def active_source_tasks():
+def active_source_tasks(roles=DEFAULT_ROLES):
     tasks=set(source_tasks())
     # Search the complete default role family on keyword-based LinkedIn guest.
     # Do not expand Gupy here: its current public endpoint returns HTTP 404.
     linkedin_terms=("product manager","product owner","project manager",
         "gerente de projetos","gerente de produto","product marketing",
         "marketing","growth","business analyst","analista de negocios","pmo")
+    if roles.strip()!=DEFAULT_ROLES:
+        linkedin_terms=tuple(discovery_queries(roles,limit=8))
     tasks.update(("linkedin_guest",term) for term in linkedin_terms)
     with psycopg.connect(DATABASE,connect_timeout=8) as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT source,slug FROM jh_catalog_source")
             tasks.update(cur.fetchall())
+    # Both public boards expose their own keyword search. Restrict discovery
+    # to selected families instead of crawling fixed unrelated vacancy lists.
+    tasks={task for task in tasks if task[0] not in ("geekhunter","nerdin")}
+    family_order=("product","projects","marketing","growth","business")
+    families=requested_families(search_terms(roles))
+    geek_terms={"product":"product","projects":"project","marketing":"marketing",
+                "growth":"growth","business":"business"}
+    nerdin_terms={"product":"product manager","projects":"project manager",
+                  "marketing":"marketing","growth":"growth","business":"business analyst"}
+    for family in family_order:
+        if family in families:
+            tasks.add(("geekhunter","search:"+geek_terms[family]))
+            tasks.add(("nerdin",nerdin_terms[family]))
+    # Include an exact selected title when it adds a distinct public query.
+    for term in search_terms(roles)[:3]:
+        if len(term)>2 and term not in nerdin_terms.values():
+            tasks.add(("nerdin",term))
     return sorted((source,slug) for source,slug in tasks if slug.casefold() not in ("kraken","kraken.com","payward"))
+
+def source_filter_quality(jobs,roles,country,mode,days):
+    """Source-level filter outcomes, without extra HTTP or AI calls."""
+    from search_filters import classify
+    terms=search_terms(roles)
+    result={}
+    fields=("raw","confirmed","review","excluded","excluded_cargo",
+            "excluded_pais","excluded_modalidade","excluded_data",
+            "review_date","review_country","review_mode","review_role")
+    for job in jobs:
+        source=str(job.get("source") or "unknown").lower()
+        row=result.setdefault(source,{field:0 for field in fields})
+        row["raw"]+=1
+        bucket,reason=classify(job,terms,country,mode,days)
+        row[bucket]+=1
+        if bucket=="excluded" and "excluded_"+reason in row:
+            row["excluded_"+reason]+=1
+        elif bucket=="review":
+            for marker,key in (("data","review_date"),("pais","review_country"),
+                               ("modalidade","review_mode"),("cargo_a_confirmar","review_role")):
+                if marker in reason.split(","):row[key]+=1
+    return result
 
 @app.post("/api/catalog/import")
 async def catalog_import(request: Request):
@@ -490,7 +532,7 @@ def unique_jobs_by_url(found):
 def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False,roles:str=DEFAULT_ROLES,country:str="BR",mode:str="remote",days:int=30,sort:str="newest",source:str="all"):
     require_auth(request)
     if source not in {"all","inhire","quickin","gupy","greenhouse","ashby","lever","bamboohr","dynamite","linkedin_guest","jobgether","workable","himalayas","remotive","remoteok","geekhunter","nerdin"}:raise HTTPException(400,"Fonte não reconhecida")
-    tasks=active_source_tasks()
+    tasks=active_source_tasks(roles)
     if source!="all":
         tasks=[(src,slug) for src,slug in tasks if src==source or (source=="greenhouse" and src=="greenhouse_eu")]
     if due_only:
@@ -519,6 +561,7 @@ def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False
     prepared,eligibility_fetch=enrich_inhire_before_filter(list(unique.values()),roles)
     raw_jobs=list(prepared)
     field_coverage=source_field_coverage(raw_jobs)
+    filter_quality=source_filter_quality(raw_jobs,roles,country,mode,days)
     try: items,review,filter_stats=analyze_filters(cached_jds_for_filter(prepared,url_key,DATABASE),roles,country,mode,days,sort)
     except ValueError as e:raise HTTPException(400,str(e))
     # Offer out-of-filter vacancies for explicit decisions without treating them
@@ -575,7 +618,7 @@ def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False
     return {"total_sources":len(tasks),"due_only":due_only,"offset":offset,"next_offset":offset+len(batch),
             "complete":offset+len(batch)>=len(tasks),"details":details,
             "found":len(items),"new":fresh_count,"duplicates":history_excluded,"raw_count":raw_count,"filter_stats":filter_stats,"eligibility_fetch":eligibility_fetch,"flow_stats":{"raw":raw_count,"classified_confirmed":len(items),"classified_review":len(review),"history_excluded":history_excluded,"display_confirmed":len(visible),"display_review":len(pending)},
-            "jd_coverage":coverage,"source_jd_stats":source_jd_stats,"source_field_stats":field_coverage,"review_items":pending[:150],"excluded_items":rejected,"items":visible[:80],"notice":"Vagas candidatas: remoto/Brasil e requisitos ainda aguardam análise completa."}
+            "jd_coverage":coverage,"source_jd_stats":source_jd_stats,"source_field_stats":field_coverage,"source_filter_quality":filter_quality,"review_items":pending[:150],"excluded_items":rejected,"items":visible[:80],"notice":"Vagas candidatas: remoto/Brasil e requisitos ainda aguardam análise completa."}
 
 class JDRequest(BaseModel):
     jobs: list[dict]

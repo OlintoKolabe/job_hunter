@@ -101,11 +101,19 @@ def public_posting(source,url,markup):
 def public_jobs(source,slug):
     if source=="geekhunter":
         root="https://www.geekhunter.com/pt/confidential/jobs"
+        search_term=slug[7:].strip()[:70] if slug.startswith("search:") else ""
         links=[]
         for page in (1,2):
-            _,objects=public_jsonld_jobs(public_board_html(root+("?page=2" if page==2 else "")))
+            params={}
+            if search_term:params["searchTerm"]=search_term
+            if page==2:params["page"]=2
+            url=root+("?"+urllib.parse.urlencode(params) if params else "")
+            html=public_board_html(url)
+            _,objects=public_jsonld_jobs(html)
             listing=next((o for o in objects if o.get("@type")=="ItemList"),None)
-            if not listing:raise ValueError("GeekHunter public ItemList unavailable")
+            if not listing:
+                if re.search(r"\b0 vagas dispon[ií]veis\b|nenhuma vaga",html,re.I):break
+                raise ValueError("GeekHunter public ItemList unavailable")
             entries=listing.get("itemListElement") or []
             if not isinstance(entries,list):raise ValueError("GeekHunter listing format changed")
             for entry in entries:

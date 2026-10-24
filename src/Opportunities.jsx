@@ -17,9 +17,20 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{}}){
  const [flowTrace,setFlowTrace]=useState({raw:0,classified_confirmed:0,classified_review:0,history_excluded:0,display_confirmed:0,display_review:0});
  const [eligibilityTrace,setEligibilityTrace]=useState({eligible_for_detail:0,attempted:0,complete:0,failed:0,absent:0,deferred:0});
  const [sourceFieldStats,setSourceFieldStats]=useState({});
+ const [sourceQuality,setSourceQuality]=useState({});
  useEffect(()=>{fetch('/api/search-filters',{cache:'no-store'}).then(r=>{if(!r.ok)throw Error('HTTP '+r.status);return r.json()}).then(d=>{if(d?.countries)setCountries(d.countries);if(!Array.isArray(d?.sources)||d.sources.length<4)throw Error('Lista de fontes incompleta');setSources(d.sources);}).catch(()=>setError('Não foi possível carregar a lista completa de fontes. Atualize a página; se persistir, consulte o serviço.'))},[]);
  const query=()=>new URLSearchParams({roles,country,mode,days,sort,source}).toString();
  const accumulateSourceFields=payload=>{
+  if(payload?.source_filter_quality){
+   setSourceQuality(previous=>{
+    const next={...previous};
+    Object.entries(payload.source_filter_quality).forEach(([source,counts])=>{
+     const old=next[source]||{};
+     next[source]=Object.fromEntries(Object.entries(counts).map(([key,n])=>[key,(old[key]||0)+n]));
+    });
+    return next;
+   });
+  }
   if(!payload?.source_field_stats)return;
   setSourceFieldStats(previous=>{
    const next={...previous};
@@ -32,7 +43,7 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{}}){
  };
  const changeSource=value=>{setSource(value);setResults([]);setReviews([]);setExcluded([]);setChecked(0);setCompleted(false);setMessage("Fonte alterada. Clique em Buscar oportunidades para executar a nova seleção.");setError("");};
  async function search(){
-  setSourceFieldStats({});
+  setSourceFieldStats({});setSourceQuality({});
   setFlowTrace({raw:0,classified_confirmed:0,classified_review:0,history_excluded:0,display_confirmed:0,display_review:0});setEligibilityTrace({eligible_for_detail:0,attempted:0,complete:0,failed:0,absent:0,deferred:0});
   setVisibleCount(10);setEvaluated(0);setEvaluationTotal(0);setScoringNow([]);setScoringFailed([]);setScoringAttempted([]);setBusy(true);setSearchedQuery(query());setError('');setResults([]);setReviews([]);setExcluded([]);setSourceStats({});setFilterStats({});setRawScanned(0);setChecked(0);setCompleted(false);setMessage('Consultando '+(sources.find(x=>x.value===source)?.label||source)+'…');
   const qs=query();const all=new Map();const uncertain=new Map();const outOfFilter=new Map();const totals={};const sourceTotals={};let inspected=0;const record=(d)=>{setFlowTrace(old=>Object.fromEntries(Object.keys(old).map(k=>[k,old[k]+(d.flow_stats?.[k]||0)])));setEligibilityTrace(old=>Object.fromEntries(Object.keys(old).map(k=>[k,old[k]+(d.eligibility_fetch?.[k]||0)])));(d.details||[]).forEach(x=>{const src=(x.source||'desconhecida').toLowerCase();const n=sourceTotals[src]||{consultas:0,recebidas:0,erros:0,jdValidos:0,jdAusentes:0};n.consultas++;n.recebidas+=x.received||0;if(x.status==='error'||x.state==='pendente')n.erros++;sourceTotals[src]=n});for(const [src,v] of Object.entries(d.source_jd_stats||{})){const key=src.toLowerCase();const n=sourceTotals[key]||{consultas:0,recebidas:0,erros:0,jdValidos:0,jdAusentes:0};n.jdValidos+=(v.jd_valid||0);n.jdAusentes+=(v.jd_missing||0);sourceTotals[key]=n}setSourceStats({...sourceTotals});(d.review_items||[]).forEach(j=>uncertain.set(j.url,j));(d.excluded_items||[]).forEach(j=>{if(outOfFilter.size<300)outOfFilter.set(j.url,j)});setExcluded(visibleUndecided([...outOfFilter.values()]));for(const [key,n] of Object.entries(d.filter_stats||{})){totals[key]=(totals[key]||0)+n}inspected+=d.raw_count||0;setReviews(visibleUndecided([...uncertain.values()]));setFilterStats({...totals});setRawScanned(inspected)};let count=0;let completedAll=false;
@@ -294,6 +305,12 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{}}){
    <p>Campos efetivamente recebidos nos anúncios brutos, após a recuperação de detalhes disponível. Ausência não prova que o site original não possua a informação.</p>
    <div className="table-wrap"><table><thead><tr><th>Fonte</th><th>Vagas</th><th>Com data</th><th>Com descrição</th><th>Com localização</th><th>Modalidade explícita</th><th>Salário informado</th><th>Detalhes recuperados</th><th>Pendentes</th><th>Sem dados no detalhe</th><th>Falhas</th></tr></thead><tbody>
    {Object.entries(sourceFieldStats).sort((a,b)=>b[1].total-a[1].total).map(([name,s])=><tr key={name}><td>{name}</td><td>{s.total}</td><td>{s.dated}</td><td>{s.described}</td><td>{s.located}</td><td>{s.mode_explicit}</td><td>{s.salary_informed}</td><td>{s.details_recovered}</td><td>{s.details_pending}</td><td>{s.details_absent}</td><td>{s.details_failed}</td></tr>)}
+   </tbody></table></div>
+  </details>
+  <details className="catalog-diagnostics"><summary>Qualidade da descoberta e dos filtros por fonte</summary>
+   <p>Separação dos anúncios recebidos conforme os cargos, país, modalidade e período que você selecionou. "A confirmar" significa falta de prova, não elegibilidade aprovada. Uma vaga pode precisar confirmar mais de um campo. A ausência de data não é tratada como publicação recente.</p>
+   <div className="table-wrap"><table><thead><tr><th>Fonte</th><th>Recebidas</th><th>Confirmadas</th><th>A confirmar</th><th>Fora dos filtros</th><th>Fora do cargo</th><th>Data ausente</th><th>País incerto</th><th>Modalidade incerta</th><th>Cargo adjacente</th></tr></thead><tbody>
+    {Object.entries(sourceQuality).sort((a,b)=>b[1].raw-a[1].raw).map(([name,s])=><tr key={name}><td>{name}</td><td>{s.raw}</td><td>{s.confirmed}</td><td>{s.review}</td><td>{s.excluded}</td><td>{s.excluded_cargo}</td><td>{s.review_date}</td><td>{s.review_country}</td><td>{s.review_mode}</td><td>{s.review_role}</td></tr>)}
    </tbody></table></div>
   </details>
   <details className="catalog-diagnostics"><summary>Rastreamento da busca — Gate 9</summary>

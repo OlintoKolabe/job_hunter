@@ -279,7 +279,10 @@ def classify(job,terms,country,mode,days):
     # when the JD supplies >=2 specific signals for the requested family.
     # A title alone remains a review item; unrelated technical titles above
     # cannot be rescued by incidental JD vocabulary.
-    uncertain_role=not title_matches and adjacent and not evidence.get("family_evidence")
+    # JD vocabulary is evidence of collaboration, not proof of the vacancy's
+    # own role. Keep adjacent management openings review-only until their
+    # actual title establishes a requested family.
+    uncertain_role=not title_matches and adjacent
     if not title_matches and not adjacent:return "excluded","cargo"
     loc=fold(job.get("location",""))
     structured_geo=fold(" ".join(str(job.get(k) or "") for k in ("country","countryCode","countryName","city","state","region","eligibleLocations","remoteRegions")))

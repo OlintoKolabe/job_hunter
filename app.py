@@ -348,14 +348,18 @@ def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:
             # took 24.12s, followed by Himalayas at 7.08s, before DB/filter.
             # Run existing independent providers concurrently; never turn a
             # failed source into an invented zero-vacancy success.
-            with ThreadPoolExecutor(max_workers=4) as pool:
-                futures={pool.submit(collect,discovery_queries(roles),country,"all"):"catalog_initial"}
+            # Catalog boards are already scanned by /api/catalog/scan.
+            # Re-scanning them in this initial request caused duplicate work
+            # and a measured browser abort while the catalog continued.
+            with ThreadPoolExecutor(max_workers=5) as pool:
+                futures={pool.submit(collect,discovery_queries(roles),country,provider):provider
+                         for provider in ("workable","jobgether")}
                 futures.update({pool.submit(fetch_public_remote,feed,roles,country):feed
                                 for feed in ("himalayas","remotive","remoteok")})
                 for future in as_completed(futures):
                     feed=futures[future]
                     try:
-                        if feed=="catalog_initial":
+                        if feed in ("workable","jobgether"):
                             original,details=future.result();items.extend(original);sources.extend(details)
                         else:
                             added=future.result();items.extend(added)

@@ -45,3 +45,29 @@
   ausência de novo `signal timed out` como erro que encerra a busca.
 - Não há inclusão de IA, tabelas, dependências, algoritmos de nota, CV,
   candidatura automática, Vercel ou GitHub Actions.
+# Canary end-to-end correction (2026-10-23, UTC)
+
+The authenticated Render canary build `8c858d7` exposed a remaining regression:
+the first `/api/catalog/scan` request returned HTTP 200 in **27,695 ms**;
+the second returned HTTP 200 in **51,104 ms**, after the browser had
+aborted its 30,000 ms request and marked the batch failed. The initial
+`/api/search-jobs` request likewise timed out client-side. Those are live
+Render logs for the user-selected `Product Manager, Product Owner`, BR,
+remote, seven-day search, not invented fixtures.
+
+Code inspection found that `collect(..., "all")` in the initial route
+repeated catalog-board collection while `/api/catalog/scan` was already
+scanning those same boards. The original initial collection locally
+required 24.12 seconds **before** remote feed and database operations.
+Separate real provider checks returned Workable 31 ads from four terms
+in 5.19 seconds and Jobgether zero from four terms in 5.59 seconds.
+The initial route now queries only those two keyword-search providers plus
+the three existing public remote feeds; catalog boards remain exclusively
+in their existing catalog scanner, with no source removed. The browser
+allows 70 seconds, exceeding the measured 51.104 seconds, before declaring
+a batch unavailable; successful batches are not replayed.
+
+Human acceptance remains contingent on observing a complete or explicitly
+partial search on the new canary build; no single smoke test can certify
+every provider at every moment.
+

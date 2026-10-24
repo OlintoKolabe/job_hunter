@@ -31,7 +31,10 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{}}){
   try{
    // A slow initial aggregator must never stop catalog discovery. Each board
    // is independently recoverable; do not repeat timed-out writes blindly.
-   const requestJson=async url=>{const started=performance.now();const r=await fetch(url,{method:'POST',signal:AbortSignal.timeout(30000)});const ct=r.headers.get('content-type')||'';if(!ct.includes('application/json'))throw Error('Servidor retornou HTML ('+r.status+'); lote não processado');const d=await r.json();if(!r.ok)throw Error(typeof d.detail==='string'?d.detail:('Erro HTTP '+r.status+' ao consultar vagas'));return {...d,_request_ms:Math.round(performance.now()-started)}};
+   // The live canary measured 51.1 seconds for a successful four-board scan.
+   // The previous 30-second abort discarded those real results and retried
+   // database writes unnecessarily. Keep a bounded 70-second allowance.
+   const requestJson=async url=>{const started=performance.now();const r=await fetch(url,{method:'POST',signal:AbortSignal.timeout(70000)});const ct=r.headers.get('content-type')||'';if(!ct.includes('application/json'))throw Error('Servidor retornou HTML ('+r.status+'); lote não processado');const d=await r.json();if(!r.ok)throw Error(typeof d.detail==='string'?d.detail:('Erro HTTP '+r.status+' ao consultar vagas'));return {...d,_request_ms:Math.round(performance.now()-started)}};
    let initialFailure='';
    const initialPromise=requestJson('/api/search-jobs?'+qs).then(d=>{
      (d.items||[]).forEach(j=>{const old=all.get(j.url);all.set(j.url,old&&(old.ranking?.score!=null)?old:j)});

@@ -14,8 +14,9 @@ from eligibility_enrichment import enrich_inhire_before_filter
 class SearchTimeoutGate9(unittest.TestCase):
     def test_independent_public_feeds_are_concurrent_in_all_source_search(self):
         source=inspect.getsource(app.search_jobs)
-        self.assertIn("ThreadPoolExecutor(max_workers=4)",source)
-        self.assertIn("pool.submit(collect,discovery_queries(roles),country,\"all\")",source)
+        self.assertIn("ThreadPoolExecutor(max_workers=5)",source)
+        self.assertIn('for provider in ("workable","jobgether")',source)
+        self.assertNotIn('pool.submit(collect,discovery_queries(roles),country,"all")',source)
         self.assertIn("pool.submit(fetch_public_remote,feed,roles,country)",source)
         self.assertIn("for future in as_completed(futures)",source)
 
@@ -35,6 +36,7 @@ class SearchTimeoutGate9(unittest.TestCase):
 
     def test_ui_reports_actual_request_latency(self):
         source=Path("src/Opportunities.jsx").read_text()
+        self.assertIn("AbortSignal.timeout(70000)",source)
         self.assertIn("_request_ms:Math.round(performance.now()-started)",source)
         self.assertIn("requestPerf.max_ms",source)
         self.assertIn("requestPerf.completed",source)

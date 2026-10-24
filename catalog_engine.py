@@ -19,6 +19,8 @@ def read(url,headers=None,size=750000):
         return body,res.status
 def source_tasks():
     tasks=[(s,slug) for s,slugs in SEED.items() for slug in slugs]
+    tasks.append(("geekhunter","public"))
+    tasks.extend(("nerdin",term) for term in ("product manager","product owner", "project manager", "business analyst", "marketing", "growth", "pmo"))
     return [(source,slug) for source,slug in tasks if slug.casefold() not in ("kraken","kraken.com","payward")]
 
 class BoardHTML(HTMLParser):
@@ -184,7 +186,7 @@ def run_task(source,slug):
             detail,jobs=pull(source.capitalize() if source!="inhire" else "inHire",slug)
             return {"source":source,"slug":slug,"state":"validado" if detail["received"] else "sem_vagas",
                 "received":detail["received"],"target":len(jobs)},jobs
-        if source in ("smartrecruiters","teamtailor","recruitee","personio","workable_account","dynamite","linkedin_guest","gupy","kaszek","jobbol"):
+        if source in ("smartrecruiters","teamtailor","recruitee","personio","workable_account","dynamite","linkedin_guest","gupy","kaszek","jobbol","geekhunter","nerdin"):
             jobs,state,count=expanded_pull(source,slug)
             if not jobs and source in ("dynamite","gupy","kaszek","jobbol"):
                 try:

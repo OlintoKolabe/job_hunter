@@ -1,8 +1,135 @@
 """Additional documented free sources; honest status, no fabricated success."""
 import re, json, urllib.parse, urllib.request, urllib.error
 from html.parser import HTMLParser
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from collectors import TITLE_RE, item, fetch_json, as_list, preserve_eligibility_fields
+
+PUBLIC_JOB_HOSTS={"www.geekhunter.com","www.nerdin.com.br"}
+
+def public_board_html(url):
+    """Read only official public job pages; never follow redirects off-host."""
+    parsed=urllib.parse.urlsplit(url)
+    if parsed.scheme!="https" or parsed.hostname not in PUBLIC_JOB_HOSTS:
+        raise ValueError("Unsupported public job host")
+    req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
+                                            "Accept":"text/html"})
+    with urllib.request.urlopen(req,timeout=8) as response:
+        final=urllib.parse.urlsplit(response.geturl())
+        if final.scheme!="https" or final.hostname!=parsed.hostname:
+            raise ValueError("Unexpected public job redirect")
+        raw=response.read(1_500_001)
+        if len(raw)>1_500_000:raise ValueError("Public job page too large")
+    return raw.decode("utf-8","replace")
+
+class PublicJobMarkup(HTMLParser):
+    def __init__(self):
+        super().__init__();self.scripts=[];self.links=[];self._script=False;self._text=[]
+    def handle_starttag(self,tag,attrs):
+        attrs=dict(attrs)
+        if tag=="script" and attrs.get("type","").lower()=="application/ld+json":
+            self._script=True;self._text=[]
+        if tag=="div" and "vaga-card" in attrs.get("class","").split():
+            href=attrs.get("data-href","")
+            if href.startswith("vaga_emprego/") and href.endswith(".php"):
+                self.links.append(href)
+    def handle_data(self,data):
+        if self._script:self._text.append(data)
+    def handle_endtag(self,tag):
+        if tag=="script" and self._script:
+            try:self.scripts.append(json.loads("".join(self._text)))
+            except (ValueError,TypeError):pass
+            self._script=False;self._text=[]
+
+def public_jsonld_jobs(markup):
+    parsed=PublicJobMarkup();parsed.feed(markup)
+    stack=list(parsed.scripts);objects=[]
+    while stack:
+        entry=stack.pop()
+        if isinstance(entry,list):stack.extend(entry)
+        elif isinstance(entry,dict):
+            objects.append(entry)
+            if isinstance(entry.get("@graph"),list):stack.extend(entry["@graph"])
+    return parsed,objects
+
+def public_posting(source,url,markup):
+    _,objects=public_jsonld_jobs(markup)
+    posting=next((o for o in objects if o.get("@type")=="JobPosting"),None)
+    if not posting or not isinstance(posting.get("description"),str) or not posting.get("title"):
+        raise ValueError("Public JobPosting metadata missing")
+    organization=posting.get("hiringOrganization") or {}
+    company=organization.get("name","") if isinstance(organization,dict) else ""
+    locations=posting.get("jobLocation") or []
+    if isinstance(locations,dict):locations=[locations]
+    names=[];countries=[]
+    for loc in locations if isinstance(locations,list) else []:
+        address=loc.get("address",{}) if isinstance(loc,dict) else {}
+        if not isinstance(address,dict):continue
+        city=address.get("addressLocality") or ""
+        state=address.get("addressRegion") or ""
+        country=address.get("addressCountry") or ""
+        names.append(", ".join(str(v) for v in (city,state,country) if v))
+        if country:countries.append(str(country))
+    restrictions=posting.get("applicantLocationRequirements") or []
+    if isinstance(restrictions,dict):restrictions=[restrictions]
+    for place in restrictions if isinstance(restrictions,list) else []:
+        if isinstance(place,dict) and place.get("name"):countries.append(str(place["name"]))
+    remote=str(posting.get("jobLocationType") or "").upper()=="TELECOMMUTE"
+    location=" / ".join(s for s in names if s) or (", ".join(dict.fromkeys(countries)))
+    if remote:location=("Remote / "+location).strip(" / ")
+    value=item(company,posting["title"],url,location,source,posting.get("datePosted"),posting["description"])
+    if not value:raise ValueError("JobPosting has no valid direct URL")
+    if remote:value["workplaceType"]="remote"
+    if any(x.upper() in ("BR","BRA","BRAZIL","BRASIL") for x in countries):
+        value["countryCode"]="BR"
+    employment=posting.get("employmentType")
+    if isinstance(employment,list):employment=", ".join(str(x) for x in employment)
+    if isinstance(employment,str) and employment:value["employmentType"]=employment[:200]
+    salary=posting.get("baseSalary") or {}
+    if isinstance(salary,dict):
+        amount=salary.get("value") or {}
+        if isinstance(amount,dict):
+            extracted={k:amount[key] for k,key in (("min","minValue"),("max","maxValue"),
+                         ("unit","unitText")) if isinstance(amount.get(key),(int,float,str))}
+            if isinstance(salary.get("currency"),str):extracted["currency"]=salary["currency"]
+            if extracted:value["salary"]=extracted
+    identifier=posting.get("identifier") or {}
+    if isinstance(identifier,dict) and identifier.get("value"):
+        value["source_job_id"]=str(identifier["value"])[:160]
+    return value
+
+def public_jobs(source,slug):
+    if source=="geekhunter":
+        root="https://www.geekhunter.com/pt/confidential/jobs"
+        links=[]
+        for page in (1,2):
+            _,objects=public_jsonld_jobs(public_board_html(root+("?page=2" if page==2 else "")))
+            listing=next((o for o in objects if o.get("@type")=="ItemList"),None)
+            if not listing:raise ValueError("GeekHunter public ItemList unavailable")
+            entries=listing.get("itemListElement") or []
+            if not isinstance(entries,list):raise ValueError("GeekHunter listing format changed")
+            for entry in entries:
+                url=entry.get("url") if isinstance(entry,dict) else ""
+                if isinstance(url,str) and url.startswith(root+"/"):
+                    links.append(url)
+            if len(entries)<10:break
+    else:
+        query=urllib.parse.urlencode({"busca":slug[:100]})
+        html=public_board_html("https://www.nerdin.com.br/vagas.php?"+query)
+        parsed,_=public_jsonld_jobs(html)
+        links=[urllib.parse.urljoin("https://www.nerdin.com.br/",path) for path in parsed.links]
+        if not links and not re.search(r"\b0 vagas dispon[ií]veis\b|nenhuma vaga",html,re.I):
+            raise ValueError("Nerdin listing markup missing")
+    links=list(dict.fromkeys(links))[:12]
+    def fetch(url):
+        try:return public_posting(source,url,public_board_html(url)),True
+        except (ValueError,TimeoutError,urllib.error.URLError):return None,False
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        received=list(pool.map(fetch,links))
+    jobs=[value for value,ok in received if ok]
+    failures=sum(not ok for _,ok in received)
+    state="pendente" if failures else ("validado" if jobs else "sem_vagas")
+    return jobs,state,len(links)
 
 class Links(HTMLParser):
     def __init__(self):
@@ -73,6 +200,8 @@ def linkedin_cards(url):
     return jobs
 
 def extra(source,slug):
+    if source in ("geekhunter","nerdin"):
+        return public_jobs(source,slug)
     jobs=[]
     if source=="smartrecruiters":
         d=fetch_json("https://api.smartrecruiters.com/v1/companies/"+urllib.parse.quote(slug)+"/postings?limit=100")

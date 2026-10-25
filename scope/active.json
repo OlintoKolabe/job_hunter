@@ -1,28 +1,33 @@
 {
-  "id": "JOB-HUNTER-SOURCE-DISCOVERY-FILTERS-20261024",
+  "id": "JOB-HUNTER-RECRUITEE-MAIN-20261025",
   "kind": "development",
   "status": "active",
-  "objective": "Fix quality of role-based source discovery, irrelevant inHire matches, transparent seven-day unknown classifications and per-source coverage using the existing catalog and filter engine.",
-  "allowed_paths": ["app.py", "search_filters.py", "source_extensions.py", "src/Opportunities.jsx", "tests/test_discovery_quality.py"],
+  "objective": "Activate the existing public Recruitee collector in catalog and source selector, preserving current eligibility filters and source attribution.",
+  "allowed_paths": [
+    "app.py",
+    "catalog_seed.json",
+    "source_extensions.py",
+    "tests/test_recruitee.py"
+  ],
   "allowed_changes": [
-    "Use verified GeekHunter searchTerm filter and existing Nerdin search for role-driven bounded catalog tasks",
-    "Prevent adjacent but unrequested inHire or other source roles being confirmed merely by JD vocabulary",
-    "Retain unknown dates, geography and work mode as explicit reviews, with no invented values",
-    "Report per-source filtering outcomes and explain coverage at the existing UI panel",
-    "Add red/green regression tests, verify build and publish only on the existing isolated canary"
+    "Add a bounded set of identified public Recruitee company boards to the existing catalog",
+    "Expose Recruitee on the existing backend source selector and catalog scan validation",
+    "Correct Recruitee-specific parsing of descriptions, public links and explicit locations only",
+    "Add focused source regression tests, verify backend and frontend build",
+    "Publish this integration directly to main without a canary, as expressly authorized"
   ],
   "forbidden_changes": [
-    "main or operational Render service, production Neon, history, candidate applications or authentication",
+    "production Neon data, history, candidate applications or authentication",
     "new scheduler, database schema, parallel search engine, paid API, external credential, new dependency or paid service",
     "scraping behind login, bypassing anti-bot protection, guessing unavailable job fields or automatic applications",
-    "CV engine, ranking formulas, existing providers, unrelated frontend redesign, GitHub Actions or Vercel"
+    "CV engine, ranking formulas, other providers, unrelated frontend redesign, GitHub Actions or Vercel"
   ],
   "acceptance": [
-    "User role selection routes to bounded keyword searches on GeekHunter and Nerdin without duplicating infrastructure",
-    "Out-of-role adjacent inHire jobs are not confirmed by incidental JD terms",
-    "Seven-day undated jobs remain review-only with per-source reasons visible",
-    "Scoped regression tests and UI build pass, with evidence and no change to main",
-    "Existing isolated canary deploy is live with coverage diagnostics for human homologation"
+    "Recruitee source can be selected individually and appears in all-source catalog scans",
+    "The existing collector returns factual public links, dates, description and locations when supplied",
+    "Unknown country, remote mode or date remains unconfirmed under existing filters",
+    "Scoped tests, regressions and frontend build pass without other provider changes",
+    "Direct main publication and deployment status are verified"
   ],
-  "deployment": "Use existing source fidelity canary and isolated Neon branch; no main merge without express approval"
+  "deployment": "Direct main update without canary expressly authorized on 2026-10-25; no database migration"
 }

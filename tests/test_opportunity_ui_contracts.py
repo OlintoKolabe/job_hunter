@@ -29,6 +29,12 @@ class OpportunityUIContracts(unittest.TestCase):
         self.assertNotIn("window.open('https://chatgpt.com",s)
         self.assertNotIn("/api/resume/generate",s)
         self.assertNotIn("/api/resume/gpt-start",s)
+
+    def test_docx_download_fallback_uses_signed_in_profile_not_previous_owner(self):
+        s=Path("src/Opportunities.jsx").read_text()
+        self.assertIn("const accountName=String(profile?.name||'').trim()",s)
+        self.assertIn("const filename=found?decodeURIComponent(found[1]):(accountName+",s)
+        self.assertNotIn("'Olinto Manso Pereira - '+(job.title",s)
         self.assertNotIn("Preparar com ChatGPT</button>",s)
 
     def test_confirmed_and_scored_jobs_precede_uncertain_results(self):

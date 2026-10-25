@@ -195,7 +195,9 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},pro
      const content=await response.blob();
      const disposition=response.headers.get('Content-Disposition')||'';
      const found=disposition.match(/filename\\*=UTF-8''([^;]+)/i);
-     const filename=found?decodeURIComponent(found[1]):('Olinto Manso Pereira - '+(job.title||'Vaga')+'.docx');
+     const accountName=String(profile?.name||'').trim();
+     if(!found&&!accountName)throw Error('Não foi possível identificar o nome da conta para o currículo');
+     const filename=found?decodeURIComponent(found[1]):(accountName+' - '+(job.title||'Vaga')+'.docx');
      const blobUrl=URL.createObjectURL(content);
      const anchor=document.createElement('a');
      anchor.href=blobUrl;anchor.download=filename;document.body.appendChild(anchor);

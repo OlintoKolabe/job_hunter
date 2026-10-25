@@ -398,19 +398,44 @@ def build_plan(jd, title):
             "jd_sha256":hashlib.sha256(jd.encode()).hexdigest(),"engine":ENGINE_VERSION}
 
 def render_docx(plan):
-    doc=Document();normal=doc.styles["Normal"];normal.font.name="Calibri";normal.font.size=Pt(10)
+    from docx.shared import Inches, RGBColor
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+    doc=Document();normal=doc.styles["Normal"];normal.font.name="Calibri";normal.font.size=Pt(10.5)
+    normal.font.color.rgb=RGBColor(0,0,0)
     section=doc.sections[0]
-    from docx.shared import Inches
-    section.top_margin=Inches(.48);section.bottom_margin=Inches(.48)
-    section.left_margin=Inches(.7);section.right_margin=Inches(.7)
-    from docx.enum.text import WD_LINE_SPACING
-    normal.paragraph_format.space_after=Pt(2)
-    normal.paragraph_format.line_spacing=1.0
-    for name in ("Title","Heading 1","Heading 2","List Bullet"):
+    section.top_margin=Inches(.72);section.bottom_margin=Inches(.68)
+    section.left_margin=Inches(.82);section.right_margin=Inches(.82)
+    normal.paragraph_format.space_after=Pt(4)
+    normal.paragraph_format.line_spacing=1.08
+    title_style=doc.styles["Title"]
+    title_style.font.name="Calibri";title_style.font.size=Pt(18)
+    title_style.font.bold=True;title_style.font.color.rgb=RGBColor(0,0,0)
+    title_style.paragraph_format.space_before=Pt(0)
+    title_style.paragraph_format.space_after=Pt(5)
+    title_style.paragraph_format.keep_with_next=True
+    # Neutralize Word's default blue underline/border below the Title style.
+    pPr=title_style.element.get_or_add_pPr()
+    border=pPr.find(qn("w:pBdr"))
+    if border is not None:pPr.remove(border)
+    border=OxmlElement("w:pBdr")
+    bottom=OxmlElement("w:bottom");bottom.set(qn("w:val"),"nil")
+    border.append(bottom);pPr.append(border)
+    for name,size,before,after in (("Heading 1",11.5,10,4),("Heading 2",10.5,6,1)):
         style=doc.styles[name]
-        style.paragraph_format.space_before=Pt(3)
-        style.paragraph_format.space_after=Pt(2)
-    doc.styles["Heading 2"].font.size=Pt(10)
+        style.font.name="Calibri";style.font.size=Pt(size)
+        style.font.bold=True;style.font.color.rgb=RGBColor(0,0,0)
+        style.paragraph_format.space_before=Pt(before)
+        style.paragraph_format.space_after=Pt(after)
+        style.paragraph_format.keep_with_next=True
+    bullet=doc.styles["List Bullet"]
+    bullet.font.name="Calibri";bullet.font.size=Pt(10.5)
+    bullet.font.color.rgb=RGBColor(0,0,0)
+    bullet.paragraph_format.left_indent=Inches(.22)
+    bullet.paragraph_format.first_line_indent=Inches(-.14)
+    bullet.paragraph_format.space_before=Pt(0)
+    bullet.paragraph_format.space_after=Pt(3)
+    bullet.paragraph_format.line_spacing=1.08
     # Provenance is embedded in DOCX metadata, invisible to recruiters/ATS.
     provenance = (
         f"JobHunterCV={CV_DOCUMENT_VERSION};"
@@ -422,7 +447,11 @@ def render_docx(plan):
     doc.core_properties.keywords = provenance
     doc.core_properties.comments = "Job Hunter CV provenance: " + provenance
     doc.add_heading(CONTACT["name"],0)
-    doc.add_paragraph(" | ".join([CONTACT["location"],CONTACT["phone"],CONTACT["email"],CONTACT["linkedin"]]))
+    contact=doc.add_paragraph(" | ".join(v for v in
+        [CONTACT["location"],CONTACT["phone"],CONTACT["email"],CONTACT["linkedin"]] if v))
+    contact.style=normal
+    for run in contact.runs:run.font.size=Pt(9)
+    contact.paragraph_format.space_after=Pt(5)
     doc.add_heading("Resumo profissional",1);doc.add_paragraph(plan["summary"])
     doc.add_heading("Experiência profissional",1)
     detailed={e["source_index"]:e for e in plan["experience"]}
@@ -435,12 +464,14 @@ def render_docx(plan):
             heading.paragraph_format.keep_with_next=True
             dates=doc.add_paragraph(e["dates"])
             dates.paragraph_format.keep_with_next=True
+            for run in dates.runs:run.font.size=Pt(9)
             # Compact experience must still have a factual description.
-            doc.add_paragraph(EXPERIENCE[idx]["facts"][0],style="List Bullet")
+            doc.add_paragraph(e.get("fact") or EXPERIENCE[idx]["facts"][0],style="List Bullet")
             continue
         heading=doc.add_heading(e["role"]+" — "+e["company"],2)
         heading.paragraph_format.keep_with_next=True
         dates=doc.add_paragraph(e["dates"]);dates.paragraph_format.keep_with_next=True
+        for run in dates.runs:run.font.size=Pt(9)
         for fact in e["facts"]:doc.add_paragraph(fact,style="List Bullet")
     doc.add_heading("Formação e certificações",1)
     for degree in plan.get("education",EDUCATION):

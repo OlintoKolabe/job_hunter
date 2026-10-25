@@ -80,6 +80,19 @@ class AIResumeMatcherTests(unittest.TestCase):
         self.assertNotIn("Power BI dashboards",text)
         self.assertIn("Graduação",text)
 
+    def test_tailored_cv_limits_secondary_roles_and_finishes_long_summary(self):
+        long_summary="Delivered documented project work across teams. " * 19
+        answer={"selected_fact_ids":["1:0","1:1","1:2","4:1"],
+                "summary":long_summary}
+        with patch("ai_resume_matcher._ask",return_value=answer):
+            plan=tailored_plan(JD,"Technical Project Manager")
+        self.assertLessEqual(len(plan["experience"])+len(plan["additional_experience"]),6)
+        self.assertLessEqual(len(plan["additional_experience"]),2)
+        self.assertNotIn("Professor de MBA",[x["role"] for x in plan["additional_experience"]])
+        self.assertTrue(plan["summary"].endswith("."))
+        self.assertLessEqual(len(plan["summary"]),520)
+        self.assertTrue(audit(plan,render_docx(plan))["factual_bullets_verified"])
+
     def test_cv_rejects_sparse_or_unknown_selection(self):
         with patch("ai_resume_matcher._ask",return_value={"selected_fact_ids":["999:9","1:0"]}):
             plan=tailored_plan(JD,"Senior Product Manager")

@@ -211,6 +211,21 @@ def tailored_plan(jd,title,company=""):
             rewrite_candidates[id_]=proposed
             provenance[proposed]=original
     plan=build_plan(jd,title)
+    ranked_support=plan["experience"]
+    # The AI orders selected evidence by relevance. Keep the strongest facts
+    # from at most six roles; listing an entire unrelated career diminishes
+    # the job-specific value and makes the DOCX difficult to scan.
+    focused=[]
+    focused_roles=set()
+    per_role={}
+    for id_ in requested:
+        index,_=valid[id_]
+        if index not in focused_roles and len(focused_roles)>=6:continue
+        if per_role.get(index,0)>=4 or len(focused)>=16:continue
+        focused.append(id_)
+        focused_roles.add(index)
+        per_role[index]=per_role.get(index,0)+1
+    requested=focused
     selected={}
     for id_ in requested:
         idx,fact=valid[id_]
@@ -218,11 +233,23 @@ def tailored_plan(jd,title,company=""):
     plan["experience"]=[{"role":EXPERIENCE[i]["role"],"company":EXPERIENCE[i]["company"],
               "dates":EXPERIENCE[i]["dates"],"facts":facts,"source_index":i}
               for i,facts in selected.items()]
-    plan["additional_experience"]=[{"role":row["role"],"company":row["company"],
-                                    "dates":row["dates"],"source_index":i}
-                                    for i,row in enumerate(EXPERIENCE) if i not in selected]
+    # Reuse the established JD-based ranking for limited supporting context.
+    # Do not print every old role with an unrelated generic bullet.
+    supporting=[]
+    for entry in ranked_support:
+        index=entry["source_index"]
+        if index not in selected and len(selected)+len(supporting)<6 and len(supporting)<2:
+            supporting.append({"role":entry["role"],"company":entry["company"],
+                               "dates":entry["dates"],"source_index":index,
+                               "fact":entry["facts"][0]})
+    plan["additional_experience"]=supporting
     plan["source_summary"]=plan["summary"]
-    summary=str(answer.get("summary") or "").strip()[:520]
+    summary=" ".join(str(answer.get("summary") or "").split())
+    if len(summary)>520:
+        # Sentence boundary is best; otherwise stop on a complete word.
+        sentence_end=max(summary.rfind(end,300,521) for end in ".!?")
+        summary=(summary[:sentence_end+1] if sentence_end>=300
+                 else summary[:520].rsplit(" ",1)[0].rstrip(" ,;:")+".")
     # Forbid candidate factual identifiers outside the verified catalog in free text.
     # Keep deterministic verified summary instead when potentially fabricated facts appear.
     forbidden=re.search(r"\b(?:SQL|Python|Tableau|Power BI|Odontologia|UEG|UNIVALI)\b",summary,re.I)

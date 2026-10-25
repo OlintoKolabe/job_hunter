@@ -6,6 +6,18 @@ from resume_engine import build_plan,render_docx,audit,EXPERIENCE,CONTACT
 JD="We need a business analyst who manages stakeholder needs, roadmaps and backlog in Azure DevOps, works with product owners and defines user stories. Previous hands-on Oracle programming experience is a plus."
 
 class ResumeEngineTests(unittest.TestCase):
+    def test_docx_has_plain_ats_typography_without_blue_headings_or_title_rule(self):
+        from docx.shared import RGBColor
+        doc=Document(io.BytesIO(render_docx(build_plan(JD,"Senior Business Analyst"))))
+        for style_name in ("Title","Heading 1","Heading 2"):
+            self.assertEqual(doc.styles[style_name].font.color.rgb,RGBColor(0,0,0))
+        self.assertLessEqual(doc.styles["Title"].font.size.pt,20)
+        self.assertGreaterEqual(doc.styles["Normal"].font.size.pt,10)
+        self.assertEqual(len(doc.sections),1)
+        self.assertEqual(len(doc.tables),0)
+        self.assertTrue(audit(build_plan(JD,"Senior Business Analyst"),
+                              render_docx(build_plan(JD,"Senior Business Analyst")))["factual_bullets_verified"])
+
     def test_document_provenance_survives_download_and_fallback(self):
         from resume_engine import CV_DOCUMENT_VERSION
         for mode in ("hybrid","cached_hybrid","fallback","cached_fallback","deterministic"):

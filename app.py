@@ -136,7 +136,7 @@ def validated_profile(value, current):
             seq=value[key]
             # Technical profiles can legitimately contain more than 60 skills.
             # Keep the former limit for all other profile lists.
-            max_items=250 if key=="skills" else 60
+            max_items=250 if key in ("skills","roles") else 60
             if not isinstance(seq,list) or len(seq)>max_items:
                 raise HTTPException(400,"Lista inválida: "+key)
             clean[key]=list(dict.fromkeys(str(x).strip()[:200] for x in seq if str(x).strip()))

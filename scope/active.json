@@ -1,17 +1,17 @@
 {
-  "id": "JOB-HUNTER-ATS-FACTUAL-AUDIT-HOTFIX-20261025",
+  "id": "JOB-HUNTER-PROFILE-JSON-HOTFIX-20261025",
   "kind": "hotfix",
   "status": "active",
-  "base_ref": "982abad5ecceb505827a92fbb0707f8668aa9959",
+  "base_ref": "e6acde3522c3c59dc87a4564be14af4d505c7df9",
   "feature_ref": "main",
-  "allowed_files": ["scope/active.json", "app.py", "ai_resume_matcher.py", "tests/test_ai_resume_matcher.py"],
+  "allowed_files": ["scope/active.json", "src/Profile.jsx", "src/profileApi.js", "tests/test_profile_api.mjs"],
   "forbidden_paths": [".github/", "vercel/"],
-  "objective": "Restore AI ATS DOCX downloads rejected by overly strict document collision assertions without weakening factual evidence checks.",
-  "allowed_paths": ["scope/active.json", "app.py", "ai_resume_matcher.py", "tests/test_ai_resume_matcher.py"],
+  "objective": "Make manual experience updates resilient to transient non-JSON upstream responses without losing form edits or falsely reporting successful saves.",
+  "allowed_paths": ["scope/active.json", "src/Profile.jsx", "src/profileApi.js", "tests/test_profile_api.mjs"],
   "allowed_changes": [
-    "Retain AI-selected verified facts when fewer than four are applicable",
-    "Retry failed rendered-document audit using unmodified source bullet wording and verified summary",
-    "Preserve strict second factual audit and log failed validation reason without leaking candidate data",
+    "Parse profile API responses only when the content-type is JSON",
+    "Retry an idempotent PUT once after unexpected HTML and preserve unsaved edits on failure",
+    "Show actionable Portuguese errors and reject unverified responses as unsaved",
     "Verify tests, UI build and operational Render deployment"
   ],
   "forbidden_changes": [
@@ -21,10 +21,10 @@
     "Unrelated features and fabricated professional experience"
   ],
   "acceptance": [
-    "Regression reproducing a summary/evidence collision produces a verified DOCX",
-    "No fallback invents facts or bypasses the strict document audit",
+    "Valid JSON saves succeed without duplicate requests",
+    "Transient HTML requests recover while persistent HTML and authentication errors fail visibly",
     "Automated tests and frontend build pass",
     "Existing accounts, history, sources and authentication remain unchanged"
   ],
-  "deployment": "Direct production hotfix explicitly authorized 2026-10-25, conditional on tests and runtime checks"
+  "deployment": "Production issue reported on 2026-10-25; only frontend profile API response handling, tests and scope contract may change"
 }

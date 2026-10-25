@@ -1,5 +1,6 @@
 import React,{useState} from 'react';
 import {UserRound,BriefcaseBusiness,GraduationCap,CheckCircle2,Plus,Trash2,Save,ShieldCheck,FileUp,FileText,AlertCircle} from 'lucide-react';
+import {profileJson,saveProfileRequest} from './profileApi.js';
 
 const emptyExperience=()=>({role:'',company:'',dates:'',facts:[],verified:false});
 const parseList=value=>value.split(/\n|,/).map(s=>s.trim()).filter(Boolean);
@@ -19,7 +20,7 @@ export function ProfilePanel({profile,onSaved}){
   setImporting(true);
   try{
    const response=await fetch('/api/profile/import-linkedin',{method:'POST',headers:{'Content-Type':'application/pdf'},body:file});
-   const parsed=await response.json();if(!response.ok)throw Error(parsed.detail||'Não foi possível ler o PDF');
+   const parsed=await profileJson(response,'ler o PDF do LinkedIn');
    const next={...form};
    for(const [key,value] of Object.entries(parsed.profile)){
     if((Array.isArray(value)&&value.length)||(typeof value==='string'&&value.trim()))next[key]=value;
@@ -37,8 +38,7 @@ export function ProfilePanel({profile,onSaved}){
    if(importPreview&&!accepted)throw Error('Confirme que conferiu os dados importados antes de salvar.');
    const dataToSave={...form,...Object.fromEntries(Object.entries(listDrafts).map(([k,v])=>[k,parseList(v)])),
     experience:form.experience.map((e,i)=>({...e,verified:importPreview?accepted:e.verified,facts:parseList(factDrafts[i]||'')}))};
-   const response=await fetch('/api/profile',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({profile:dataToSave})});
-   const data=await response.json();if(!response.ok)throw Error(data.detail||'Falha ao salvar');
+   const data=await saveProfileRequest(dataToSave);
    setForm(data.profile);setImportPreview(null);setAccepted(false);onSaved(data.profile);setNotice('Currículo mestre salvo. O Caçador já pode utilizar as evidências confirmadas nas análises e nos currículos ATS.');
   }catch(error){setNotice(error.message)}finally{setBusy(false)}
  }

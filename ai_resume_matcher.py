@@ -294,6 +294,10 @@ def localize_plan(plan,jd):
     """Presentation-only translation of the selected, source-backed CV facts."""
     language=job_description_language(jd)
     plan["language"]=language
+    # Offline contract tests can mock selection without configuring paid translation.
+    # The production CV route already requires both flags before calling this path.
+    if os.getenv("JH_AI_ENABLED")!="1" or not os.getenv("OPENAI_API_KEY"):
+        return plan
     from resume_engine import EDUCATION
     education=list(plan.get("education",EDUCATION))
     entries=plan["experience"]+plan.get("additional_experience",[])

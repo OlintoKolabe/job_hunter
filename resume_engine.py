@@ -11,6 +11,7 @@ import re
 from datetime import datetime, timezone
 from docx import Document
 from docx.shared import Pt
+import multiuser as mu
 
 ENGINE_VERSION = "block5-traceable-rewrite-v5"
 CV_DOCUMENT_VERSION = "job-hunter-cv-provenance-v1"
@@ -162,6 +163,11 @@ EDUCATION = ["Graduação — Universidade de São Paulo (USP)",
              "MBA em Marketing — Universidade de São Paulo (2015–2016)",
              "MBA em Administração e Gestão — Fundação Getulio Vargas (2001–2003)",
              "Professional Scrum Product Owner I (PSPO I)"]
+# Imports in AI matcher retain these dynamic proxies and resolve the facts for
+# the authenticated request; legacy deployments still use the original facts.
+EXPERIENCE = mu.ProfileSequence(EXPERIENCE, mu.factual_experience)
+EDUCATION = mu.ProfileSequence(EDUCATION, mu.profile_education)
+CONTACT = mu.ProfileContact(CONTACT)
 STOP={"the","and","with","for","that","from","have","will","are","this","your","our",
       "para","com","que","dos","das","uma","por","como","nos","nas","mais","sobre",
       "experiencia","experience","required","requirements","responsibilities","years"}
@@ -199,6 +205,15 @@ def words(value):
     return {w for w in re.findall(r"[a-záàâãéêíóôõúüç0-9]{3,}",value) if w not in STOP}
 def chronology_index(item):
     """Actual start dates, including overlapping employment."""
+    if mu.enabled:
+        dates=str(item.get("dates") or "")
+        match=re.search(r"(?i)(?:jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)[a-z]*\s+(20\d\d|19\d\d)",dates)
+        months={"jan":1,"fev":2,"mar":3,"abr":4,"mai":5,"jun":6,
+                "jul":7,"ago":8,"set":9,"out":10,"nov":11,"dez":12}
+        if match:
+            return (int(match.group(1)),months.get(match.group(0)[:3].lower(),1))
+        year=re.search(r"\b(19\d{2}|20\d{2})\b",dates)
+        return (int(year.group(1)),1) if year else (0,0)
     starts={
       "Centauro.life":(2026,4),"Neocoder / LiberPay":(2025,5),"Neocoder":(2025,2),
       "Hexagon Mining":(2023,8),"Stefanini Brasil / Hexagon Mining":(2023,5),
@@ -246,6 +261,8 @@ def relevance(fact, required, jd_words):
     return 4*len(matched)+specificity
 def build_plan(jd, title):
     if not jd or not jd.strip():raise ValueError("JD vazio")
+    if mu.enabled and not mu.factual_experience():
+        raise ValueError("Cadastre e valide experiências antes de gerar um currículo")
     # Job title is high-signal; descriptions often mention unrelated tools and domains.
     needs=categories(relevant_jd_text(jd)+" "+title,TOPICS)
     title_needs=categories(title,TOPICS)
@@ -368,6 +385,12 @@ def build_plan(jd, title):
                  ", com atuação documentada em tecnologia e negócios. "
                  "Histórico de atividades em equipes e projetos de diferentes setores.")
     # Only a profile-level statement here, never repeated verbatim from the roles.
+    if mu.enabled:
+        profile=mu.current_profile.get() or {}
+        summary=str(profile.get("summary") or "").strip()
+        if not summary:
+            summary="Profissional com experiência documentada em "+", ".join(
+                sorted(set(e["role"] for e in EXPERIENCE))[:3])+"."
     tailored_education=[degree for degree in EDUCATION if "odontolog" not in degree.casefold()]
     return {"title":title[:120],"summary":summary,"focus_topics":top_topics,
             "education":tailored_education,
@@ -422,7 +445,11 @@ def render_docx(plan):
     doc.add_heading("Formação e certificações",1)
     for degree in plan.get("education",EDUCATION):
         if "odontolog" not in degree.casefold():doc.add_paragraph(degree,style="List Bullet")
-    doc.add_paragraph("Idiomas: Português (nativo); Inglês (profissional); Italiano (intermediário).")
+    if mu.enabled:
+        languages=(mu.current_profile.get() or {}).get("languages") or []
+        if languages:doc.add_paragraph("Idiomas: "+ "; ".join(languages)+".")
+    else:
+        doc.add_paragraph("Idiomas: Português (nativo); Inglês (profissional); Italiano (intermediário).")
     out=io.BytesIO();doc.save(out);return out.getvalue()
 
 def audit(plan,data):

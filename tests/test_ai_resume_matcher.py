@@ -3,6 +3,7 @@ import io
 import json
 import os
 import unittest
+from datetime import date, timedelta
 from unittest.mock import patch
 from docx import Document
 from ai_resume_matcher import evaluate, tailored_plan, to_ranking, AIUnavailable
@@ -305,7 +306,7 @@ class ShortlistedJDTests(unittest.TestCase):
         jd='Product strategy, roadmap, discovery, requirements and stakeholder leadership. '*12
         job={'url':'https://example.com/product/1','title':'Senior Product Manager',
              'company':'Example','location':'Remote Brazil','remote':True,
-             'source':'ashby','published':'2026-10-22','description':jd}
+             'source':'ashby','published':(date.today()-timedelta(days=1)).isoformat(),'description':jd}
         confirmed,review,_=analyze_filters([job],'Product Manager','BR','remote',3,'newest')
         self.assertEqual(len(confirmed),1)
         self.assertEqual(confirmed[0]['description'],'')

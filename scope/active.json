@@ -1,28 +1,29 @@
 {
-  "id": "JOB-HUNTER-SOURCE-DISCOVERY-FILTERS-20261024",
+  "id": "JOB-HUNTER-MULTIUSER-CANARY-20261025",
   "kind": "development",
   "status": "active",
-  "objective": "Fix quality of role-based source discovery, irrelevant inHire matches, transparent seven-day unknown classifications and per-source coverage using the existing catalog and filter engine.",
-  "allowed_paths": ["app.py", "search_filters.py", "source_extensions.py", "src/Opportunities.jsx", "tests/test_discovery_quality.py"],
+  "objective": "Develop the approved isolated multiuser canary with accounts, professional profiles, role preferences, separate history, scores and ATS documents.",
+  "allowed_paths": ["scope/active.json", "multiuser.py", "migrations/20261025_multiuser_canary.sql", "app.py", "jd_enrichment.py", "ai_resume_matcher.py", "resume_engine.py", "block4_score.py", "Dockerfile", "src/main.jsx", "src/Opportunities.jsx", "src/Profile.jsx", "src/style.css", "tests/test_multiuser.py", "tests/test_ai_resume_matcher.py", "MULTIUSER_CANARY_EVIDENCE.md"],
   "allowed_changes": [
-    "Use verified GeekHunter searchTerm filter and existing Nerdin search for role-driven bounded catalog tasks",
-    "Prevent adjacent but unrequested inHire or other source roles being confirmed merely by JD vocabulary",
-    "Retain unknown dates, geography and work mode as explicit reviews, with no invented values",
-    "Report per-source filtering outcomes and explain coverage at the existing UI panel",
-    "Add red/green regression tests, verify build and publish only on the existing isolated canary"
+    "Create registration, login and tenant isolation on the isolated Neon branch",
+    "Provide Meu Perfil and editable experience, qualifications, role catalog and search preferences",
+    "Adapt existing search, ranking and CV engines to validated tenant evidence",
+    "Preserve cache and collector architecture without data leakage",
+    "Test and publish a separately configured Render canary",
+    "Stabilize the existing time-relative regression fixture that otherwise blocks the required Docker build on the current date"
   ],
   "forbidden_changes": [
-    "main or operational Render service, production Neon, history, candidate applications or authentication",
-    "new scheduler, database schema, parallel search engine, paid API, external credential, new dependency or paid service",
-    "scraping behind login, bypassing anti-bot protection, guessing unavailable job fields or automatic applications",
-    "CV engine, ranking formulas, existing providers, unrelated frontend redesign, GitHub Actions or Vercel"
+    "main, production Neon and operational Render services",
+    "new collector, scheduler, scoring engine, paid services or automatic applications",
+    "fabricated professional evidence and data mixing between accounts",
+    "unrelated frontend redesign, GitHub Actions or Vercel"
   ],
   "acceptance": [
-    "User role selection routes to bounded keyword searches on GeekHunter and Nerdin without duplicating infrastructure",
-    "Out-of-role adjacent inHire jobs are not confirmed by incidental JD terms",
-    "Seven-day undated jobs remain review-only with per-source reasons visible",
-    "Scoped regression tests and UI build pass, with evidence and no change to main",
-    "Existing isolated canary deploy is live with coverage diagnostics for human homologation"
+    "Three separate accounts can search their selected profession with isolated personal data",
+    "Scores and CV use only verified evidence of the logged-in user",
+    "Invalid JD and ineligible jobs cannot spend AI budget",
+    "Scoped regressions and UI build pass without main changes",
+    "Independent canary deploy is live with a URL for homologation"
   ],
-  "deployment": "Use existing source fidelity canary and isolated Neon branch; no main merge without express approval"
+  "deployment": "Use canary/multiuser-isolated-20261025 and br-flat-glitter-b7fqujew only; no main merge"
 }

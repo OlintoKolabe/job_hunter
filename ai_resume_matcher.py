@@ -15,6 +15,7 @@ import urllib.error
 from contextvars import ContextVar
 
 from resume_engine import EXPERIENCE, relevant_jd_text
+import multiuser as mu
 
 MODEL_DEFAULT = "gpt-4.1-mini"
 MAX_JD_CHARS = 16000
@@ -182,7 +183,7 @@ def tailored_plan(jd,title,company=""):
     if not isinstance(requested,list):raise ValueError("Seleção de fatos inválida")
     requested=[x for x in requested if isinstance(x,str) and x in valid]
     requested=list(dict.fromkeys(requested))[:MAX_FACTS]
-    if len(requested)<4:raise ValueError("Seleção insuficiente de evidências")
+    if len(requested)<min(4,len(valid)):raise ValueError("Seleção insuficiente de evidências")
     # Rewrite only when lexical overlap and numeric provenance are safe.
     provenance={}
     rewrite_candidates={}
@@ -233,7 +234,7 @@ def tailored_plan(jd,title,company=""):
 def to_ranking(job, roles, analysis):
     """Map verified semantic fit to existing Job Hunter UI without a second scoring model."""
     from block4_score import score_job
-    base=score_job(job,roles)
+    base=({} if mu.enabled else score_job(job,roles))
     rows=[]
     catalog={item["id"]:item for item in evidence_catalog()}
     for req in analysis["requirements"]:

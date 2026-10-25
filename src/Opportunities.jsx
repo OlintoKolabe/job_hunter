@@ -9,10 +9,11 @@ function DecisionActions({job,pending,cvPending,cvError,onDecision,onGenerateCv}
   {job.jd_available===true&&<button type="button" disabled={cvPending} onClick={()=>onGenerateCv(job)} style={{...shared,background:'#2563eb',border:'1px solid #2563eb'}}>{cvPending?'Gerando DOCX com IA…':'Gerar currículo ATS'}</button>}
  </div>{cvError&&<small role="alert" style={{display:'block',color:'#b91c1c',whiteSpace:'normal',maxWidth:330,marginTop:5}}>{cvError}</small>}</div>;
 }
-export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{}}){
+export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},profile=null}){
+ const catalog=profile?.roles||[];
  const decidedUrlsRef=useRef(new Set());
  const visibleUndecided=jobs=>jobs.filter(j=>!decidedUrlsRef.current.has(j.url));
- const [onlyNew,setOnlyNew]=useState(false),[searchedQuery,setSearchedQuery]=useState(''),[source,setSource]=useState('all'),[sources,setSources]=useState([{value:'all',label:'Todas as fontes'},{value:'inhire',label:'inHire'},{value:'quickin',label:'Quickin'},{value:'gupy',label:'Gupy'}]),[roles,setRoles]=useState(defaultRoles),[days,setDays]=useState('0'),[country,setCountry]=useState('BR'),[countries,setCountries]=useState(initialCountries),[mode,setMode]=useState('remote'),[sort,setSort]=useState('score');
+ const [onlyNew,setOnlyNew]=useState(false),[searchedQuery,setSearchedQuery]=useState(''),[source,setSource]=useState('all'),[sources,setSources]=useState([{value:'all',label:'Todas as fontes'},{value:'inhire',label:'inHire'},{value:'quickin',label:'Quickin'},{value:'gupy',label:'Gupy'}]),[roles,setRoles]=useState(profile?catalog.join(', '):defaultRoles),[days,setDays]=useState(String(profile?.days??0)),[country,setCountry]=useState(profile?.country||'BR'),[countries,setCountries]=useState(initialCountries),[mode,setMode]=useState(profile?.mode||'remote'),[sort,setSort]=useState('score');
  const [sourceStats,setSourceStats]=useState({}),[reviews,setReviews]=useState([]),[excluded,setExcluded]=useState([]),[filterStats,setFilterStats]=useState({}),[rawScanned,setRawScanned]=useState(0),[busy,setBusy]=useState(false),[results,setResults]=useState([]),[message,setMessage]=useState(''),[error,setError]=useState(''),[cvErrors,setCvErrors]=useState({}),[checked,setChecked]=useState(0),[counts,setCounts]=useState({new:0,total:0}),[completed,setCompleted]=useState(false),[visibleCount,setVisibleCount]=useState(10),[evaluated,setEvaluated]=useState(0),[evaluationTotal,setEvaluationTotal]=useState(0),[scoringNow,setScoringNow]=useState([]),[scoringFailed,setScoringFailed]=useState([]),[scoringAttempted,setScoringAttempted]=useState([]);
  const [flowTrace,setFlowTrace]=useState({raw:0,classified_confirmed:0,classified_review:0,history_excluded:0,display_confirmed:0,display_review:0});
  const [eligibilityTrace,setEligibilityTrace]=useState({eligible_for_detail:0,attempted:0,complete:0,failed:0,absent:0,deferred:0});
@@ -183,7 +184,7 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{}}){
        method:'POST',credentials:'same-origin',
        headers:{'Content-Type':'application/json'},
        signal:AbortSignal.timeout(65000),
-       body:JSON.stringify({url:job.url,title:job.title,company:job.company||'',description:job.description||''})});
+       body:JSON.stringify({url:job.url,title:job.title,company:job.company||'',description:job.description||'',confirmed:job.confirmed===true,needs_verification:job.needs_verification||[]})});
      if(!response.ok){
        const error=await response.json().catch(()=>({}));
        throw Error(error.detail||('Erro HTTP '+response.status));
@@ -280,7 +281,8 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{}}){
   <div className="infra-title"><div><h3>Encontrar oportunidades</h3><p>Personalize sua busca. Os quadros são verificados automaticamente ao pesquisar.</p></div></div>
   <div className="history-stats" aria-label="Contagem de decisões no Histórico"><span>Candidatado: <b>{historyStats?(historyStats.states.Candidatado||0).toLocaleString("pt-BR"):"—"}</b></span><span>Descartado: <b>{historyStats?(historyStats.states.Descartado||0).toLocaleString("pt-BR"):"—"}</b></span></div>
   <div className="jh-filters">
-   <label className="jh-field jh-roles"><span>Quais vagas você procura? <button type="button" style={{marginLeft:12,fontSize:12}} disabled={busy} onClick={()=>setRoles(defaultRoles)}>Restaurar cargos padrão</button></span><textarea rows="3" value={roles} onChange={e=>setRoles(e.target.value)} maxLength={700} placeholder="Separe os cargos por vírgula"/></label>
+   {profile?<div className="jh-field jh-roles"><span>Selecione os cargos do seu catálogo (Meu Perfil)</span><div className="role-options">{catalog.map(role=><label key={role}><input type="checkbox" checked={roles.split(',').map(x=>x.trim()).includes(role)} disabled={busy} onChange={e=>setRoles(previous=>{const active=previous.split(',').map(x=>x.trim()).filter(Boolean);return (e.target.checked?[...new Set([...active,role])]:active.filter(x=>x!==role)).join(', ')})}/>{role}</label>)}</div>{!catalog.length&&<p>Cadastre cargos em Meu Perfil para iniciar a busca.</p>}</div>:
+   <label className="jh-field jh-roles"><span>Quais vagas você procura? <button type="button" style={{marginLeft:12,fontSize:12}} disabled={busy} onClick={()=>setRoles(defaultRoles)}>Restaurar cargos padrão</button></span><textarea rows="3" value={roles} onChange={e=>setRoles(e.target.value)} maxLength={700} placeholder="Separe os cargos por vírgula"/></label>}
    <label className="jh-field"><span>Fonte / site</span><select value={source} onChange={e=>changeSource(e.target.value)}>{sources.map(x=><option key={x.value} value={x.value}>{x.label}</option>)}</select></label>
    <label className="jh-field"><span>Publicadas nos últimos</span><select value={days} onChange={e=>setDays(e.target.value)}>{[['1','1 dia'],['3','3 dias'],['7','7 dias'],['15','15 dias'],['30','30 dias'],['60','60 dias'],['90','90 dias'],['0','Qualquer período']].map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label>
    <label className="jh-field"><span>Ordenar por</span><select value={sort} onChange={e=>setSort(e.target.value)}><option value="score">Maior aderência primeiro</option><option value="recommendation">Mais recomendadas primeiro</option><option value="newest">Mais recentes primeiro</option><option value="oldest">Mais antigas primeiro</option></select></label>

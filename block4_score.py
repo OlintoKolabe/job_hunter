@@ -4,6 +4,7 @@ salary bonus 10, strongest domain bonus 16), bounded to 97.
 A priority score is NOT confirmed professional eligibility.
 """
 import re
+import multiuser as mu
 from search_filters import fold,detect_work_mode,requested_families,search_terms
 from jd_signals import signals,clean_jd
 
@@ -319,6 +320,13 @@ def recommend_application(job, ranking):
         "sao paulo","rio de janeiro","curitiba","belo horizonte",
         "brasilia","porto alegre","recife","florianopolis","campinas"))
     local_city=any(x in location for x in ("goiania","caldas novas"))
+    if mu.enabled:
+        # The original two-city exclusion belongs only to the legacy owner.
+        # For any other user, unresolved location requires confirmation.
+        profile=mu.current_profile.get() or {}
+        personal_city=fold(str(profile.get("location") or "").split(",")[0])
+        local_city=bool(personal_city and personal_city in location)
+        other_city=False
     if mode in ("hybrid","onsite") and other_city and not local_city:
         return {"score":0,"decision":"nao_recomendada","reason":"Vaga híbrida/presencial em cidade fora de Goiânia ou Caldas Novas.","factors":["restrição geográfica confirmada"]}
     mandatory=[r for r in ranking.get("requirements",[]) if r.get("type")=="obrigatorio"]

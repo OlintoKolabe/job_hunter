@@ -299,13 +299,14 @@ class ShortlistedJDTests(unittest.TestCase):
             self.assertEqual(fallback_public_jd(job),'generic JD')
 
     def test_filter_does_not_destroy_collector_jd_before_cache(self):
+        from datetime import datetime, timezone
         from jd_enrichment import persist_listing_jds
         from search_filters import analyze_filters
         from unittest.mock import Mock
         jd='Product strategy, roadmap, discovery, requirements and stakeholder leadership. '*12
         job={'url':'https://example.com/product/1','title':'Senior Product Manager',
              'company':'Example','location':'Remote Brazil','remote':True,
-             'source':'ashby','published':'2026-10-22','description':jd}
+             'source':'ashby','published':datetime.now(timezone.utc).isoformat(),'description':jd}
         confirmed,review,_=analyze_filters([job],'Product Manager','BR','remote',3,'newest')
         self.assertEqual(len(confirmed),1)
         self.assertEqual(confirmed[0]['description'],'')

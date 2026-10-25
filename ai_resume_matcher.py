@@ -215,9 +215,23 @@ def tailored_plan(jd,title,company=""):
     # Preserve the established JD-first AI selection (up to MAX_FACTS).
     # Multiuser's post-selection caps silently discarded verified evidence.
     selected={}
+    seen_source=set()
+    seen_text=set()
     for id_ in requested:
         idx,fact=valid[id_]
-        selected.setdefault(idx,[]).append(rewrite_candidates.get(id_,fact))
+        # Several positions can contain the same imported achievement or
+        # technology. Keep its first JD-ranked occurrence; the audit requires
+        # unique professional bullets, not unique source IDs.
+        if fact in seen_source:
+            continue
+        rendered=rewrite_candidates.get(id_,fact)
+        if rendered in seen_text:
+            rendered=fact
+        if rendered in seen_text:
+            continue
+        selected.setdefault(idx,[]).append(rendered)
+        seen_source.add(fact)
+        seen_text.add(rendered)
     plan["experience"]=[{"role":EXPERIENCE[i]["role"],"company":EXPERIENCE[i]["company"],
               "dates":EXPERIENCE[i]["dates"],"facts":facts,"source_index":i}
               for i,facts in selected.items()]
@@ -238,9 +252,13 @@ def tailored_plan(jd,title,company=""):
                 support_indices.append(index)
     for index in support_indices:
         row=EXPERIENCE[index]
+        fact=next((f for f in row["facts"] if f not in seen_text),None)
+        if fact is None:
+            continue
+        seen_text.add(fact)
         supporting.append({"role":row["role"],"company":row["company"],
                            "dates":row["dates"],"source_index":index,
-                           "fact":row["facts"][0]})
+                           "fact":fact})
     plan["additional_experience"]=supporting
     plan["source_summary"]=plan["summary"]
     summary=" ".join(str(answer.get("summary") or "").split())

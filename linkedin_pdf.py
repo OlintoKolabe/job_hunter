@@ -93,6 +93,7 @@ def clean_summary(lines):
 def clean_credentials(lines, name, skills):
     """Reject LinkedIn sidebar spillover, never infer an academic credential."""
     name_key = normal(name)
+    name_words = [x for x in re.findall(r"\w+", name_key) if len(x)>1]
     skill_keys = {normal(x) for x in skills}
     sidebar_technologies = {"python", "sql", "databricks", "power bi", "pyspark",
                             "spark", "streamlit", "n8n", "generative ai & process automation"}
@@ -100,7 +101,12 @@ def clean_credentials(lines, name, skills):
     footer_started = False
     for entry in simple_list(lines):
         key = normal(entry)
-        if name_key and key == name_key:
+        words = [x for x in re.findall(r"\w+", key) if len(x)>1]
+        repeated_name = (len(name_words)>=2 and len(words)>=2 and
+                         words[:2]==name_words[:2] and
+                         sum(w in name_words for w in words)>=min(3,len(words)) and
+                         sum(w in name_words for w in words)/len(words)>=.75)
+        if repeated_name:
             footer_started = True
         is_sidebar = (footer_started or key in skill_keys or key in sidebar_technologies or
                       EMAIL.search(entry) or LINKEDIN.search(entry) or

@@ -97,6 +97,15 @@ Brasil
             self.assertNotIn(contamination, profile["education"])
         self.assertTrue(result["warnings"])
 
+    def test_abbreviated_profile_name_marks_end_of_certification_area(self):
+        from linkedin_pdf import clean_credentials
+        fields, rejected=clean_credentials(
+            ["Build Solutions with Power Apps", "Marcus Pablo R. T. Manso",
+             "Data Scientist & Data Engineer", "Power", "BI", "São Paulo", "Brasil"],
+            "Marcus Pablo Rezende Teixeira Manso Pereira", [])
+        self.assertEqual(fields,["Build Solutions with Power Apps"])
+        self.assertIn("São Paulo",rejected)
+
     def test_full_english_profile_is_structured_without_invention(self):
         result = parse_profile_text(ENGLISH)
         p = result["profile"]

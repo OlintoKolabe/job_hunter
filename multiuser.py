@@ -199,16 +199,30 @@ class ProfileContact(Mapping):
 def profile_education():
     p = current_profile.get() or {}
     name = str(p.get("name") or "").casefold().strip()
+    name_words = [x for x in re.findall(r"\w+", name) if len(x) > 1]
     skills = {str(x).casefold().strip() for x in p.get("skills", [])}
     sidebar_technologies = {"python", "sql", "databricks", "power bi", "pyspark",
                             "spark", "streamlit", "n8n", "generative ai & process automation"}
     output = []
-    for raw in [*p.get("education", []), *p.get("certifications", [])]:
+    for collection in (p.get("education", []), p.get("certifications", [])):
+      for raw in collection:
         item = str(raw).strip(" •·\t\n")
         key = item.casefold()
+        words = [x for x in re.findall(r"\w+", key) if len(x) > 1]
+        # A LinkedIn footer often repeats an abbreviated display name, then
+        # places headline, skill tags and location inside certifications.
+        repeated_name = (len(name_words) >= 2 and len(words) >= 2 and
+                         words[:2] == name_words[:2] and
+                         sum(w in name_words for w in words) >= min(3,len(words)) and
+                         sum(w in name_words for w in words)/len(words) >= .75)
+        if repeated_name:
+            break
         if (len(item) < 4 or key == name or key in skills or
             key in sidebar_technologies or "@" in item or
             "linkedin.com" in key or key.startswith("data scientist &")):
+            continue
+        if output and re.search(r"(?i)\b(?:com|meu|de|with|for)$",output[-1]):
+            output[-1] += " " + item
             continue
         output.append(item)
     return output

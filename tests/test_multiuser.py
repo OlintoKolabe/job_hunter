@@ -4,6 +4,24 @@ import multiuser as mu
 
 
 class AcademicSidebarTests(unittest.TestCase):
+ def test_saved_abbreviated_linkedin_footer_drops_all_following_lines(self):
+    profile={"name":"Marcus Pablo Rezende Teixeira Manso Pereira","skills":[],
+             "education":["Pontifícia Universidade Católica de Goiás", "Engenharia de Computação"],
+             "certifications":["Certificado de conclusão python", "Visualização de dados com",
+                               "matplotlib", "Marcus Pablo R. T. Manso",
+                               "Data Scientist & Data Engineer", "Power", "BI", "São Paulo", "Brasil"]}
+    token=mu.current_profile.set(profile)
+    try:
+        credentials=mu.profile_education()
+        self.assertIn("Engenharia de Computação",credentials)
+        self.assertIn("Visualização de dados com matplotlib",credentials)
+        self.assertNotIn("Marcus Pablo R. T. Manso",credentials)
+        self.assertNotIn("São Paulo",credentials)
+        self.assertNotIn("Power",credentials)
+        self.assertNotIn("BI",credentials)
+    finally:
+        mu.current_profile.reset(token)
+
  def test_academic_sidebar_is_not_promoted_to_credentials(self):
     profile = {"name": "Marcus Pablo Rezende Teixeira Manso Pereira",
                "skills": ["Python", "SQL"],

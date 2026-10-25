@@ -387,7 +387,15 @@ def build_plan(jd, title):
     # Only a profile-level statement here, never repeated verbatim from the roles.
     if mu.enabled:
         profile=mu.current_profile.get() or {}
-        summary=str(profile.get("summary") or "").strip()
+        summary=html.unescape(str(profile.get("summary") or "")).replace("\\", " ")
+        summary=" ".join(summary.split()).strip()
+        # LinkedIn PDF often appends a direct-contact invitation to About.
+        # Contact information already lives in the document header.
+        summary=re.split(r"(?i)\s*\[\s*[^\]]*(?:@|direct message)[^\]]*\]",summary,maxsplit=1)[0].strip()
+        if len(summary)>520:
+            end=max(summary.rfind(x,280,521) for x in ".!?")
+            summary=(summary[:end+1] if end>=280
+                     else summary[:520].rsplit(" ",1)[0].rstrip(" ,;:")+".")
         if not summary:
             summary="Profissional com experiência documentada em "+", ".join(
                 sorted(set(e["role"] for e in EXPERIENCE))[:3])+"."

@@ -59,6 +59,44 @@ Inglês
 
 
 class LinkedInPdfTests(unittest.TestCase):
+    def test_linkedin_sidebar_does_not_pollute_marcus_academic_fields(self):
+        source = """Marcus Pablo Rezende Teixeira Manso Pereira
+Contact
+marcus@example.com
+Summary
+I turn raw data into strategic decisions — and manual processes
+into intelligent automation. &amp; analytics.
+Experience
+Bluetech Films
+Automation Analyst
+June 2025 - August 2025
+Built Python and SQL pipelines for business analytics.
+Education
+Pontifícia Universidade Católica de Goiás
+Engenharia de Computação
+(2022 - 2026)
+Asimov Academy
+Certificado de conclusão python
+Marcus Pablo Rezende Teixeira Manso Pereira
+Data Scientist & Data Engineer
+Python
+SQL
+Databricks
+Senior Associate @PwC
+São Paulo
+Brasil
+"""
+        result = parse_profile_text(source)
+        profile = result["profile"]
+        self.assertEqual(len(profile["experience"]), 1)
+        self.assertEqual(profile["summary"],
+                         "I turn raw data into strategic decisions — and manual processes into intelligent automation. & analytics.")
+        self.assertIn("Engenharia de Computação", profile["education"])
+        for contamination in ("Python", "SQL", "Databricks", "Data Scientist & Data Engineer",
+                              "Marcus Pablo Rezende Teixeira Manso Pereira", "Senior Associate @PwC"):
+            self.assertNotIn(contamination, profile["education"])
+        self.assertTrue(result["warnings"])
+
     def test_full_english_profile_is_structured_without_invention(self):
         result = parse_profile_text(ENGLISH)
         p = result["profile"]

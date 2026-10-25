@@ -1,6 +1,27 @@
 import unittest
 from unittest.mock import patch
 import multiuser as mu
+
+
+class AcademicSidebarTests(unittest.TestCase):
+ def test_academic_sidebar_is_not_promoted_to_credentials(self):
+    profile = {"name": "Marcus Pablo Rezende Teixeira Manso Pereira",
+               "skills": ["Python", "SQL"],
+               "education": ["Pontifícia Universidade Católica de Goiás", "Engenharia de Computação",
+                             "Marcus Pablo Rezende Teixeira Manso Pereira", "Python", "SQL",
+                             "Data Scientist & Data Engineer", "Senior Associate @PwC"],
+               "certifications": ["Power BI", "Asimov Academy"]}
+    token = mu.current_profile.set(profile)
+    try:
+        credentials = mu.profile_education()
+        assert "Engenharia de Computação" in credentials
+        assert "Asimov Academy" in credentials
+        assert "Python" not in credentials
+        assert "Data Scientist & Data Engineer" not in credentials
+        assert "Senior Associate @PwC" not in credentials
+        assert profile["education"][2] not in credentials
+    finally:
+        mu.current_profile.reset(token)
 from docx import Document
 from io import BytesIO
 import resume_engine

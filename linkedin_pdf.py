@@ -4,6 +4,7 @@ The returned fields are suggestions for review, never verified evidence.
 No uploaded PDF or extracted text is sent to another service or saved here.
 """
 from io import BytesIO
+import html
 import re
 import unicodedata
 
@@ -37,7 +38,7 @@ def normal(value):
 
 def lines_from_text(text):
     result = []
-    for line in text.replace("\x00", "").splitlines():
+    for line in html.unescape(text).replace("\x00", "").replace("\u200b", "").splitlines():
         cleaned = " ".join(line.split()).strip("• \t")
         if cleaned and not re.fullmatch(r"(?:Page|Página)\s+\d+(?:\s+(?:of|de)\s+\d+)?", cleaned, re.I):
             result.append(cleaned[:1200])
@@ -83,6 +84,32 @@ def simple_list(lines, limit=60):
         else:
             result.append(line)
     return unique(result, limit)
+
+
+def clean_summary(lines):
+    return " ".join(html.unescape(" ".join(lines)).replace("\\", " ").split())[:1500]
+
+
+def clean_credentials(lines, name, skills):
+    """Reject LinkedIn sidebar spillover, never infer an academic credential."""
+    name_key = normal(name)
+    skill_keys = {normal(x) for x in skills}
+    sidebar_technologies = {"python", "sql", "databricks", "power bi", "pyspark",
+                            "spark", "streamlit", "n8n", "generative ai & process automation"}
+    result, rejected = [], []
+    footer_started = False
+    for entry in simple_list(lines):
+        key = normal(entry)
+        if name_key and key == name_key:
+            footer_started = True
+        is_sidebar = (footer_started or key in skill_keys or key in sidebar_technologies or
+                      EMAIL.search(entry) or LINKEDIN.search(entry) or
+                      "@" in entry or re.search(r"(?i)data scientist\s*&\s*data engineer",entry))
+        if len(entry.strip()) < 4 or is_sidebar:
+            rejected.append(entry)
+        else:
+            result.append(entry)
+    return result, rejected
 
 
 def experience_from_lines(lines):
@@ -133,13 +160,23 @@ def parse_profile_text(text):
         "name": name,
         "phone": phones[0] if phones else "",
         "linkedin": linked.group().rstrip("/") if linked else "",
-        "summary": "\n".join(groups["summary"])[:1500],
+        "summary": clean_summary(groups["summary"]),
         "experience": experience,
-        "education": simple_list(groups["education"]),
+        "education": [],
         "skills": simple_list(groups["skills"]),
         "certifications": simple_list(groups["certifications"]),
         "languages": simple_list(groups["languages"]),
     }
+    result["education"], rejected = clean_credentials(groups["education"], name, result["skills"])
+    result["certifications"], rejected_certs = clean_credentials(groups["certifications"], name, result["skills"])
+    if rejected or rejected_certs:
+        warnings.append("Fragmentos do cabeçalho ou competências foram excluídos das credenciais; confira a formação antes de confirmar.")
+    employers = {normal(row["company"]) for row in experience}
+    for fragment in [*rejected, *rejected_certs]:
+        headline = re.search(r"\b@([\w][\w .&-]{1,50})", fragment)
+        if headline and normal(headline.group(1)) not in employers:
+            warnings.append("Há uma empresa mencionada no cabeçalho sem experiência estruturada; confira se alguma atuação ficou de fora.")
+            break
     if not groups["experience"]:
         warnings.append("Não foi encontrada uma seção de experiências reconhecível.")
     if experience and not any(row["facts"] for row in experience):

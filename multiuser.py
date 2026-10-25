@@ -198,4 +198,17 @@ class ProfileContact(Mapping):
 
 def profile_education():
     p = current_profile.get() or {}
-    return [str(x).strip() for x in [*p.get("education",[]),*p.get("certifications",[])] if str(x).strip()]
+    name = str(p.get("name") or "").casefold().strip()
+    skills = {str(x).casefold().strip() for x in p.get("skills", [])}
+    sidebar_technologies = {"python", "sql", "databricks", "power bi", "pyspark",
+                            "spark", "streamlit", "n8n", "generative ai & process automation"}
+    output = []
+    for raw in [*p.get("education", []), *p.get("certifications", [])]:
+        item = str(raw).strip(" •·\t\n")
+        key = item.casefold()
+        if (len(item) < 4 or key == name or key in skills or
+            key in sidebar_technologies or "@" in item or
+            "linkedin.com" in key or key.startswith("data scientist &")):
+            continue
+        output.append(item)
+    return output

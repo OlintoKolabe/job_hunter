@@ -6,6 +6,35 @@ from resume_engine import build_plan,render_docx,audit,EXPERIENCE,CONTACT
 JD="We need a business analyst who manages stakeholder needs, roadmaps and backlog in Azure DevOps, works with product owners and defines user stories. Previous hands-on Oracle programming experience is a plus."
 
 class ResumeEngineTests(unittest.TestCase):
+    def test_multiuser_docx_never_mixes_sidebar_into_education(self):
+        import multiuser as mu
+        from unittest.mock import patch
+        profile={"name":"Marcus Pablo Rezende Teixeira Manso Pereira",
+                 "location":"Santos, SP","phone":"13 99212-8060",
+                 "email":"marcus@example.com","linkedin":"linkedin.com/in/marcus-pablo",
+                 "summary":"I turn raw data into strategic decisions — and manual processes\\\ninto intelligent automation. &amp; analytics.",
+                 "experience":[{"role":"Automation Analyst","company":"Bluetech Films",
+                                "dates":"June 2025 - August 2025",
+                                "facts":["Built Python and SQL pipelines for analytics."],"verified":True}],
+                 "education":["Pontifícia Universidade Católica de Goiás", "Engenharia de Computação",
+                              "Marcus Pablo Rezende Teixeira Manso Pereira", "Python",
+                              "Data Scientist & Data Engineer"],
+                 "certifications":["Asimov Academy","Senior Associate @PwC"],
+                 "skills":["Python"]}
+        token=mu.current_profile.set(profile)
+        try:
+            with patch.object(mu,"enabled",True):
+                plan=build_plan("Python SQL ETL analytics", "Data Engineer")
+                text=[p.text for p in Document(io.BytesIO(render_docx(plan))).paragraphs]
+                self.assertEqual(text[0],profile["name"])
+                self.assertEqual(sum(profile["name"]==line for line in text),1)
+                self.assertNotIn("Data Scientist & Data Engineer", text)
+                self.assertNotIn("Senior Associate @PwC",text)
+                self.assertIn("Engenharia de Computação", text)
+                self.assertTrue(any("intelligent automation. & analytics." in line for line in text))
+        finally:
+            mu.current_profile.reset(token)
+
     def test_docx_has_plain_ats_typography_without_blue_headings_or_title_rule(self):
         from docx.shared import RGBColor
         doc=Document(io.BytesIO(render_docx(build_plan(JD,"Senior Business Analyst"))))

@@ -2,7 +2,7 @@
 import re, json, urllib.parse, urllib.request, urllib.error
 from html.parser import HTMLParser
 from datetime import datetime, timezone
-from collectors import TITLE_RE, item, fetch_json, as_list
+from collectors import TITLE_RE, item, fetch_json, as_list, preserve_eligibility_fields
 
 class Links(HTMLParser):
     def __init__(self):
@@ -98,9 +98,20 @@ def extra(source,slug):
     if source=="recruitee":
         d=fetch_json("https://"+slug+".recruitee.com/api/offers/")
         records=d.get("offers",[]) if isinstance(d,dict) else []
+        if not isinstance(records,list):raise ValueError("Recruitee offers format unexpected")
         for j in records:
-            v=item(slug,j.get("title"),j.get("careers_url") or j.get("url"),j.get("location") or "",source,j.get("published_at"))
-            if v:jobs.append(v)
+            if not isinstance(j,dict):continue
+            locations=[]
+            explicit=j.get("locations") or [j.get("location")]
+            for loc in explicit if isinstance(explicit,list) else [explicit]:
+                if isinstance(loc,str) and loc.strip():locations.append(loc.strip())
+                elif isinstance(loc,dict):
+                    name=", ".join(str(loc[k]).strip() for k in ("city","region","country") if isinstance(loc.get(k),str) and loc[k].strip())
+                    if not name and isinstance(loc.get("name"),str):name=loc["name"].strip()
+                    if name:locations.append(name)
+            description="\n".join(str(j[key]) for key in ("description","requirements") if isinstance(j.get(key),str) and j[key].strip())
+            v=item(slug,j.get("title"),j.get("careers_url") or j.get("url")," / ".join(dict.fromkeys(locations)),source,j.get("published_at"),description)
+            if v:jobs.append(preserve_eligibility_fields(v,j))
         return jobs,"validado" if records else "sem_vagas",len(records)
     if source=="personio":
         url="https://"+slug+".jobs.personio.de/search.json"

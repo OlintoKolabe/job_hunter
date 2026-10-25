@@ -20,6 +20,7 @@ from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from pydantic import BaseModel
 import psycopg
 from psycopg.types.json import Jsonb
+import multiuser as mu
 from public_remote_feeds import fetch as fetch_public_remote
 from indeed_provider import search as indeed_search, enabled as indeed_enabled
 from collectors import collect,source_field_coverage
@@ -83,6 +84,10 @@ class _CVAuthorizedMCP:
         self.inner=inner
     async def __call__(self, scope, receive, send):
         if scope["type"]=="http":
+            if mu.enabled:
+                response=JSONResponse({"detail":"MCP legado indisponível no modo multiusuário"},status_code=403)
+                await response(scope,receive,send)
+                return
             headers=dict(scope.get("headers",[]))
             token=os.environ.get("CV_ACTION_TOKEN","")
             provided=headers.get(b"authorization",b"").decode("latin1")
@@ -105,12 +110,62 @@ class ChangePassword(BaseModel):
 
 class Credentials(BaseModel):
     password: str
+    email: str = ""
+
+class Registration(BaseModel):
+    name: str
+    email: str
+    password: str
+
+class ProfileUpdate(BaseModel):
+    profile: dict
+
+def validated_profile(value, current):
+    """Explicit user-provided facts; verified evidence must be approved by user."""
+    if len(json.dumps(value,ensure_ascii=False))>60000:
+        raise HTTPException(413,"Perfil muito extenso")
+    clean={**current}
+    for key in ("name","location","phone","linkedin","summary","seniority","country","mode"):
+        if key in value:
+            clean[key]=str(value[key]).strip()[:1500 if key=="summary" else 260]
+    clean["name"]=clean.get("name","").strip()
+    if not clean["name"]:
+        raise HTTPException(400,"Nome obrigatório")
+    for key in ("roles","education","skills","certifications","languages"):
+        if key in value:
+            seq=value[key]
+            if not isinstance(seq,list) or len(seq)>60:
+                raise HTTPException(400,"Lista inválida: "+key)
+            clean[key]=list(dict.fromkeys(str(x).strip()[:200] for x in seq if str(x).strip()))
+    if "days" in value:
+        try:clean["days"]=max(0,min(90,int(value["days"])))
+        except (ValueError,TypeError):raise HTTPException(400,"Período inválido")
+    if "experience" in value:
+        items=value["experience"]
+        if not isinstance(items,list) or len(items)>40:
+            raise HTTPException(400,"Experiência inválida")
+        verified=[]
+        for item in items:
+            if not isinstance(item,dict):raise HTTPException(400,"Experiência inválida")
+            facts=item.get("facts",[])
+            if not isinstance(facts,list) or len(facts)>25:
+                raise HTTPException(400,"Evidências inválidas")
+            row={k:str(item.get(k) or "").strip()[:200] for k in ("role","company","dates")}
+            row["facts"]=list(dict.fromkeys(str(f).strip()[:500] for f in facts if str(f).strip()))
+            row["verified"]=item.get("verified") is True
+            # LinkedIn exports sometimes list a position without bullet points.
+            # Keep the position for review, but never use it as factual AI
+            # evidence until actual source-backed facts are available.
+            if row["role"] and row["company"]:
+                verified.append(row)
+        clean["experience"]=verified
+    return clean
 
 def password_digest(password, salt):
     return hashlib.pbkdf2_hmac("sha256", password.encode(), bytes.fromhex(salt), 600000).hex()
 
 def auth_record():
-    with psycopg.connect(DATABASE, connect_timeout=8) as conn:
+    with mu.connect(DATABASE, connect_timeout=8) as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT password_hash,password_salt,version FROM jh_auth WHERE id=1")
             return cur.fetchone()
@@ -123,6 +178,18 @@ def check_password(value, record):
 def require_auth(request: Request):
     if not serializer or not DATABASE:
         raise HTTPException(503, "Acesso indisponível")
+    if mu.enabled:
+        try:
+            token=serializer.loads(request.cookies.get(COOKIE) or "",max_age=604800,salt="multiuser-v1")
+            if not isinstance(token,list) or len(token)!=2:
+                raise HTTPException(401,"Sessão inválida")
+            user=mu.get_user(DATABASE,token[0])
+            if not user or user[4]!=token[1]:
+                raise HTTPException(401,"Sessão expirada")
+            mu.set_context(user)
+            return user[0]
+        except (BadSignature,SignatureExpired,ValueError,TypeError):
+            raise HTTPException(401,"Acesso não autorizado")
     try:
         value = serializer.loads(request.cookies.get(COOKIE) or "", max_age=604800)
         record = auth_record()
@@ -171,13 +238,72 @@ def health():
 
 @app.get("/api/me")
 def me(request: Request):
+    uid=require_auth(request)
+    return {"authenticated":True,"user":(
+        {"id":uid,"name":mu.current_profile.get().get("name"),"email":mu.current_profile.get().get("email")}
+        if mu.enabled else None)}
+
+@app.post("/api/register")
+def register(payload: Registration, response: Response):
+    if not mu.enabled:raise HTTPException(404,"Indisponível")
+    try:uid=mu.create_account(DATABASE,payload.email,payload.password,payload.name)
+    except psycopg.errors.UniqueViolation:raise HTTPException(409,"Email já cadastrado")
+    except ValueError as exc:raise HTTPException(400,str(exc))
+    user=mu.get_user(DATABASE,uid)
+    response.set_cookie(COOKIE,serializer.dumps([uid,user[4]],salt="multiuser-v1"),
+                        httponly=True,secure=True,samesite="lax",max_age=604800)
+    return {"authenticated":True,"id":uid}
+
+@app.get("/api/profile")
+def get_profile(request: Request):
+    if not mu.enabled:raise HTTPException(404,"Indisponível")
     require_auth(request)
-    return {"authenticated":True}
+    return {"profile":mu.current_profile.get()}
+
+@app.post("/api/profile/import-linkedin")
+async def import_linkedin_pdf(request: Request):
+    if not mu.enabled:
+        raise HTTPException(404,"Indisponível")
+    require_auth(request)
+    if request.headers.get("content-type", "").split(";",1)[0].strip().lower() != "application/pdf":
+        raise HTTPException(415,"Envie um arquivo PDF exportado do LinkedIn")
+    from linkedin_pdf import MAX_PDF_BYTES,parse_linkedin_pdf
+    try:
+        length=int(request.headers.get("content-length") or 0)
+    except ValueError:
+        raise HTTPException(400,"Tamanho do PDF inválido")
+    if length > MAX_PDF_BYTES:
+        raise HTTPException(413,"O PDF deve ter no máximo 8 MB")
+    data=bytearray()
+    async for part in request.stream():
+        data.extend(part)
+        if len(data)>MAX_PDF_BYTES:
+            raise HTTPException(413,"O PDF deve ter no máximo 8 MB")
+    try:
+        # Source PDF exists only in memory for extraction; nothing is
+        # persisted until the user reviews and explicitly saves the profile.
+        return parse_linkedin_pdf(bytes(data))
+    except ValueError as exc:
+        raise HTTPException(422,str(exc)) from exc
+
+@app.put("/api/profile")
+def save_profile(payload: ProfileUpdate, request: Request):
+    if not mu.enabled:raise HTTPException(404,"Indisponível")
+    uid=require_auth(request)
+    profile=validated_profile(payload.profile,mu.current_profile.get())
+    mu.update_profile(DATABASE,uid,profile)
+    return {"saved":True,"profile":profile}
 
 @app.post("/api/login")
 def login(payload: Credentials, response: Response):
     if not serializer or not DATABASE:
         raise HTTPException(503, "Acesso não configurado")
+    if mu.enabled:
+        user=mu.authenticate(DATABASE,payload.email,payload.password)
+        if not user:raise HTTPException(401,"Credenciais incorretas")
+        response.set_cookie(COOKIE,serializer.dumps(list(user),salt="multiuser-v1"),
+                            httponly=True,secure=True,samesite="lax",max_age=604800)
+        return {"authenticated":True}
     try:
         record=auth_record()
     except psycopg.Error:
@@ -189,12 +315,18 @@ def login(payload: Credentials, response: Response):
 
 @app.post("/api/change-password")
 def change_password(payload: ChangePassword, request: Request, response: Response):
-    require_auth(request)
+    uid=require_auth(request)
+    if mu.enabled:
+        try:version=mu.change_password(DATABASE,uid,payload.current_password,payload.new_password)
+        except ValueError as exc:raise HTTPException(400,str(exc))
+        response.set_cookie(COOKIE,serializer.dumps([uid,version],salt="multiuser-v1"),
+                            httponly=True,secure=True,samesite="lax",max_age=604800)
+        return {"ok":True}
     if len(payload.new_password)<12 or len(payload.new_password)>128:
         raise HTTPException(400,"A nova senha deve ter entre 12 e 128 caracteres")
     if secrets.compare_digest(payload.current_password,payload.new_password):
         raise HTTPException(400,"A nova senha deve ser diferente")
-    with psycopg.connect(DATABASE,connect_timeout=8) as conn:
+    with mu.connect(DATABASE,connect_timeout=8) as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT password_hash,password_salt,version FROM jh_auth WHERE id=1 FOR UPDATE")
             rec=cur.fetchone()
@@ -337,7 +469,7 @@ def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:
     filter_quality=source_filter_quality(raw_jobs,roles,country,mode,days)
     try: items,review,filter_stats=analyze_filters(cached_jds_for_filter(items,url_key,DATABASE),roles,country,mode,days,sort)
     except ValueError as e: raise HTTPException(400,str(e))
-    with psycopg.connect(DATABASE,connect_timeout=8) as conn:
+    with mu.connect(DATABASE,connect_timeout=8) as conn:
         with conn.cursor() as cur:
             source_jd_stats=persist_listing_jds(cur,raw_jobs,items+review,url_key)
             keys=[url_key(j["url"]) for j in items+review]
@@ -354,13 +486,13 @@ def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:
     visible=[j for j in visible if not any(b in normalized(j["company"]) for b in ("kraken","payward"))]
     pending=[j for j in pending if not any(b in normalized(j["company"]) for b in ("kraken","payward"))]
     # First seen is persisted independently of the terminal application history.
-    with psycopg.connect(DATABASE,connect_timeout=8) as seen_conn:
+    with mu.connect(DATABASE,connect_timeout=8) as seen_conn:
         flagged=flag_new_jobs(seen_conn,visible+pending,url_key)
     visible=flagged[:len(visible)]
     pending=flagged[len(visible):]
     # Initial results must not wait for scoring or open another database connection.
     coverage={"cached":0,"fetched":0,"missing":0,"not_attempted":len(visible)}
-    with psycopg.connect(DATABASE,connect_timeout=7) as score_conn:
+    with mu.connect(DATABASE,connect_timeout=7) as score_conn:
         with score_conn.cursor() as score_cur:
             visible,restored=restore_persisted_scores(score_cur,visible,roles,url_key)
     coverage["cached"]=restored
@@ -403,7 +535,7 @@ def active_source_tasks(roles=DEFAULT_ROLES):
     if roles.strip()!=DEFAULT_ROLES:
         linkedin_terms=tuple(discovery_queries(roles,limit=8))
     tasks.update(("linkedin_guest",term) for term in linkedin_terms)
-    with psycopg.connect(DATABASE,connect_timeout=8) as conn:
+    with mu.connect(DATABASE,connect_timeout=8) as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT source,slug FROM jh_catalog_source")
             tasks.update(cur.fetchall())
@@ -475,7 +607,7 @@ async def catalog_import(request: Request):
             if isinstance(value,list):
                 for slug in value:
                     if isinstance(slug,str) and re.fullmatch(r"[a-zA-Z0-9_.-]{2,100}",slug):imported.add((kind,slug))
-    with psycopg.connect(DATABASE,connect_timeout=10) as conn:
+    with mu.connect(DATABASE,connect_timeout=10) as conn:
         with conn.cursor() as cur:
             cur.execute("INSERT INTO jh_catalog_document(id,document) VALUES(1,%s) ON CONFLICT(id) DO UPDATE SET document=EXCLUDED.document,imported_at=now()", (Jsonb(data),))
             for ats,slug in sorted(imported):
@@ -492,7 +624,7 @@ def catalog(request: Request):
     require_auth(request)
     from collections import Counter
     tasks=active_source_tasks()
-    with psycopg.connect(DATABASE,connect_timeout=8) as conn:
+    with mu.connect(DATABASE,connect_timeout=8) as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT source,slug,state,received,error,checked_at FROM jh_catalog_checks")
             history={(r[0],r[1]):r[2:] for r in cur.fetchall()}
@@ -513,7 +645,7 @@ def catalog(request: Request):
 @app.get("/api/catalog/checks")
 def catalog_checks(request: Request):
     require_auth(request)
-    with psycopg.connect(DATABASE,connect_timeout=8) as conn:
+    with mu.connect(DATABASE,connect_timeout=8) as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT source,slug,state,received,error,checked_at::text FROM jh_catalog_checks ORDER BY checked_at DESC LIMIT 500")
             rows=[dict(zip(("source","slug","state","received","error","checked_at"),r)) for r in cur.fetchall()]
@@ -536,7 +668,7 @@ def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False
     if source!="all":
         tasks=[(src,slug) for src,slug in tasks if src==source or (source=="greenhouse" and src=="greenhouse_eu")]
     if due_only:
-        with psycopg.connect(DATABASE,connect_timeout=8) as conn:
+        with mu.connect(DATABASE,connect_timeout=8) as conn:
             with conn.cursor() as cur:
                 cur.execute("SELECT source,slug,state,checked_at FROM jh_catalog_checks")
                 checked={(r[0],r[1]):(r[2],r[3]) for r in cur.fetchall()}
@@ -576,7 +708,7 @@ def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False
     urls=[url_key(v["url"]) for v in items+review+rejected]
     pairs=[pair_key(v["company"],v["title"]) for v in items+review+rejected if v["company"]]
     known_urls=set();known_pairs=set()
-    with psycopg.connect(DATABASE,connect_timeout=7) as conn:
+    with mu.connect(DATABASE,connect_timeout=7) as conn:
         with conn.cursor() as cur:
             source_jd_stats=persist_listing_jds(cur,raw_jobs,items+review,url_key)
             for entry in details:
@@ -596,13 +728,13 @@ def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False
     visible=[j for j in visible if not any(b in normalized(j["company"]) for b in ("kraken","payward"))]
     pending=[j for j in pending if not any(b in normalized(j["company"]) for b in ("kraken","payward"))]
     # First seen is persisted independently of the terminal application history.
-    with psycopg.connect(DATABASE,connect_timeout=8) as seen_conn:
+    with mu.connect(DATABASE,connect_timeout=8) as seen_conn:
         flagged=flag_new_jobs(seen_conn,visible+pending,url_key)
     visible=flagged[:len(visible)]
     pending=flagged[len(visible):]
     # Initial results must not wait for scoring or open another database connection.
     coverage={"cached":0,"fetched":0,"missing":0,"not_attempted":len(visible)}
-    with psycopg.connect(DATABASE,connect_timeout=7) as score_conn:
+    with mu.connect(DATABASE,connect_timeout=7) as score_conn:
         with score_conn.cursor() as score_cur:
             visible,restored=restore_persisted_scores(score_cur,visible,roles,url_key)
     coverage["cached"]=restored
@@ -653,7 +785,7 @@ def jd_enrich(request: Request, payload: JDRequest):
         if not str(j.get("url","")).startswith("https://"):raise HTTPException(400,"URL inválida")
         if len(str(j.get("url","")))>2000:raise HTTPException(400,"URL inválida")
         rows.append({k:j.get(k,"") for k in ("url","title","company","source","description","location","published","detected_mode","needs_verification")})
-    with psycopg.connect(DATABASE,connect_timeout=7) as conn:
+    with mu.connect(DATABASE,connect_timeout=7) as conn:
         with conn.cursor() as cur:
             # History is a discovery filter, not a scoring/cache filter.
             # Repeated searches must return persisted scores for previously seen jobs.
@@ -682,7 +814,7 @@ def mark_job_disposition(payload: JobDisposition, request: Request):
     if not uk or not title:
         raise HTTPException(400, "Vaga sem URL ou cargo válido")
     pk=pair_key(company,title) if company else ""
-    with psycopg.connect(DATABASE,connect_timeout=8) as conn:
+    with mu.connect(DATABASE,connect_timeout=8) as conn:
         with conn.cursor() as cur:
             # Serialize decisions on the same vacancy to avoid duplicate history rows.
             cur.execute("SELECT pg_advisory_xact_lock(hashtext(%s))",("job-disposition:"+uk,))
@@ -752,7 +884,7 @@ def history(request: Request, q: str="", state: str="", limit:int=50, offset:int
         elif state=="Descartado":where.append("lower(estado) IN ('descartado','descartada')")
         else:where.append("lower(estado)=lower(%s)");params.append(state[:60])
     clause=" WHERE "+" AND ".join(where) if where else ""
-    with psycopg.connect(DATABASE,connect_timeout=8) as conn:
+    with mu.connect(DATABASE,connect_timeout=8) as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT COUNT(*) FROM jh_history"+clause,params)
             total=cur.fetchone()[0]
@@ -767,7 +899,7 @@ def history_daily(request: Request, from_date: str="", to_date: str="", dates: s
     where,params=history_date_filters(from_date,to_date,dates)
     where.append("lower(estado) IN ('candidatado','descartado','descartada')")
     clause=" WHERE "+" AND ".join(where)
-    with psycopg.connect(DATABASE,connect_timeout=8) as conn:
+    with mu.connect(DATABASE,connect_timeout=8) as conn:
         with conn.cursor() as cur:
             cur.execute(f"""SELECT ({HISTORY_DAY_SQL}) AS dia,
                     COUNT(*) FILTER (WHERE lower(estado)='candidatado')::int,
@@ -781,7 +913,7 @@ def history_daily(request: Request, from_date: str="", to_date: str="", dates: s
 @app.get("/api/history-stats")
 def history_stats(request: Request):
     require_auth(request)
-    with psycopg.connect(DATABASE,connect_timeout=8) as conn:
+    with mu.connect(DATABASE,connect_timeout=8) as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT lower(trim(estado)),COUNT(*) FROM jh_history GROUP BY lower(trim(estado))")
             raw=dict(cur.fetchall())
@@ -806,7 +938,7 @@ async def history_import(request: Request):
     if len(parsed)>20000:
         raise HTTPException(413,"Muitas linhas")
     inserted=0;duplicates=0;invalid=0
-    with psycopg.connect(DATABASE,connect_timeout=12) as conn:
+    with mu.connect(DATABASE,connect_timeout=12) as conn:
         with conn.cursor() as cur:
             for item in parsed:
                 company=(item.get("empresa") or "").strip()[:300]
@@ -834,7 +966,7 @@ def logout(response: Response):
 def _cv_source(url):
     key=url_key(url)
     if not key or len(key)>500:raise HTTPException(400,"URL da vaga inválida")
-    with psycopg.connect(DATABASE,connect_timeout=8) as conn:
+    with mu.connect(DATABASE,connect_timeout=8) as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT description FROM jh_jd_cache WHERE normalized_url=%s",(key,))
             row=cur.fetchone()
@@ -847,11 +979,18 @@ class ResumeAIRequest(BaseModel):
     title: str
     company: str = ""
     description: str = ""
+    confirmed: bool = False
+    needs_verification: list[str] = []
 
 @app.post("/api/resume/ai-download")
 def ai_resume_download(payload: ResumeAIRequest, request: Request):
     """One-click AI resume download; never silently use the deterministic old CV."""
     require_auth(request)
+    if mu.enabled:
+        if not mu.factual_experience():
+            raise HTTPException(422,"Cadastre experiências verificadas em Meu Perfil")
+        if not payload.confirmed or payload.needs_verification:
+            raise HTTPException(422,"Confirme a elegibilidade da vaga antes de gerar currículo")
     from ai_resume_matcher import (AIUnavailable, tailored_plan, estimate_cost,
                                    reset_billable_usage, billable_usage)
     from score_repository import reserve, settle
@@ -881,7 +1020,7 @@ def ai_resume_download(payload: ResumeAIRequest, request: Request):
         raise HTTPException(422,"Descrição integral indisponível; não é seguro gerar currículo desta vaga")
     if os.getenv("JH_AI_ENABLED")!="1" or not os.getenv("OPENAI_API_KEY"):
         raise HTTPException(503,"Geração por IA indisponível; configure OPENAI_API_KEY e JH_AI_ENABLED=1")
-    with psycopg.connect(DATABASE,connect_timeout=7) as conn:
+    with mu.connect(DATABASE,connect_timeout=7) as conn:
         with conn.cursor() as cur:
             usage_id=reserve(cur,"resume:"+url_key(url),amount=0.015)
     if usage_id is None:
@@ -916,11 +1055,11 @@ def ai_resume_download(payload: ResumeAIRequest, request: Request):
         # after the provider bills tokens, so account for returned usage even
         # when no usable plan was produced. No response means no known charge.
         cost=min(0.015,estimate_cost(billable_usage()))
-        with psycopg.connect(DATABASE,connect_timeout=7) as conn:
+        with mu.connect(DATABASE,connect_timeout=7) as conn:
             with conn.cursor() as cur:
                 settle(cur,usage_id,cost,success)
     safe=lambda v:re.sub(r"[^\wÀ-ÿ -]","",v).strip()[:75]
-    name="Olinto Manso Pereira - "+safe(title)+" - "+safe(company or "Empresa")+".docx"
+    name=(safe(mu.current_profile.get().get("name","")) if mu.enabled else "Olinto Manso Pereira")+" - "+safe(title)+" - "+safe(company or "Empresa")+".docx"
     from urllib.parse import quote
     return StreamingResponse(io.BytesIO(document),
        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -930,6 +1069,7 @@ def ai_resume_download(payload: ResumeAIRequest, request: Request):
 
 @app.get("/api/gpt-action/download")
 def gpt_cv_download(ticket:str):
+    if mu.enabled:raise HTTPException(403,"Gerador legado indisponível para múltiplas contas")
     from resume_engine import EXPERIENCE
     if not serializer:raise HTTPException(503,"Assinatura indisponível")
     try:payload=serializer.loads(ticket,salt="cv-action-download-v1",max_age=900)
@@ -972,7 +1112,7 @@ def status(request: Request):
     if not DATABASE:
         return {"database":"not_configured","mode":"phase2"}
     try:
-        with psycopg.connect(DATABASE, connect_timeout=5) as conn:
+        with mu.connect(DATABASE, connect_timeout=5) as conn:
             with conn.cursor() as cur:
                 cur.execute("select 1")
                 cur.fetchone()

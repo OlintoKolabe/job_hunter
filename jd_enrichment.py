@@ -17,6 +17,7 @@ from ai_resume_matcher import (evaluate as evaluate_ai, to_ranking, estimate_cos
                                reset_billable_usage, billable_usage)
 import os
 import psycopg
+from multiuser import connect as tenant_connect, enabled as multiuser_enabled, factual_experience
 from search_filters import detect_work_mode
 
 TTL_DAYS=7
@@ -46,7 +47,7 @@ def cached_jds_for_filter(jobs, url_key, database):
     if not missing:
         return jobs
     try:
-        with psycopg.connect(database,connect_timeout=5) as conn:
+        with tenant_connect(database,connect_timeout=5) as conn:
             with conn.cursor() as cursor:
                 cursor.execute('''SELECT normalized_url,description FROM jh_jd_cache
                     WHERE normalized_url=ANY(%s) AND length(description)>=300''',(list(missing),))
@@ -190,9 +191,15 @@ def hydrate_jobs(cursor,jobs,roles,url_key,limit=PER_BATCH_LIMIT):
             evaluation=get_cached(cursor,key,jd_hash,roles)
             if evaluation is not None:ai_status='cached_failure' if evaluation.get('_ai_failed') else 'cache'
         if evaluation is None:
-            evaluation=score_job(complete,roles)
+            if multiuser_enabled:
+                # Deterministic legacy evidence belongs exclusively to the old
+                # single-user profile. Never score a new user from that catalog.
+                evaluation={"score":None,"fit":None,"confidence":"awaiting_verified_profile",
+                            "reason":"Aguardando avaliação das evidências individuais"}
+            else:
+                evaluation=score_job(complete,roles)
             model='deterministic'
-            is_technical_role=hard_role_mismatch(complete)
+            is_technical_role=False if multiuser_enabled else hard_role_mismatch(complete)
             if is_technical_role:
                 evaluation.update({"score":0,"fit":0,"confidence":"hard_role_mismatch",
                    "reason":"Cargo de desenvolvimento ou QA técnico, sem experiência profissional comprovada nessa função; não é um julgamento da capacidade de aprendizado."})
@@ -200,8 +207,8 @@ def hydrate_jobs(cursor,jobs,roles,url_key,limit=PER_BATCH_LIMIT):
                 ai_status='not_needed'
             # Resume Matcher-inspired, evidence-grounded AI replaces the legacy
             # extraction + deterministic grading on opt-in; one paid call per JD.
-            if valid and not j.get('needs_verification') and not is_technical_role and os.getenv('JH_AI_ENABLED')=='1' and os.getenv('OPENAI_API_KEY'):
-                with psycopg.connect(os.environ['DATABASE_URL'],connect_timeout=7) as budget_conn:
+            if valid and not j.get('needs_verification') and not is_technical_role and (not multiuser_enabled or factual_experience()) and os.getenv('JH_AI_ENABLED')=='1' and os.getenv('OPENAI_API_KEY'):
+                with tenant_connect(os.environ['DATABASE_URL'],connect_timeout=7) as budget_conn:
                     with budget_conn.cursor() as budget_cur:
                         usage_id=reserve(budget_cur,key,amount=0.015)
                 if usage_id is not None:
@@ -227,7 +234,7 @@ def hydrate_jobs(cursor,jobs,roles,url_key,limit=PER_BATCH_LIMIT):
                         # As in the CV flow, failed validation after a provider
                         # response is billable, but never assume full reservation.
                         actual=min(0.015,estimate_cost(billable_usage()))
-                        with psycopg.connect(os.environ['DATABASE_URL'],connect_timeout=7) as budget_conn:
+                        with tenant_connect(os.environ['DATABASE_URL'],connect_timeout=7) as budget_conn:
                             with budget_conn.cursor() as budget_cur:
                                 settle(budget_cur,usage_id,actual,successful)
                 else:

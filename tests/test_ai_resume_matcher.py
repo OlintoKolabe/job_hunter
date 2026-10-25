@@ -3,6 +3,7 @@ import io
 import json
 import os
 import unittest
+from datetime import date, timedelta
 from unittest.mock import patch
 from docx import Document
 from ai_resume_matcher import evaluate, tailored_plan, to_ranking, AIUnavailable

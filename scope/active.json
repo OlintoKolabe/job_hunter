@@ -1,36 +1,32 @@
 {
-  "id": "JOB-HUNTER-RECRUITEE-MAIN-20261025",
-  "kind": "development",
+  "id": "JOB-HUNTER-MULTIUSER-PRODUCTION-CUTOVER-20261025",
+  "kind": "deployment",
   "status": "active",
-  "objective": "Activate the existing public Recruitee collector in catalog and source selector, preserving current eligibility filters and source attribution.",
-  "allowed_paths": [
-    "app.py",
-    "catalog_seed.json",
-    "source_extensions.py",
-    "tests/test_recruitee.py",
-    "tests/test_ai_resume_matcher.py"
-  ],
+  "base_ref": "ccfaec75e8e4a95036e83cff02084b33197617d6",
+  "feature_ref": "canary/multiuser-isolated-20261025",
+  "allowed_files": ["scope/active.json", "multiuser.py", "linkedin_pdf.py", "requirements.txt", "migrations/20261025_multiuser_canary.sql", "migrations/20261025_multiuser_production.sql", "app.py", "jd_enrichment.py", "ai_resume_matcher.py", "resume_engine.py", "block4_score.py", "Dockerfile", "src/main.jsx", "src/Opportunities.jsx", "src/Profile.jsx", "src/style.css", "tests/test_multiuser.py", "tests/test_linkedin_pdf.py", "tests/test_ai_resume_matcher.py"],
+  "forbidden_paths": [".github/", "vercel/"],
+  "objective": "Merge the approved multiuser canary while retaining newer main changes and safely migrate both real accounts and owner history.",
+  "allowed_paths": ["scope/active.json", "multiuser.py", "linkedin_pdf.py", "requirements.txt", "migrations/20261025_multiuser_canary.sql", "migrations/20261025_multiuser_production.sql", "app.py", "jd_enrichment.py", "ai_resume_matcher.py", "resume_engine.py", "block4_score.py", "Dockerfile", "src/main.jsx", "src/Opportunities.jsx", "src/Profile.jsx", "src/style.css", "tests/test_multiuser.py", "tests/test_linkedin_pdf.py", "tests/test_ai_resume_matcher.py"],
   "allowed_changes": [
-    "Add a bounded set of identified public Recruitee company boards to the existing catalog",
-    "Expose Recruitee on the existing backend source selector and catalog scan validation",
-    "Correct Recruitee-specific parsing of descriptions, public links and explicit locations only",
-    "Add focused source regression tests, verify backend and frontend build",
-    "Publish this integration directly to main without a canary, as expressly authorized",
-    "Replace only the stale fixed publication date in test_filter_does_not_destroy_collector_jd_before_cache with the current UTC date"
+    "Integrate approved multiuser authentication, LinkedIn PDF and per-user search without removing newer main changes",
+    "Preserve Recruitee collector and current UTC-based test fixture",
+    "Migrate two real accounts, password verifiers, profiles and private history into operational Neon tenant schemas",
+    "Keep original public history intact while importing it into the owner account",
+    "Verify tests, UI build, tenant isolation and Render deployment"
   ],
   "forbidden_changes": [
-    "production Neon data, history, candidate applications or authentication",
-    "new scheduler, database schema, parallel search engine, paid API, external credential, new dependency or paid service",
-    "scraping behind login, bypassing anti-bot protection, guessing unavailable job fields or automatic applications",
-    "CV engine, ranking formulas, other providers, unrelated frontend redesign, GitHub Actions or Vercel"
+    "Deleting or replacing shared operational data, caches, collectors or existing history",
+    "Copying synthetic test accounts into production",
+    "New schedulers, parallel scoring engines, paid services, GitHub Actions or Vercel",
+    "Unrelated features and fabricated professional experience"
   ],
   "acceptance": [
-    "Recruitee source can be selected individually and appears in all-source catalog scans",
-    "The existing collector returns factual public links, dates, description and locations when supplied",
-    "Unknown country, remote mode or date remains unconfirmed under existing filters",
-    "Scoped tests, regressions and frontend build pass without other provider changes",
-    "Direct main publication and deployment status are verified",
-    "Full test suite passes with no production filter change"
+    "Owner retains complete application and seen-job history",
+    "Marcus retains his profile, chosen roles and seen-job history",
+    "Existing sources including Recruitee and newer main changes still work",
+    "Automated tests and frontend build pass",
+    "Both accounts authenticate and cannot access each other's personal data"
   ],
-  "deployment": "Direct main update without canary expressly authorized on 2026-10-25; no database migration"
+  "deployment": "Production cutover explicitly authorized 2026-10-25, conditional on data-integrity and smoke tests"
 }

@@ -3,7 +3,8 @@ import {UserRound,BriefcaseBusiness,GraduationCap,CheckCircle2,Plus,Trash2,Save,
 import {profileJson,saveProfileRequest} from './profileApi.js';
 
 const emptyExperience=()=>({role:'',company:'',dates:'',facts:[],verified:false});
-const parseList=value=>value.split(/\n|,/).map(s=>s.trim()).filter(Boolean);
+// Commas belong inside accomplishments and credential names; one item per line.
+const parseList=value=>value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
 export function ProfilePanel({profile,onSaved}){
  const [form,setForm]=useState(structuredClone(profile));
  const [listDrafts,setListDrafts]=useState(Object.fromEntries(['roles','skills','education','certifications','languages'].map(k=>[k,(profile[k]||[]).join('\n')])));

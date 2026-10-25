@@ -51,7 +51,9 @@ class TenantTests(unittest.TestCase):
         with patch.object(mu,"enabled",True),patch.object(mu.psycopg,"connect") as connect:
             token=mu.current_uid.set(42)
             mu.connect("postgresql://placeholder",connect_timeout=4)
-            self.assertEqual(connect.call_args.kwargs["options"],"-csearch_path=jh_user_42,public")
+            self.assertNotIn("options", connect.call_args.kwargs)
+            connect.return_value.execute.assert_called_once_with(
+                'SET search_path TO "jh_user_42", public')
             mu.current_uid.reset(token)
 
     def test_independent_evidence_proxy(self):

@@ -36,7 +36,16 @@ def connect(db_url, **kwargs):
         raise ValueError("Invalid tenant schema")
     if "options" in kwargs:
         raise ValueError("Conflicting connection options")
-    return psycopg.connect(db_url, options="-csearch_path=" + schema + ",public", **kwargs)
+    # Neon pooling should receive the same connection parameters as the
+    # already-proven public connection. Set the tenant path on the acquired
+    # connection, before any user-owned query executes.
+    conn = public_connect(db_url, **kwargs)
+    try:
+        conn.execute('SET search_path TO "' + schema + '", public')
+    except Exception:
+        conn.close()
+        raise
+    return conn
 
 
 def provision_schema(cursor, user_id):

@@ -212,20 +212,8 @@ def tailored_plan(jd,title,company=""):
             provenance[proposed]=original
     plan=build_plan(jd,title)
     ranked_support=plan["experience"]
-    # The AI orders selected evidence by relevance. Keep the strongest facts
-    # from at most six roles; listing an entire unrelated career diminishes
-    # the job-specific value and makes the DOCX difficult to scan.
-    focused=[]
-    focused_roles=set()
-    per_role={}
-    for id_ in requested:
-        index,_=valid[id_]
-        if index not in focused_roles and len(focused_roles)>=6:continue
-        if per_role.get(index,0)>=4 or len(focused)>=16:continue
-        focused.append(id_)
-        focused_roles.add(index)
-        per_role[index]=per_role.get(index,0)+1
-    requested=focused
+    # Preserve the established JD-first AI selection (up to MAX_FACTS).
+    # Multiuser's post-selection caps silently discarded verified evidence.
     selected={}
     for id_ in requested:
         idx,fact=valid[id_]
@@ -233,15 +221,26 @@ def tailored_plan(jd,title,company=""):
     plan["experience"]=[{"role":EXPERIENCE[i]["role"],"company":EXPERIENCE[i]["company"],
               "dates":EXPERIENCE[i]["dates"],"facts":facts,"source_index":i}
               for i,facts in selected.items()]
-    # Reuse the established JD-based ranking for limited supporting context.
-    # Do not print every old role with an unrelated generic bullet.
+    # Preserve every verified role for short careers. With long careers, show
+    # the newest missing role plus one JD-ranked supporting role; avoid
+    # stuffing irrelevant jobs into the tailored document.
     supporting=[]
-    for entry in ranked_support:
-        index=entry["source_index"]
-        if index not in selected and len(selected)+len(supporting)<6 and len(supporting)<2:
-            supporting.append({"role":entry["role"],"company":entry["company"],
-                               "dates":entry["dates"],"source_index":index,
-                               "fact":entry["facts"][0]})
+    from resume_engine import chronology_index
+    unselected=[(i,row) for i,row in enumerate(EXPERIENCE) if i not in selected]
+    if len(EXPERIENCE)<=3:
+        support_indices=[i for i,_ in unselected]
+    else:
+        recent=sorted(unselected,key=lambda pair:chronology_index(pair[1]),reverse=True)
+        support_indices=[recent[0][0]] if recent else []
+        for entry in ranked_support:
+            index=entry["source_index"]
+            if index not in selected and index not in support_indices and len(support_indices)<2:
+                support_indices.append(index)
+    for index in support_indices:
+        row=EXPERIENCE[index]
+        supporting.append({"role":row["role"],"company":row["company"],
+                           "dates":row["dates"],"source_index":index,
+                           "fact":row["facts"][0]})
     plan["additional_experience"]=supporting
     plan["source_summary"]=plan["summary"]
     summary=" ".join(str(answer.get("summary") or "").split())

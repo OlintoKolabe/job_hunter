@@ -7,14 +7,16 @@
     "app.py",
     "catalog_seed.json",
     "source_extensions.py",
-    "tests/test_recruitee.py"
+    "tests/test_recruitee.py",
+    "tests/test_ai_resume_matcher.py"
   ],
   "allowed_changes": [
     "Add a bounded set of identified public Recruitee company boards to the existing catalog",
     "Expose Recruitee on the existing backend source selector and catalog scan validation",
     "Correct Recruitee-specific parsing of descriptions, public links and explicit locations only",
     "Add focused source regression tests, verify backend and frontend build",
-    "Publish this integration directly to main without a canary, as expressly authorized"
+    "Publish this integration directly to main without a canary, as expressly authorized",
+    "Replace only the stale fixed publication date in test_filter_does_not_destroy_collector_jd_before_cache with the current UTC date"
   ],
   "forbidden_changes": [
     "production Neon data, history, candidate applications or authentication",
@@ -27,7 +29,8 @@
     "The existing collector returns factual public links, dates, description and locations when supplied",
     "Unknown country, remote mode or date remains unconfirmed under existing filters",
     "Scoped tests, regressions and frontend build pass without other provider changes",
-    "Direct main publication and deployment status are verified"
+    "Direct main publication and deployment status are verified",
+    "Full test suite passes with no production filter change"
   ],
   "deployment": "Direct main update without canary expressly authorized on 2026-10-25; no database migration"
 }

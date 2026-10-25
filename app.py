@@ -134,7 +134,10 @@ def validated_profile(value, current):
     for key in ("roles","education","skills","certifications","languages"):
         if key in value:
             seq=value[key]
-            if not isinstance(seq,list) or len(seq)>60:
+            # Technical profiles can legitimately contain more than 60 skills.
+            # Keep the former limit for all other profile lists.
+            max_items=250 if key=="skills" else 60
+            if not isinstance(seq,list) or len(seq)>max_items:
                 raise HTTPException(400,"Lista inválida: "+key)
             clean[key]=list(dict.fromkeys(str(x).strip()[:200] for x in seq if str(x).strip()))
     if "days" in value:

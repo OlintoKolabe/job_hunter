@@ -8,6 +8,11 @@ class AcademicSidebarTests(unittest.TestCase):
     from app import validated_profile
     from fastapi import HTTPException
     skills=["Skill "+str(i) for i in range(120)]
+    roles=["Role "+str(i) for i in range(120)]
+    saved_roles=validated_profile({"name":"Test Candidate","roles":roles},{})
+    self.assertEqual(saved_roles["roles"],roles)
+    with self.assertRaises(HTTPException):
+        validated_profile({"name":"Test Candidate","roles":["Role "+str(i) for i in range(251)]},{})
     saved=validated_profile({"name":"Test Candidate","skills":skills},{})
     self.assertEqual(saved["skills"],skills)
     with self.assertRaises(HTTPException) as blocked:

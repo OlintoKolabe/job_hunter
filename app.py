@@ -769,7 +769,7 @@ class ShortlistRequest(BaseModel):
 def ranking_shortlist(request: Request, payload: ShortlistRequest):
     """Cost-free shortlist over the *whole* collected set, before AI spending."""
     require_auth(request)
-    if len(payload.jobs)>2500 or len(payload.roles)>700:
+    if len(payload.jobs)>2500 or len(payload.roles)>5000:
         raise HTTPException(400,'Seleção grande demais')
     from ai_resume_matcher import shortlist_jobs
     return {'urls':shortlist_jobs(payload.jobs,payload.roles,payload.limit),
@@ -779,7 +779,7 @@ def ranking_shortlist(request: Request, payload: ShortlistRequest):
 def jd_enrich(request: Request, payload: JDRequest):
     require_auth(request)
     if len(payload.jobs)>10:raise HTTPException(400,"Máximo de 10 vagas por lote")
-    if len(payload.roles)>700:raise HTTPException(400,"Filtro inválido")
+    if len(payload.roles)>5000:raise HTTPException(400,"Filtro inválido")
     rows=[]
     for j in payload.jobs:
         if not isinstance(j,dict):raise HTTPException(400,"Vaga inválida")

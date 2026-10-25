@@ -460,35 +460,43 @@ def render_docx(plan):
     contact.style=normal
     for run in contact.runs:run.font.size=Pt(9)
     contact.paragraph_format.space_after=Pt(5)
-    doc.add_heading("Resumo profissional",1);doc.add_paragraph(plan["summary"])
-    doc.add_heading("Experiência profissional",1)
+    english=plan.get("language")=="en"
+    localized=plan.get("localized") or {}
+    translated_rows={e["source_index"]:row for e,row in zip(plan["experience"]+plan["additional_experience"],localized.get("entries",[]))}
+    doc.add_heading("Professional Summary" if english else "Resumo profissional",1)
+    doc.add_paragraph(localized.get("summary",plan["summary"]))
+    doc.add_heading("Professional Experience" if english else "Experiência profissional",1)
     detailed={e["source_index"]:e for e in plan["experience"]}
     compact={e["source_index"]:e for e in plan["additional_experience"]}
     chronology=sorted(set(detailed)|set(compact),key=lambda i:chronology_index(EXPERIENCE[i]),reverse=True)
     for idx in chronology:
         e=detailed.get(idx) or compact[idx]
+        translated=translated_rows.get(idx) or {}
+        role=translated.get("role",e["role"])
+        dates_text=translated.get("dates",e["dates"])
+        displayed_facts=translated.get("facts") or (e["facts"] if idx in detailed else [e.get("fact") or EXPERIENCE[idx]["facts"][0]])
         if idx not in detailed:
-            heading=doc.add_heading(e["role"]+" — "+e["company"],2)
+            heading=doc.add_heading(role+" — "+e["company"],2)
             heading.paragraph_format.keep_with_next=True
-            dates=doc.add_paragraph(e["dates"])
+            dates=doc.add_paragraph(dates_text)
             dates.paragraph_format.keep_with_next=True
             for run in dates.runs:run.font.size=Pt(9)
             # Compact experience must still have a factual description.
-            doc.add_paragraph(e.get("fact") or EXPERIENCE[idx]["facts"][0],style="List Bullet")
+            doc.add_paragraph(displayed_facts[0],style="List Bullet")
             continue
-        heading=doc.add_heading(e["role"]+" — "+e["company"],2)
+        heading=doc.add_heading(role+" — "+e["company"],2)
         heading.paragraph_format.keep_with_next=True
-        dates=doc.add_paragraph(e["dates"]);dates.paragraph_format.keep_with_next=True
+        dates=doc.add_paragraph(dates_text);dates.paragraph_format.keep_with_next=True
         for run in dates.runs:run.font.size=Pt(9)
-        for fact in e["facts"]:doc.add_paragraph(fact,style="List Bullet")
-    doc.add_heading("Formação e certificações",1)
-    for degree in plan.get("education",EDUCATION):
+        for fact in displayed_facts:doc.add_paragraph(fact,style="List Bullet")
+    doc.add_heading("Education and Certifications" if english else "Formação e certificações",1)
+    for degree in localized.get("education",plan.get("education",EDUCATION)):
         if "odontolog" not in degree.casefold():doc.add_paragraph(degree,style="List Bullet")
     if mu.enabled:
         languages=(mu.current_profile.get() or {}).get("languages") or []
-        if languages:doc.add_paragraph("Idiomas: "+ "; ".join(languages)+".")
+        if languages:doc.add_paragraph(("Languages: " if english else "Idiomas: ")+ "; ".join(localized.get("languages",languages))+".")
     else:
-        doc.add_paragraph("Idiomas: Português (nativo); Inglês (profissional); Italiano (intermediário).")
+        doc.add_paragraph("Languages: Portuguese (native); English (professional); Italian (intermediate)." if english else "Idiomas: Português (nativo); Inglês (profissional); Italiano (intermediário).")
     out=io.BytesIO();doc.save(out);return out.getvalue()
 
 def professional_bullets(document):
@@ -496,9 +504,9 @@ def professional_bullets(document):
     inside=False
     bullets=[]
     for paragraph in document.paragraphs:
-        if paragraph.text=="Experiência profissional":
+        if paragraph.text in ("Experiência profissional","Professional Experience"):
             inside=True
-        elif paragraph.text=="Formação e certificações":
+        elif paragraph.text in ("Formação e certificações","Education and Certifications"):
             inside=False
         elif inside and paragraph.style.name=="List Bullet":
             bullets.append(paragraph.text)
@@ -517,7 +525,10 @@ def audit(plan,data):
     # The evidence must occur once as a professional bullet, not once across
     # the whole document: cities, credentials and skills can recur elsewhere.
     bullets=professional_bullets(parsed)
-    assert all(bullets.count(f)==1 for f in selected), "fact_bullet_missing_or_repeated"
+    rows=plan["experience"]+plan.get("additional_experience",[])
+    translations=(plan.get("localized") or {}).get("entries",[])
+    expected=[f for i,e in enumerate(rows[:len(plan["experience"])]) for f in (translations[i]["facts"] if i<len(translations) else e["facts"])]
+    assert all(bullets.count(f)==1 for f in expected), "fact_bullet_missing_or_repeated"
     assert not any(f in plan["summary"] for f in selected), "summary_repeats_fact"
     assert all(source in original for source in provenance.values()), "invalid_provenance"
     return {"engine":ENGINE_VERSION,"document_sha256":hashlib.sha256(data).hexdigest(),
@@ -542,17 +553,21 @@ def evaluate_rendered_resume(plan, data, jd):
                 or fact_source.get(f) in {x for item in EXPERIENCE for x in item["facts"]})
     unique=len(facts)==len(set(facts))
     bullet_lines=professional_bullets(doc)
-    bullet_present=all(bullet_lines.count(f)==1 for f in facts)
-    all_roles=sorted(EXPERIENCE,key=chronology_index,reverse=True)
-    offsets=[displayed.find(e["role"]+" — "+e["company"]) for e in all_roles]
+    translations=(plan.get("localized") or {}).get("entries",[])
+    expected=[f for i,e in enumerate(plan["experience"]) for f in (translations[i]["facts"] if i<len(translations) else e["facts"])]
+    bullet_present=all(bullet_lines.count(f)==1 for f in expected)
+    all_roles=sorted(range(len(EXPERIENCE)),key=lambda i:chronology_index(EXPERIENCE[i]),reverse=True)
+    localized_rows={e["source_index"]:row for e,row in zip(plan["experience"]+plan.get("additional_experience",[]),(plan.get("localized") or {}).get("entries",[]))}
+    offsets=[displayed.find(localized_rows.get(i,{}).get("role",EXPERIENCE[i]["role"])+" — "+EXPERIENCE[i]["company"]) for i in all_roles]
     chronologically_sorted=all(p>=0 for p in offsets) and offsets==sorted(offsets)
     factual_ok=factual==len(facts) and bullet_present and unique
+    english=plan.get("language")=="en"
+    heading_ok=(("Professional Summary" in displayed and "Professional Experience" in displayed) if english else ("Resumo profissional" in displayed and "Experiência profissional" in displayed))
     scores={
         "factual_traceability":2.0 if factual_ok else 0.0,
         "role_relevance":2.0*len(covered&title_requirements)/max(1,len(title_requirements)),
         "jd_topic_coverage":2.0*len(covered)/max(1,len(requirements)),
-        "document_integrity":2.0 if "Resumo profissional" in displayed and
-            "Experiência profissional" in displayed and chronologically_sorted else 0.0,
+        "document_integrity":2.0 if heading_ok and chronologically_sorted else 0.0,
         "evidence_density":2.0*min(1.0,len(facts)/9.0),
     }
     # Mechanical quality is distinct from real candidate eligibility and writing quality.

@@ -111,7 +111,12 @@ def extra(source,slug):
                     if name:locations.append(name)
             description="\n".join(str(j[key]) for key in ("description","requirements") if isinstance(j.get(key),str) and j[key].strip())
             v=item(slug,j.get("title"),j.get("careers_url") or j.get("url")," / ".join(dict.fromkeys(locations)),source,j.get("published_at"),description)
-            if v:jobs.append(preserve_eligibility_fields(v,j))
+            if v:
+                v=preserve_eligibility_fields(v,j)
+                identifier=j.get("id")
+                if isinstance(identifier,(str,int)) and str(identifier).strip():
+                    v["source_job_id"]=str(identifier)[:160]
+                jobs.append(v)
         return jobs,"validado" if records else "sem_vagas",len(records)
     if source=="personio":
         url="https://"+slug+".jobs.personio.de/search.json"

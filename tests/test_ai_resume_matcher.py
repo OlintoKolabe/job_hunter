@@ -6,7 +6,7 @@ import unittest
 from datetime import date, timedelta
 from unittest.mock import patch
 from docx import Document
-from ai_resume_matcher import evaluate, tailored_plan, to_ranking, AIUnavailable
+from ai_resume_matcher import evaluate, tailored_plan, original_evidence_plan, to_ranking, AIUnavailable
 from resume_engine import audit, render_docx, EXPERIENCE
 
 JD=("Senior Product Manager required to lead discovery, product roadmaps, stakeholders, "
@@ -82,8 +82,34 @@ class AIResumeMatcherTests(unittest.TestCase):
 
     def test_cv_rejects_sparse_or_unknown_selection(self):
         with patch("ai_resume_matcher._ask",return_value={"selected_fact_ids":["999:9","1:0"]}):
-            with self.assertRaises(ValueError):
+            plan=tailored_plan(JD,"Senior Product Manager")
+        self.assertEqual(len(plan["experience"]),1)
+        self.assertTrue(audit(plan,render_docx(plan))["factual_bullets_verified"])
+        with patch("ai_resume_matcher._ask",return_value={"selected_fact_ids":["999:9"]}):
+            with self.assertRaisesRegex(ValueError,"nenhuma evidência"):
                 tailored_plan(JD,"Senior Product Manager")
+
+    def test_rewritten_collision_recovers_only_original_verified_evidence(self):
+        original=EXPERIENCE[1]["facts"][0]
+        answer={"selected_fact_ids":["1:0","1:1"],
+                "summary":"Gestão de produtos e resultados.",
+                "rewrites":[{"id":"1:0","text":"Gestão e criação de roadmaps de produto, priorizando impacto e valor percebido."}]}
+        with patch("ai_resume_matcher._ask",return_value=answer):
+            plan=tailored_plan(JD,"Product Manager")
+        recovered=original_evidence_plan(plan)
+        self.assertIn(original,recovered["experience"][0]["facts"])
+        self.assertEqual(recovered["bullet_provenance"],{})
+        self.assertTrue(audit(recovered,render_docx(recovered))["factual_bullets_verified"])
+
+    def test_ai_summary_repeats_bullet_and_verified_summary_restores_audit(self):
+        original=EXPERIENCE[1]["facts"][0]
+        with patch("ai_resume_matcher._ask",return_value={
+                "selected_fact_ids":["1:0","1:1"],"summary":original}):
+            plan=tailored_plan(JD,"Product Manager")
+        with self.assertRaises(AssertionError):
+            audit(plan,render_docx(plan))
+        recovered=original_evidence_plan(plan)
+        self.assertTrue(audit(recovered,render_docx(recovered))["factual_bullets_verified"])
 
     def test_ai_bullet_rewrites_require_original_fact_provenance(self):
         base={"selected_fact_ids":["1:0","1:1","1:2","4:1","4:2"],
@@ -144,6 +170,22 @@ class AIResumeMatcherTests(unittest.TestCase):
         self.assertIn("wordprocessingml",response.media_type)
         self.assertIn("AI=ai_resume_matcher_evidence_v1",
                       Document(io.BytesIO(document)).core_properties.keywords)
+
+    def test_download_recovers_when_ai_summary_duplicates_evidence(self):
+        from unittest.mock import Mock
+        import app as service
+        selected_fact=EXPERIENCE[1]["facts"][0]
+        answer={"selected_fact_ids":["1:0","1:1"],"summary":selected_fact}
+        with patch.dict(os.environ,{"JH_AI_ENABLED":"1","OPENAI_API_KEY":"test-only"}), \
+             patch("app.require_auth"),patch("app._cv_source",return_value=("example.com/job/1",JD)), \
+             patch("score_repository.reserve",return_value=41),patch("score_repository.settle"), \
+             patch("app.psycopg.connect"),patch("ai_resume_matcher._ask",return_value=answer):
+            response=service.ai_resume_download(service.ResumeAIRequest(
+                url="https://example.com/job/1",title="Product Manager"),Mock())
+            document=__import__("asyncio").run(self._drain(response))
+        content=" ".join(p.text for p in Document(io.BytesIO(document)).paragraphs)
+        self.assertEqual(content.count(selected_fact),1)
+        self.assertEqual(response.status_code,200)
 
     def test_cv_uses_full_listing_description_when_public_page_is_blocked(self):
         import asyncio

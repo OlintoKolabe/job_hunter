@@ -183,7 +183,10 @@ def tailored_plan(jd,title,company=""):
     if not isinstance(requested,list):raise ValueError("Seleção de fatos inválida")
     requested=[x for x in requested if isinstance(x,str) and x in valid]
     requested=list(dict.fromkeys(requested))[:MAX_FACTS]
-    if len(requested)<min(4,len(valid)):raise ValueError("Seleção insuficiente de evidências")
+    # A vacancy can genuinely match only one to three verified facts. The
+    # document still lists the other roles with their original evidence; do
+    # not turn a sparse but factual AI selection into a failed download.
+    if not requested:raise ValueError("IA não selecionou nenhuma evidência verificada")
     # Rewrite only when lexical overlap and numeric provenance are safe.
     provenance={}
     rewrite_candidates={}
@@ -218,6 +221,7 @@ def tailored_plan(jd,title,company=""):
     plan["additional_experience"]=[{"role":row["role"],"company":row["company"],
                                     "dates":row["dates"],"source_index":i}
                                     for i,row in enumerate(EXPERIENCE) if i not in selected]
+    plan["source_summary"]=plan["summary"]
     summary=str(answer.get("summary") or "").strip()[:520]
     # Forbid candidate factual identifiers outside the verified catalog in free text.
     # Keep deterministic verified summary instead when potentially fabricated facts appear.
@@ -229,6 +233,22 @@ def tailored_plan(jd,title,company=""):
     plan["cv_mode"]="ai_resume_matcher_evidence_v1"
     plan["ai_usage"]=answer.get("_usage",{})
     return plan
+
+
+def original_evidence_plan(plan):
+    """Recover the AI-selected facts verbatim when rewritten bullets fail audit.
+
+    No extra AI call, no new facts and no change to selected roles or ordering.
+    This is deliberately narrower than bypassing the document audit.
+    """
+    from copy import deepcopy
+    recovered=deepcopy(plan)
+    provenance=plan.get("bullet_provenance") or {}
+    for entry in recovered.get("experience",[]):
+        entry["facts"]=[provenance.get(fact,fact) for fact in entry["facts"]]
+    recovered["bullet_provenance"]={}
+    recovered["summary"]=plan.get("source_summary",plan["summary"])
+    return recovered
 
 
 def to_ranking(job, roles, analysis):

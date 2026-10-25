@@ -991,7 +991,7 @@ def ai_resume_download(payload: ResumeAIRequest, request: Request):
             raise HTTPException(422,"Cadastre experiências verificadas em Meu Perfil")
         if not payload.confirmed or payload.needs_verification:
             raise HTTPException(422,"Confirme a elegibilidade da vaga antes de gerar currículo")
-    from ai_resume_matcher import (AIUnavailable, tailored_plan, estimate_cost,
+    from ai_resume_matcher import (AIUnavailable, tailored_plan, original_evidence_plan, estimate_cost,
                                    reset_billable_usage, billable_usage)
     from score_repository import reserve, settle
     url=payload.url[:2000]
@@ -1035,7 +1035,19 @@ def ai_resume_download(payload: ResumeAIRequest, request: Request):
         plan["cv_build"]=os.getenv("RENDER_GIT_COMMIT","local")[:12]
         document=render_docx(plan)
         print(f"JH_CV_STAGE stage=docx_rendered bytes={len(document)}",flush=True)
-        audit(plan,document)
+        try:
+            audit(plan,document)
+        except AssertionError:
+            # The LLM's optional bullet wording can collide with another
+            # factual line in the complete CV. Keep the AI's fact selection,
+            # restore exact source wording and run the same strict audit.
+            if (not plan.get("bullet_provenance") and
+                    plan.get("summary")==plan.get("source_summary")):
+                raise
+            print("JH_CV_STAGE stage=restore_original_evidence",flush=True)
+            plan=original_evidence_plan(plan)
+            document=render_docx(plan)
+            audit(plan,document)
         print("JH_CV_STAGE stage=factual_audit_passed",flush=True)
         quality=evaluate_rendered_resume(plan,document,jd)
         if not quality["factual_ok"]:
@@ -1046,7 +1058,7 @@ def ai_resume_download(payload: ResumeAIRequest, request: Request):
     except AIUnavailable as exc:
         raise HTTPException(503,str(exc)) from exc
     except (ValueError,AssertionError) as exc:
-        print(f"JH_CV_REJECT code=validation type={type(exc).__name__}",flush=True)
+        print(f"JH_CV_REJECT code=validation type={type(exc).__name__} reason={str(exc)[:160]}",flush=True)
         raise HTTPException(422,"IA não produziu currículo factual auditável") from exc
     except urllib.error.HTTPError as exc:
         raise HTTPException(502,"Provedor de IA indisponível") from exc

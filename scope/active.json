@@ -1,19 +1,18 @@
 {
-  "id": "JOB-HUNTER-MULTIUSER-PRODUCTION-CUTOVER-20261025",
-  "kind": "deployment",
+  "id": "JOB-HUNTER-ATS-FACTUAL-AUDIT-HOTFIX-20261025",
+  "kind": "hotfix",
   "status": "active",
-  "base_ref": "ccfaec75e8e4a95036e83cff02084b33197617d6",
-  "feature_ref": "canary/multiuser-isolated-20261025",
-  "allowed_files": ["scope/active.json", "multiuser.py", "linkedin_pdf.py", "requirements.txt", "migrations/20261025_multiuser_canary.sql", "migrations/20261025_multiuser_production.sql", "app.py", "jd_enrichment.py", "ai_resume_matcher.py", "resume_engine.py", "block4_score.py", "Dockerfile", "src/main.jsx", "src/Opportunities.jsx", "src/Profile.jsx", "src/style.css", "tests/test_multiuser.py", "tests/test_linkedin_pdf.py", "tests/test_ai_resume_matcher.py"],
+  "base_ref": "982abad5ecceb505827a92fbb0707f8668aa9959",
+  "feature_ref": "main",
+  "allowed_files": ["scope/active.json", "app.py", "ai_resume_matcher.py", "tests/test_ai_resume_matcher.py"],
   "forbidden_paths": [".github/", "vercel/"],
-  "objective": "Merge the approved multiuser canary while retaining newer main changes and safely migrate both real accounts and owner history.",
-  "allowed_paths": ["scope/active.json", "multiuser.py", "linkedin_pdf.py", "requirements.txt", "migrations/20261025_multiuser_canary.sql", "migrations/20261025_multiuser_production.sql", "app.py", "jd_enrichment.py", "ai_resume_matcher.py", "resume_engine.py", "block4_score.py", "Dockerfile", "src/main.jsx", "src/Opportunities.jsx", "src/Profile.jsx", "src/style.css", "tests/test_multiuser.py", "tests/test_linkedin_pdf.py", "tests/test_ai_resume_matcher.py"],
+  "objective": "Restore AI ATS DOCX downloads rejected by overly strict document collision assertions without weakening factual evidence checks.",
+  "allowed_paths": ["scope/active.json", "app.py", "ai_resume_matcher.py", "tests/test_ai_resume_matcher.py"],
   "allowed_changes": [
-    "Integrate approved multiuser authentication, LinkedIn PDF and per-user search without removing newer main changes",
-    "Preserve Recruitee collector and current UTC-based test fixture",
-    "Migrate two real accounts, password verifiers, profiles and private history into operational Neon tenant schemas",
-    "Keep original public history intact while importing it into the owner account",
-    "Verify tests, UI build, tenant isolation and Render deployment"
+    "Retain AI-selected verified facts when fewer than four are applicable",
+    "Retry failed rendered-document audit using unmodified source bullet wording and verified summary",
+    "Preserve strict second factual audit and log failed validation reason without leaking candidate data",
+    "Verify tests, UI build and operational Render deployment"
   ],
   "forbidden_changes": [
     "Deleting or replacing shared operational data, caches, collectors or existing history",
@@ -22,11 +21,10 @@
     "Unrelated features and fabricated professional experience"
   ],
   "acceptance": [
-    "Owner retains complete application and seen-job history",
-    "Marcus retains his profile, chosen roles and seen-job history",
-    "Existing sources including Recruitee and newer main changes still work",
+    "Regression reproducing a summary/evidence collision produces a verified DOCX",
+    "No fallback invents facts or bypasses the strict document audit",
     "Automated tests and frontend build pass",
-    "Both accounts authenticate and cannot access each other's personal data"
+    "Existing accounts, history, sources and authentication remain unchanged"
   ],
-  "deployment": "Production cutover explicitly authorized 2026-10-25, conditional on data-integrity and smoke tests"
+  "deployment": "Direct production hotfix explicitly authorized 2026-10-25, conditional on tests and runtime checks"
 }

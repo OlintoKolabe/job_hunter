@@ -276,6 +276,89 @@ def tailored_plan(jd,title,company=""):
     plan["bullet_provenance"]=provenance
     plan["cv_mode"]="ai_resume_matcher_evidence_v1"
     plan["ai_usage"]=answer.get("_usage",{})
+    return localize_plan(plan,jd)
+
+
+def job_description_language(jd):
+    """Infer the language from JD prose, never from the candidate profile."""
+    sample=re.sub(r"https?://\\S+"," ",relevant_jd_text(jd)).lower()
+    words=re.findall(r"[a-záàâãéêíóôõúüç]+",sample)
+    pt={"de","da","do","dos","das","para","com","uma","você","experiência","requisitos","responsabilidades","empresa","conhecimento","equipe","trabalho","habilidades","desenvolvimento"}
+    en={"the","and","with","for","you","your","experience","requirements","responsibilities","company","knowledge","team","work","skills","development","must","will"}
+    portuguese=sum(w in pt for w in words)
+    english=sum(w in en for w in words)
+    return "pt" if portuguese>english else "en"
+
+
+def localize_plan(plan,jd):
+    """Presentation-only translation of the selected, source-backed CV facts."""
+    language=job_description_language(jd)
+    plan["language"]=language
+    from resume_engine import EDUCATION
+    education=list(plan.get("education",EDUCATION))
+    entries=plan["experience"]+plan.get("additional_experience",[])
+    languages=list((mu.current_profile.get() or {}).get("languages") or []) if mu.enabled else []
+    source={"summary":plan["summary"],
+            "entries":[{"role":e["role"],"dates":e["dates"],
+                        "facts":e["facts"] if "facts" in e else [e["fact"]]} for e in entries],
+            "education":education,"languages":languages}
+    # Exact wording is kept when the profile is already in the JD language.
+    # The API only translates the *selected* material, never invents new jobs.
+    instructions=(
+        "You translate an existing factual resume to "+("Brazilian Portuguese" if language=="pt" else "English")+
+        ". Return JSON only with identical keys and array lengths as the input. "
+        "Translate summary, job titles, date text, facts, education labels and language proficiency. "
+        "Preserve original employer and institution names, qualifications, technologies, numbers, "
+        "dates, quantities and achievements exactly. Do not add or infer any information. "
+        "Do not paraphrase or embellish facts already in the target language. "
+        "Each translated fact must express only its source fact.")
+    request={"model":os.getenv("JH_RESUME_AI_MODEL",MODEL_DEFAULT),
+             "messages":[{"role":"system","content":instructions},
+                         {"role":"user","content":json.dumps(source,ensure_ascii=False)}],
+             "response_format":{"type":"json_object"},"temperature":0,
+             "max_tokens":3200}
+    req=urllib.request.Request("https://api.openai.com/v1/chat/completions",
+        data=json.dumps(request,ensure_ascii=False).encode("utf-8"),
+        headers={"Authorization":"Bearer "+os.environ["OPENAI_API_KEY"],
+                 "Content-Type":"application/json"},method="POST")
+    with urllib.request.urlopen(req,timeout=35) as response:
+        completion=json.load(response)
+    usage=completion.get("usage") or {}
+    accumulated=dict(billable_usage())
+    for key in ("prompt_tokens","completion_tokens","total_tokens"):
+        accumulated[key]=int(accumulated.get(key,0))+int(usage.get(key,0))
+    _last_billable_usage.set(accumulated)
+    translated=json.loads(completion["choices"][0]["message"]["content"])
+    def valid_text(item,original):
+        if not isinstance(item,str) or not item.strip() or len(item)>max(650,len(original)*2+60):
+            raise ValueError("Tradução do CV incompleta")
+        # The translator may localize punctuation, never invent quantitative claims.
+        numbers=lambda v:sorted(re.findall(r"\\d+(?:[.,]\\d+)?",v))
+        if numbers(item)!=numbers(original):
+            raise ValueError("Tradução do CV alterou dados quantitativos")
+        return " ".join(item.split())
+    translated_entries=translated.get("entries")
+    if not isinstance(translated_entries,list) or len(translated_entries)!=len(entries):
+        raise ValueError("Tradução do CV incompleta")
+    localized=[]
+    for old,new in zip(source["entries"],translated_entries):
+        if not isinstance(new,dict) or not isinstance(new.get("facts"),list) or len(new["facts"])!=len(old["facts"]):
+            raise ValueError("Tradução do CV incompleta")
+        localized.append({
+            "role":valid_text(new.get("role"),old["role"]),
+            "dates":valid_text(new.get("dates"),old["dates"]),
+            "facts":[valid_text(a,b) for a,b in zip(new["facts"],old["facts"])]})
+    translated_education=translated.get("education")
+    translated_languages=translated.get("languages")
+    if not isinstance(translated_education,list) or len(translated_education)!=len(education):
+        raise ValueError("Tradução da formação incompleta")
+    if not isinstance(translated_languages,list) or len(translated_languages)!=len(languages):
+        raise ValueError("Tradução dos idiomas incompleta")
+    plan["localized"]={
+        "summary":valid_text(translated.get("summary"),source["summary"]),
+        "entries":localized,
+        "education":[valid_text(a,b) for a,b in zip(translated_education,education)],
+        "languages":[valid_text(a,b) for a,b in zip(translated_languages,languages)]}
     return plan
 
 

@@ -985,7 +985,7 @@ class ResumeAIRequest(BaseModel):
 @app.post("/api/resume/ai-download")
 def ai_resume_download(payload: ResumeAIRequest, request: Request):
     """One-click AI resume download; never silently use the deterministic old CV."""
-    require_auth(request)
+    authenticated_uid=require_auth(request)
     if mu.enabled:
         if not mu.factual_experience():
             raise HTTPException(422,"Cadastre experiências verificadas em Meu Perfil")
@@ -1058,7 +1058,12 @@ def ai_resume_download(payload: ResumeAIRequest, request: Request):
     except AIUnavailable as exc:
         raise HTTPException(503,str(exc)) from exc
     except (ValueError,AssertionError) as exc:
-        print(f"JH_CV_REJECT code=validation type={type(exc).__name__} reason={str(exc)[:160]}",flush=True)
+        # Internal account ID and validation code only: no job description,
+        # resume text, name or email is logged.
+        print(f"JH_CV_REJECT code=validation user_id={authenticated_uid if mu.enabled else 'legacy'} "
+              f"type={type(exc).__name__} reason={str(exc)[:160]}",flush=True)
+        if isinstance(exc,ValueError) and str(exc)=="IA não selecionou nenhuma evidência verificada":
+            raise HTTPException(422,"A IA não selecionou evidências profissionais desta vaga; tente outra vaga ou revise as experiências verificadas no perfil") from exc
         raise HTTPException(422,"IA não produziu currículo factual auditável") from exc
     except urllib.error.HTTPError as exc:
         raise HTTPException(502,"Provedor de IA indisponível") from exc

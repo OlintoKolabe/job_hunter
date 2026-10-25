@@ -28,8 +28,10 @@ def public_connect(db_url, **kwargs):
 
 def connect(db_url, **kwargs):
     uid = current_uid.get()
-    if not enabled or uid is None:
+    if not enabled:
         return public_connect(db_url, **kwargs)
+    if uid is None:
+        raise PermissionError("Authenticated user context is required for private data")
     # IDs are sourced from database BIGSERIAL and verified signed sessions.
     schema = "jh_user_" + str(int(uid))
     if not re.fullmatch(r"jh_user_[0-9]+", schema):
@@ -150,7 +152,12 @@ def factual_experience():
     profile = current_profile.get() or {}
     result = []
     for item in profile.get("experience", []):
-        facts = [str(f).strip() for f in item.get("facts",[]) if str(f).strip()]
+        # Verified profile entries may contain PDF fragments (e.g. a city or a
+        # single skill). Preserve the saved profile, but do not treat those
+        # fragments as auditable professional achievements in an ATS CV.
+        facts = [text for f in item.get("facts",[])
+                 if (text := str(f).strip()) and len(text) >= 18
+                 and len(text.split()) >= 3]
         if item.get("verified") is True and facts:
             result.append({"role":str(item.get("role") or "")[:140],
                            "company":str(item.get("company") or "")[:140],

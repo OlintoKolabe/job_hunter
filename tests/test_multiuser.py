@@ -47,6 +47,19 @@ class TenantTests(unittest.TestCase):
             self.assertEqual(mu.factual_experience(),[])
             mu.current_profile.reset(token)
 
+    def test_short_geographic_fragments_are_not_professional_evidence(self):
+        profile={"experience":[{"role":"Analista de automação","company":"Exemplo",
+            "dates":"2024-2026","verified":True,
+            "facts":["Goiás","Brasil","Goiânia","Automation",
+                     "Led automation projects to improve business processes."]}]}
+        with patch.object(mu,"enabled",True):
+            token=mu.current_profile.set(profile)
+            try:
+                self.assertEqual(mu.factual_experience()[0]["facts"],
+                    ["Led automation projects to improve business processes."])
+            finally:
+                mu.current_profile.reset(token)
+
     def test_connection_schema_is_derived_from_numeric_uid(self):
         with patch.object(mu,"enabled",True),patch.object(mu.psycopg,"connect") as connect:
             token=mu.current_uid.set(42)
@@ -55,6 +68,16 @@ class TenantTests(unittest.TestCase):
             connect.return_value.execute.assert_called_once_with(
                 'SET search_path TO "jh_user_42", public')
             mu.current_uid.reset(token)
+
+    def test_private_connection_fails_closed_without_account(self):
+        with patch.object(mu,"enabled",True),patch.object(mu.psycopg,"connect") as connect:
+            token=mu.current_uid.set(None)
+            try:
+                with self.assertRaises(PermissionError):
+                    mu.connect("postgresql://placeholder")
+                connect.assert_not_called()
+            finally:
+                mu.current_uid.reset(token)
 
     def test_independent_evidence_proxy(self):
         legacy=[{"role":"Legacy"}]
@@ -96,6 +119,52 @@ class TenantTests(unittest.TestCase):
                             self.assertNotIn(other_fact,rendered)
                 finally:
                     mu.current_profile.reset(token)
+
+    def test_non_owner_cv_survives_fragmented_import_and_repeated_education_term(self):
+        substantive="Designed and automated business processes with reliable data pipelines."
+        profile={"name":"Marcos Exemplo","email":"marcos@example.test","phone":"62999999999",
+                 "location":"Goiânia, Goiás","linkedin":"","summary":"Experiência em automação.",
+                 "education":["Formação em Goiás", "Designed and automated business processes with reliable data pipelines."],
+                 "certifications":["Automation Brasil"],"languages":[],
+                 "experience":[{"role":"Analista de automação","company":"Empresa B",
+                                "dates":"2023-2026","verified":True,
+                                "facts":["Goiás","Brasil","Goiânia","Automation",substantive]}]}
+        with patch.object(mu,"enabled",True):
+            token=mu.current_profile.set(profile)
+            try:
+                self.assertEqual([row["fact"] for row in ai_resume_matcher.evidence_catalog()],
+                                 [substantive])
+                with patch("ai_resume_matcher._ask",return_value={
+                    "selected_fact_ids":["0:0"],"summary":"Experiência em automação."}):
+                    plan=ai_resume_matcher.tailored_plan(
+                        "Automação de processos de negócios e gestão de dados com experiências demonstradas.",
+                        "Analista de automação")
+                document=resume_engine.render_docx(plan)
+                resume_engine.audit(plan,document)
+                rendered="\n".join(p.text for p in Document(BytesIO(document)).paragraphs)
+                self.assertIn(substantive,rendered)
+                self.assertIn("Marcos Exemplo",rendered)
+                self.assertNotIn("Olinto Manso Pereira",rendered)
+                self.assertNotIn("Digital Design",rendered)
+            finally:
+                mu.current_profile.reset(token)
+
+    def test_hallucinated_fact_still_fails_audit(self):
+        profile={"name":"Usuário Exemplo","email":"exemplo@example.test","phone":"62999999999",
+                 "location":"","linkedin":"","summary":"Profissional de tecnologia.",
+                 "education":[],"certifications":[],"experience":[{
+                     "role":"Developer","company":"Exemplo","dates":"2023-2026",
+                     "facts":["Maintained and improved test automation for existing workflows."],
+                     "verified":True}]}
+        with patch.object(mu,"enabled",True):
+            token=mu.current_profile.set(profile)
+            try:
+                plan=resume_engine.build_plan("Software engineering testing requirements", "Developer")
+                plan["experience"][0]["facts"]=["Invented leadership of an entire department."]
+                with self.assertRaisesRegex(AssertionError,"unproven_fact"):
+                    resume_engine.audit(plan,resume_engine.render_docx(plan))
+            finally:
+                mu.current_profile.reset(token)
 
 
 if __name__=="__main__":

@@ -452,17 +452,35 @@ def render_docx(plan):
         doc.add_paragraph("Idiomas: Português (nativo); Inglês (profissional); Italiano (intermediário).")
     out=io.BytesIO();doc.save(out);return out.getvalue()
 
+def professional_bullets(document):
+    """Read only the experience section, never education/certification bullets."""
+    inside=False
+    bullets=[]
+    for paragraph in document.paragraphs:
+        if paragraph.text=="Experiência profissional":
+            inside=True
+        elif paragraph.text=="Formação e certificações":
+            inside=False
+        elif inside and paragraph.style.name=="List Bullet":
+            bullets.append(paragraph.text)
+    return bullets
+
+
 def audit(plan,data):
     parsed=Document(io.BytesIO(data))
     content=" ".join(p.text for p in parsed.paragraphs)
-    assert CONTACT["email"] in content and CONTACT["phone"] in content
+    assert CONTACT["email"] in content and CONTACT["phone"] in content, "contact_missing"
     original={f for e in EXPERIENCE for f in e["facts"]}
     selected=[f for e in plan["experience"] for f in e["facts"]]
     provenance=plan.get("bullet_provenance") or {}
-    assert selected and len(selected)==len(set(selected))
-    assert all(f in original or provenance.get(f) in original for f in selected)
-    assert all(content.count(f)==1 for f in selected)
-    assert all(source in original for source in provenance.values())
+    assert selected and len(selected)==len(set(selected)), "missing_or_duplicate_facts"
+    assert all(f in original or provenance.get(f) in original for f in selected), "unproven_fact"
+    # The evidence must occur once as a professional bullet, not once across
+    # the whole document: cities, credentials and skills can recur elsewhere.
+    bullets=professional_bullets(parsed)
+    assert all(bullets.count(f)==1 for f in selected), "fact_bullet_missing_or_repeated"
+    assert not any(f in plan["summary"] for f in selected), "summary_repeats_fact"
+    assert all(source in original for source in provenance.values()), "invalid_provenance"
     return {"engine":ENGINE_VERSION,"document_sha256":hashlib.sha256(data).hexdigest(),
             "jd_sha256":plan["jd_sha256"],"factual_bullets_verified":True,
             "cost_usd":0.0,"ai_calls":0,"paragraphs":len(parsed.paragraphs)}
@@ -484,7 +502,8 @@ def evaluate_rendered_resume(plan, data, jd):
                 f in {x for item in EXPERIENCE for x in item["facts"]}
                 or fact_source.get(f) in {x for item in EXPERIENCE for x in item["facts"]})
     unique=len(facts)==len(set(facts))
-    bullet_present=all(displayed.count(f)==1 for f in facts)
+    bullet_lines=professional_bullets(doc)
+    bullet_present=all(bullet_lines.count(f)==1 for f in facts)
     all_roles=sorted(EXPERIENCE,key=chronology_index,reverse=True)
     offsets=[displayed.find(e["role"]+" — "+e["company"]) for e in all_roles]
     chronologically_sorted=all(p>=0 for p in offsets) and offsets==sorted(offsets)

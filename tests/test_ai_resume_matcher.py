@@ -18,6 +18,66 @@ JD=("Senior Product Manager required to lead discovery, product roadmaps, stakeh
     "on measurable outcomes and continuous product delivery.")
 
 class AIResumeMatcherTests(unittest.TestCase):
+    def setUp(self):
+        # Selection-contract tests do not hit the separate translation API.
+        self._localize_patch=patch("ai_resume_matcher.localize_plan",side_effect=lambda p,j:p)
+        self._localize_patch.start()
+        self.addCleanup(self._localize_patch.stop)
+
+    def test_jd_prose_determines_resume_language(self):
+        from ai_resume_matcher import job_description_language
+        english=("We are hiring a product manager with experience in product "
+                 "development and stakeholder collaboration. You will work with "
+                 "engineering teams and own the roadmap and delivery.")
+        portuguese=("Buscamos profissional com experiência em gestão de produtos, "
+                    "desenvolvimento de soluções e trabalho em equipe. "
+                    "A empresa exige conhecimento de requisitos e responsabilidades.")
+        self.assertEqual(job_description_language(english),"en")
+        self.assertEqual(job_description_language(portuguese),"pt")
+
+    def test_english_render_preserves_source_evidence_audit(self):
+        from ai_resume_matcher import localize_plan
+        import multiuser as mu
+        profile={"name":"Candidate Test","email":"candidate@example.com",
+                 "phone":"11987654321","location":"Brasil","linkedin":"",
+                 "summary":"Atuei com produtos e equipes.","education":["Graduação — USP"],
+                 "certifications":[],"languages":["Português (nativo)"],
+                 "experience":[{"role":"Gerente de Produto","company":"Empresa A",
+                     "dates":"jan 2022 - dez 2025",
+                     "facts":["Gerenciei roadmap e backlog de produtos digitais."],
+                     "verified":True}]}
+        jd=("We are looking for an experienced Product Manager who will work "
+            "with cross-functional teams and lead product roadmaps, collaboration "
+            "and user research to deliver products to customers.")
+        answer={"summary":"I worked with products and teams.",
+                "entries":[{"role":"Product Manager","dates":"Jan 2022 - Dec 2025",
+                            "facts":["Managed roadmaps and backlogs for digital products."]}],
+                "education":["Undergraduate degree — USP"],
+                "languages":["Portuguese (native)"]}
+        class FakeResponse:
+            def __enter__(self):return self
+            def __exit__(self,*args):return False
+            def read(self,*args):
+                return json.dumps({"choices":[{"message":{"content":json.dumps(answer)}}],
+                                   "usage":{"prompt_tokens":100,"completion_tokens":90}}).encode()
+        token=mu.current_profile.set(profile)
+        try:
+            with patch.object(mu,"enabled",True),patch.dict(os.environ,{"OPENAI_API_KEY":"test","JH_AI_ENABLED":"1"}), \
+                 patch("ai_resume_matcher._ask",return_value={"selected_fact_ids":["0:0"],"summary":"Product manager with documented experience."}), \
+                 patch("ai_resume_matcher.urllib.request.urlopen",return_value=FakeResponse()):
+                plan=tailored_plan(jd,"Product Manager")
+                self._localize_patch.stop()
+                import ai_resume_matcher as matcher
+                matcher.localize_plan(plan,jd)
+                document=render_docx(plan)
+                self.assertTrue(audit(plan,document)["factual_bullets_verified"])
+                text=" | ".join(p.text for p in Document(io.BytesIO(document)).paragraphs)
+                self.assertIn("Professional Experience",text)
+                self.assertIn("Managed roadmaps and backlogs",text)
+                self.assertNotIn("Formação e certificações",text)
+        finally:
+            mu.current_profile.reset(token)
+
     def test_duplicate_facts_from_two_verified_roles_do_not_block_cv(self):
         import multiuser as mu
         facts="Led product discovery and roadmap prioritization with stakeholders."

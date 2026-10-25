@@ -39,7 +39,9 @@ def normal(value):
 def lines_from_text(text):
     result = []
     for line in html.unescape(text).replace("\x00", "").replace("\u200b", "").splitlines():
-        cleaned = " ".join(line.split()).strip("• \t")
+        cleaned = " ".join(line.split()).strip()
+        if cleaned.startswith(("•", "●")):
+            cleaned = "• " + cleaned[1:].strip()
         if cleaned and not re.fullmatch(r"(?:Page|Página)\s+\d+(?:\s+(?:of|de)\s+\d+)?", cleaned, re.I):
             result.append(cleaned[:1200])
     return result
@@ -60,14 +62,14 @@ def sections_from_lines(lines):
     return before, sections
 
 
-def unique(lines, limit=60):
+def unique(lines, limit=60, max_chars=200):
     result = []
     seen = set()
     for line in lines:
         line = line.strip("• \t")
         key = normal(line)
         if line and key not in seen:
-            result.append(line[:200])
+            result.append(line[:max_chars])
             seen.add(key)
         if len(result) >= limit:
             break
@@ -136,15 +138,39 @@ def experience_from_lines(lines):
             company, role = first, second
         next_start = (dates[n + 1] - 2) if n + 1 < len(dates) else len(lines)
         description = lines[index + 1:max(index + 1, next_start)]
+        # LinkedIn places location immediately after the date. It is not a
+        # professional accomplishment when followed by a marked bullet.
+        if (len(description)>1 and not description[0].startswith("• ")
+            and description[1].startswith("• ")):
+            description=description[1:]
         facts = []
+        current = ""
         for line in description:
-            if len(line) >= 18 and not DATE_RANGE.search(line) and not LINKEDIN.search(line):
-                # Never synthesize achievements or expand abbreviations.
-                facts.append(line[:500])
+            if DATE_RANGE.search(line) or LINKEDIN.search(line):
+                continue
+            marked = line.startswith("• ")
+            clean = line[2:].strip() if marked else line.strip()
+            if not clean:
+                continue
+            # The PDF exporter wraps a single factual bullet across multiple
+            # physical lines. Keep its exact words and punctuation together.
+            if marked and current:
+                facts.append(current)
+                current = ""
+            if current and not marked and (not re.search(r"[.!?]$", current) or
+                                           clean[:1].islower()):
+                current += " " + clean
+            else:
+                if current:
+                    facts.append(current)
+                current = clean
+        if current:
+            facts.append(current)
+        facts = [fact for fact in facts if len(fact) >= 18]
         if not ROLE_CUES.search(role):
             warnings.append("Confira cargo e empresa de uma experiência importada.")
         records.append({"role": role[:200], "company": company[:200],
-                        "dates": lines[index][:200], "facts": unique(facts, 25),
+                        "dates": lines[index][:200], "facts": unique(facts, 25, 500),
                         "verified": False})
     if lines and not records:
         warnings.append("A seção de experiências não pôde ser estruturada; confira o PDF e complete apenas o que faltar.")

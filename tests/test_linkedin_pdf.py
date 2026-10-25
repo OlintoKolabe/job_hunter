@@ -59,6 +59,32 @@ Inglês
 
 
 class LinkedInPdfTests(unittest.TestCase):
+    def test_wrapped_linkedin_bullets_remain_complete(self):
+        source = """Jane Example
+Contact
+jane@example.com
+Summary
+Product manager working with AI prototypes.
+Experience
+Kolabe
+Product Manager
+May 2018 - January 2023
+São Paulo, Brasil
+• Created product discovery journeys, user interviews and
+prototypes for validation with stakeholders.
+• Managed the product roadmap, prioritizing value
+and aligning engineering with UX decisions.
+Education
+University of Example
+Bachelor degree
+"""
+        data = parse_profile_text(source)["profile"]["experience"]
+        self.assertEqual(len(data), 1)
+        self.assertEqual(len(data[0]["facts"]), 2)
+        self.assertIn("user interviews and prototypes", data[0]["facts"][0])
+        self.assertIn("prioritizing value and aligning", data[0]["facts"][1])
+        self.assertNotIn("São Paulo, Brasil", data[0]["facts"])
+
     def test_linkedin_sidebar_does_not_pollute_marcus_academic_fields(self):
         source = """Marcus Pablo Rezende Teixeira Manso Pereira
 Contact

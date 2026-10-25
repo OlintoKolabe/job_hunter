@@ -18,6 +18,30 @@ JD=("Senior Product Manager required to lead discovery, product roadmaps, stakeh
     "on measurable outcomes and continuous product delivery.")
 
 class AIResumeMatcherTests(unittest.TestCase):
+    def test_duplicate_facts_from_two_verified_roles_do_not_block_cv(self):
+        import multiuser as mu
+        facts="Led product discovery and roadmap prioritization with stakeholders."
+        profile={"name":"Candidate Test","email":"candidate@example.com",
+                 "phone":"11987654321","location":"Brasil","linkedin":"",
+                 "summary":"","education":[],"certifications":[],"languages":[],
+                 "experience":[
+                   {"role":"Product Manager","company":"Company A","dates":"jan 2025 – atual",
+                    "facts":[facts,"Delivered user research and prototyping for digital products."],"verified":True},
+                   {"role":"Product Owner","company":"Company B","dates":"jan 2023 – dez 2024",
+                    "facts":[facts,"Managed delivery with engineering and UX teams."],"verified":True}]}
+        answer={"selected_fact_ids":["0:0","1:0","1:1","0:1"],"summary":"","rewrites":[]}
+        token=mu.current_profile.set(profile)
+        try:
+            with patch.object(mu,"enabled",True),patch("ai_resume_matcher._ask",return_value=answer):
+                plan=tailored_plan(JD,"Product Manager")
+                doc=render_docx(plan)
+                audit(plan,doc)
+            chosen=[f for row in plan["experience"] for f in row["facts"]]
+            self.assertEqual(chosen.count(facts),1)
+            self.assertEqual(len(chosen),3)
+        finally:
+            mu.current_profile.reset(token)
+
     def test_real_jd_phrasing_is_not_lost_to_strict_word_overlap(self):
         # Source wording can include filler words even when a meaningful
         # quoted requirement is fully present in the job description.

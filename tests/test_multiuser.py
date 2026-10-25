@@ -4,6 +4,16 @@ import multiuser as mu
 
 
 class AcademicSidebarTests(unittest.TestCase):
+ def test_profile_accepts_extended_skill_list_without_relaxing_other_limits(self):
+    from app import validated_profile
+    from fastapi import HTTPException
+    skills=["Skill "+str(i) for i in range(120)]
+    saved=validated_profile({"name":"Test Candidate","skills":skills},{})
+    self.assertEqual(saved["skills"],skills)
+    with self.assertRaises(HTTPException) as blocked:
+        validated_profile({"name":"Test Candidate","education":skills},{})
+    self.assertEqual(blocked.exception.status_code,400)
+
  def test_saved_abbreviated_linkedin_footer_drops_all_following_lines(self):
     profile={"name":"Marcus Pablo Rezende Teixeira Manso Pereira","skills":[],
              "education":["Pontifícia Universidade Católica de Goiás", "Engenharia de Computação"],

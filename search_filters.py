@@ -35,7 +35,7 @@ def fold(x):
 
 def search_terms(value):
     raw=[x.strip() for x in re.split(r"[,;\n]+",str(value or ""))]
-    return [fold(x) for x in raw if x.strip()][:25]
+    return [fold(x) for x in raw if x.strip()][:250]
 
 def parse_date(value):
     if not value:return None
@@ -315,7 +315,7 @@ def analyze_filters(jobs,roles=DEFAULT_ROLES,country="BR",mode="remote",days=30,
     from block4_score import score_job
     from jd_enrichment import valid_listing_jd
     terms=search_terms(roles)
-    if len(roles)>700:raise ValueError("Filtros de cargo excessivamente longos")
+    if len(roles)>5000:raise ValueError("Seleção de cargos acima de 5.000 caracteres; divida a busca em grupos")
     if country not in COUNTRY_NAMES:raise ValueError("País desconhecido")
     if mode not in ("remote","hybrid","onsite","all"):raise ValueError("Regime inválido")
     if days not in (0,1,3,7,15,30,60,90):raise ValueError("Período inválido")

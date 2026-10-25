@@ -2,15 +2,16 @@
   "id": "JOB-HUNTER-MULTIUSER-CANARY-20261025",
   "kind": "development",
   "status": "active",
-  "objective": "Develop the approved isolated multiuser canary with accounts, professional profiles, role preferences, separate history, scores and ATS documents.",
-  "allowed_paths": ["scope/active.json", "multiuser.py", "migrations/20261025_multiuser_canary.sql", "app.py", "jd_enrichment.py", "ai_resume_matcher.py", "resume_engine.py", "block4_score.py", "Dockerfile", "src/main.jsx", "src/Opportunities.jsx", "src/Profile.jsx", "src/style.css", "tests/test_multiuser.py", "tests/test_ai_resume_matcher.py", "MULTIUSER_CANARY_EVIDENCE.md"],
+  "objective": "Develop the approved isolated multiuser canary, including LinkedIn-exported PDF as the primary master resume input, with a reviewable parsed profile.",
+  "allowed_paths": ["scope/active.json", "multiuser.py", "linkedin_pdf.py", "requirements.txt", "migrations/20261025_multiuser_canary.sql", "app.py", "jd_enrichment.py", "ai_resume_matcher.py", "resume_engine.py", "block4_score.py", "Dockerfile", "src/main.jsx", "src/Opportunities.jsx", "src/Profile.jsx", "src/style.css", "tests/test_multiuser.py", "tests/test_linkedin_pdf.py", "tests/test_ai_resume_matcher.py", "MULTIUSER_CANARY_EVIDENCE.md"],
   "allowed_changes": [
     "Create registration, login and tenant isolation on the isolated Neon branch",
     "Provide Meu Perfil and editable experience, qualifications, role catalog and search preferences",
     "Adapt existing search, ranking and CV engines to validated tenant evidence",
     "Preserve cache and collector architecture without data leakage",
     "Test and publish a separately configured Render canary",
-    "Stabilize the existing time-relative regression fixture that otherwise blocks the required Docker build on the current date"
+    "Stabilize the existing time-relative regression fixture that otherwise blocks the required Docker build on the current date",
+    "Extract and preview profile fields from user-uploaded LinkedIn PDFs, requiring explicit approval before verified evidence is saved"
   ],
   "forbidden_changes": [
     "main, production Neon and operational Render services",

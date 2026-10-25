@@ -153,7 +153,10 @@ def validated_profile(value, current):
             row={k:str(item.get(k) or "").strip()[:200] for k in ("role","company","dates")}
             row["facts"]=list(dict.fromkeys(str(f).strip()[:500] for f in facts if str(f).strip()))
             row["verified"]=item.get("verified") is True
-            if row["role"] and row["company"] and row["facts"]:
+            # LinkedIn exports sometimes list a position without bullet points.
+            # Keep the position for review, but never use it as factual AI
+            # evidence until actual source-backed facts are available.
+            if row["role"] and row["company"]:
                 verified.append(row)
         clean["experience"]=verified
     return clean
@@ -256,6 +259,32 @@ def get_profile(request: Request):
     if not mu.enabled:raise HTTPException(404,"Indisponível")
     require_auth(request)
     return {"profile":mu.current_profile.get()}
+
+@app.post("/api/profile/import-linkedin")
+async def import_linkedin_pdf(request: Request):
+    if not mu.enabled:
+        raise HTTPException(404,"Indisponível")
+    require_auth(request)
+    if request.headers.get("content-type", "").split(";",1)[0].strip().lower() != "application/pdf":
+        raise HTTPException(415,"Envie um arquivo PDF exportado do LinkedIn")
+    from linkedin_pdf import MAX_PDF_BYTES,parse_linkedin_pdf
+    try:
+        length=int(request.headers.get("content-length") or 0)
+    except ValueError:
+        raise HTTPException(400,"Tamanho do PDF inválido")
+    if length > MAX_PDF_BYTES:
+        raise HTTPException(413,"O PDF deve ter no máximo 8 MB")
+    data=bytearray()
+    async for part in request.stream():
+        data.extend(part)
+        if len(data)>MAX_PDF_BYTES:
+            raise HTTPException(413,"O PDF deve ter no máximo 8 MB")
+    try:
+        # Source PDF exists only in memory for extraction; nothing is
+        # persisted until the user reviews and explicitly saves the profile.
+        return parse_linkedin_pdf(bytes(data))
+    except ValueError as exc:
+        raise HTTPException(422,str(exc)) from exc
 
 @app.put("/api/profile")
 def save_profile(payload: ProfileUpdate, request: Request):

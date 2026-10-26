@@ -24,7 +24,7 @@ from psycopg.types.json import Jsonb
 import multiuser as mu
 from public_remote_feeds import fetch as fetch_public_remote
 from indeed_provider import search as indeed_search, enabled as indeed_enabled
-from collectors import collect,source_field_coverage
+from collectors import collect,source_field_coverage,BOARDS
 from search_filters import analyze_filters,apply_filters,search_terms,discovery_queries,requested_families,DEFAULT_ROLES,COUNTRIES
 from first_seen import flag_new_jobs
 from catalog_engine import source_tasks,scan
@@ -435,9 +435,31 @@ def restore_persisted_scores(cursor, jobs, roles, url_key):
     return output, restored
 
 
+def resolved_search_filters(request,roles,country,mode,days):
+    """Keep omitted query defaults tenant-specific; reject cross-profile roles."""
+    if not mu.enabled:
+        return roles,country,mode,days
+    profile=mu.current_profile.get() or {}
+    saved=[str(r).strip() for r in profile.get("roles",[]) if str(r).strip()]
+    if "roles" not in request.query_params:
+        roles=", ".join(saved)
+    else:
+        requested=[r.strip() for r in roles.split(",") if r.strip()]
+        allowed={r.casefold() for r in saved}
+        if not requested or any(r.casefold() not in allowed for r in requested):
+            raise HTTPException(400,"Seleção de cargos diferente do perfil autenticado")
+    if not roles.strip():
+        raise HTTPException(400,"Cadastre cargos em Meu Perfil")
+    if "country" not in request.query_params:country=profile.get("country") or country
+    if "mode" not in request.query_params:mode=profile.get("mode") or mode
+    if "days" not in request.query_params:days=int(profile.get("days") or 0)
+    return roles,country,mode,days
+
+
 @app.post("/api/search-jobs")
 def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:str="remote",days:int=30,sort:str="newest",source:str="all"):
     require_auth(request)
+    roles,country,mode,days=resolved_search_filters(request,roles,country,mode,days)
     allowed_sources={"all","inhire","quickin","gupy","greenhouse","ashby","lever","bamboohr","dynamite","linkedin_guest","jobgether","workable","himalayas","remotive","remoteok","indeed","geekhunter","nerdin","recruitee"}
     if source not in allowed_sources:raise HTTPException(400,"Fonte não reconhecida")
     if source=="indeed":
@@ -538,6 +560,15 @@ def source_freshness(source, checked_at):
     return {"interval_days":days,"due":next_time<=datetime.now(timezone.utc),
             "next_check":next_time.isoformat()}
 
+WARM_SOURCE_TASKS={(source.casefold(),slug.casefold()) for source,slugs in BOARDS.items() for slug in slugs}
+
+
+def ordered_catalog_tasks(tasks):
+    """Surface the stable, Brazil-oriented starter boards before the long catalog."""
+    valid=[(src,slug) for src,slug in tasks if slug.casefold() not in ("kraken","kraken.com","payward")]
+    return sorted(valid,key=lambda x:(0 if (x[0].casefold(),x[1].casefold()) in WARM_SOURCE_TASKS else 1,x[0].casefold(),x[1].casefold()))
+
+
 def active_source_tasks(roles=DEFAULT_ROLES):
     tasks=set(source_tasks())
     # Search the complete default role family on keyword-based LinkedIn guest.
@@ -569,7 +600,7 @@ def active_source_tasks(roles=DEFAULT_ROLES):
     for term in search_terms(roles)[:3]:
         if len(term)>2 and term not in nerdin_terms.values():
             tasks.add(("nerdin",term))
-    return sorted((source,slug) for source,slug in tasks if slug.casefold() not in ("kraken","kraken.com","payward"))
+    return ordered_catalog_tasks(tasks)
 
 def source_filter_quality(jobs,roles,country,mode,days):
     """Source-level filter outcomes, without extra HTTP or AI calls."""
@@ -676,6 +707,7 @@ def unique_jobs_by_url(found):
 @app.post("/api/catalog/scan")
 def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False,roles:str=DEFAULT_ROLES,country:str="BR",mode:str="remote",days:int=30,sort:str="newest",source:str="all"):
     require_auth(request)
+    roles,country,mode,days=resolved_search_filters(request,roles,country,mode,days)
     if source not in {"all","inhire","quickin","gupy","greenhouse","ashby","lever","bamboohr","dynamite","linkedin_guest","jobgether","workable","himalayas","remotive","remoteok","geekhunter","nerdin","recruitee"}:raise HTTPException(400,"Fonte não reconhecida")
     tasks=active_source_tasks(roles)
     if source!="all":

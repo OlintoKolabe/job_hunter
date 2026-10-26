@@ -250,8 +250,8 @@ def geo_verdict(job,country,evidence=None):
     if br:codes.add("BR")
     if country=="BR":
         if us_only and not (br or regional or global_eligible):return "excluded"
-        if br or regional:return "eligible"
-        if global_eligible:return "unknown"
+        if global_eligible and contains_phrase(loc,"worldwide") and not (br or regional):return "unknown"
+        if br or regional or global_eligible:return "eligible"
         if any(contains_phrase(loc,p) for p in OTHER_FOREIGN_COUNTRIES+FOREIGN_CITY_ONLY):return "excluded"
         # If the vacancy explicitly names a different country but not BR/LATAM, don't silently confirm Brazil.
         if codes and "BR" not in codes:return "excluded"

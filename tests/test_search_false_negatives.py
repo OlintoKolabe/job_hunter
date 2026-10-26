@@ -35,6 +35,26 @@ class SearchFalseNegativeTests(unittest.TestCase):
         status,_=classify(job("Product Manager",""),TERMS,"BR","remote",0)
         self.assertEqual(status,"review")
 
+    def test_explicit_data_science_roles_are_not_blocked_as_non_target(self):
+        roles=search_terms("Data Scientist, Machine Learning Engineer, AI Engineer")
+        for title in ("Data Scientist","Machine Learning Engineer","AI Engineer"):
+            with self.subTest(title=title):
+                status,_=classify(job(title,"Brazil - Remote"),roles,"BR","remote",0)
+                self.assertEqual(status,"confirmed")
+
+    def test_explicit_junior_and_intern_roles_are_not_blocked(self):
+        roles=search_terms("Software Engineer Intern, Desenvolvedor Júnior, Estagiário de TI")
+        for title in ("Software Engineer Intern","Desenvolvedor Júnior","Estagiário de TI"):
+            with self.subTest(title=title):
+                status,_=classify(job(title,"Brazil - Remote"),roles,"BR","remote",0)
+                self.assertEqual(status,"confirmed")
+
+    def test_product_profile_still_rejects_unrequested_engineering(self):
+        for title in ("Data Scientist","AI Engineer","Software Engineer Intern"):
+            with self.subTest(title=title):
+                status,reason=classify(job(title,"Brazil - Remote"),TERMS,"BR","remote",0)
+                self.assertEqual((status,reason),("excluded","cargo"))
+
     def test_history_sets_control_exclusion(self):
         j=job("Product Manager","Brazil - Remote")
         confirmed,review,count=exclude_history_matches([j],[],set(),set())

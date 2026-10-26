@@ -28,7 +28,7 @@ class InitialSearchRoutingTests(unittest.TestCase):
         self.assertFalse(any(src not in ("Jobgether","Workable") for src,_ in seen))
 
     def test_source_specific_search_does_not_change(self):
-        with patch("collectors.pull",return_value=({"source":"Jobgether","status":"ok","received":0},[])):
+        with patch("collectors.pull",return_value=({"source":"Jobgether","term":"data scientist","status":"ok","received":0},[])):
             _,details=collect(["data scientist","data engineer"],"BR","jobgether")
         self.assertEqual(len(details),2)
 

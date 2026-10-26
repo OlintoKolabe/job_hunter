@@ -14,7 +14,8 @@
     "tests/test_opportunity_ui_contracts.py",
     "tests/test_gate12_scoring.py",
     "tests/test_block4_1.py",
-    "tests/test_ai_resume_matcher.py"
+    "tests/test_ai_resume_matcher.py",
+    "tests/test_p0_search_canary.py"
   ],
   "allowed_paths": [
     "scope/active.json",
@@ -26,7 +27,8 @@
     "tests/test_opportunity_ui_contracts.py",
     "tests/test_gate12_scoring.py",
     "tests/test_block4_1.py",
-    "tests/test_ai_resume_matcher.py"
+    "tests/test_ai_resume_matcher.py",
+    "tests/test_p0_search_canary.py"
   ],
   "forbidden_paths": [
     ".github/",

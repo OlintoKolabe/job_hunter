@@ -1,63 +1,53 @@
 {
-  "id": "JOB-HUNTER-MERGE-APPROVED-SEARCH-LOGOUT-20261026",
-  "kind": "bugfix",
+  "id": "JOB-HUNTER-OLINTO-FILHO-SEARCH-DIAGNOSTIC-20261026",
+  "kind": "audit-and-bounded-bugfix",
   "status": "active",
-  "base_ref": "6e3868330c26e604702204b9a541850e193ef0ea",
-  "feature_ref": "fix/merge-approved-search-logout-20261026",
+  "base_ref": "db95fe1d0de48362481c5c1c4201573934bddc09",
+  "feature_ref": "homologacao/busca-20261026-limpa",
   "allowed_files": [
     "scope/active.json",
-    "Dockerfile",
     "app.py",
     "catalog_engine.py",
     "collectors.py",
     "search_filters.py",
-    "ai_resume_matcher.py",
     "src/Opportunities.jsx",
-    "src/style.css",
-    "tests/test_opportunity_ui_contracts.py",
     "tests/test_p0_search_canary.py",
     "tests/test_search_role_scope.py",
-    "tests/test_search_source_fallbacks.py",
-    "tests/test_sidebar_logout_visibility.py"
+    "tests/test_search_source_fallbacks.py"
   ],
   "allowed_paths": [
     "scope/active.json",
-    "Dockerfile",
     "app.py",
     "catalog_engine.py",
     "collectors.py",
     "search_filters.py",
-    "ai_resume_matcher.py",
     "src/Opportunities.jsx",
-    "src/style.css",
-    "tests/test_opportunity_ui_contracts.py",
     "tests/test_p0_search_canary.py",
     "tests/test_search_role_scope.py",
-    "tests/test_search_source_fallbacks.py",
-    "tests/test_sidebar_logout_visibility.py"
+    "tests/test_search_source_fallbacks.py"
   ],
   "forbidden_paths": [
     ".github/",
     "vercel/"
   ],
-  "objective": "Merge only father/Marcus-approved search canary fixes, keep CV generation unchanged, and pin the logout action inside the always-visible sidebar.",
+  "objective": "Investigate whether the junior/intern Brazil-remote scarcity for Olinto Filho is real or caused by search coverage, catalog collection, title aliases, filters, source failures or exclusions; preserve father/Marcus search and CV production functionality.",
   "allowed_changes": [
-    "Transfer only homologated search collection, selection, paging, source matching and filter adjustments",
-    "Fix the engineering shortlist KeyError without changing resume generation methods, factual evidence or scoring rubric",
-    "Keep logout visible while long search results scroll",
-    "Run mandatory existing CV and search tests and React build",
-    "Sync operational Render branch without overwriting non-search changes"
+    "Read-only evidence gathering, baseline coverage and source-by-source comparisons for son vs proven father/Marcus paths",
+    "Only evidence-backed isolated search discovery/filter changes with small targeted regression tests",
+    "Use existing collectors/catalog and no new services; report raw, confirmed, rejected and review counts by source",
+    "Run backend/UI tests and real canary verification before any approval request"
   ],
   "forbidden_changes": [
-    "Alterations to resume_engine.py, resume_hybrid.py, job history, saved profiles, user credentials, database schema, costs",
-    "Changes to business logic of CV/ATS generation, notes/scoring formula or third-party source catalogue beyond approved search fixes",
-    "GitHub Actions, Vercel, new environments, unapproved migrations or replacement of existing multiuser database"
+    "Any writes to main or production Render/Neon",
+    "Passwords, user records, profile contents, history, candidacy decisions, scoring weights or ATS/DOCX engines",
+    "Guess-driven fixes, new collectors or architectures, GitHub Actions, Vercel and paid services",
+    "Any merge to main before explicit new authorization"
   ],
   "acceptance": [
-    "Approved father and Marcus search paths match homologated canary, son search remains for future canary work",
-    "Resume generation files unchanged; factual and DOCX regression tests pass",
-    "Logout remains visible on desktop/mobile while scrolling",
-    "Render operational deploy reports live with UI build and health OK; prior main rollback preserved"
+    "Canary starts from exact approved main baseline db95fe1 and uses separate Neon branch",
+    "Olinto Filho search checked with all 11 saved titles, Brazilian-eligible remote and period 7 days plus all-time diagnostic",
+    "Relevant junior/intern openings checked independently against source results; no assumption that zero results means zero real openings",
+    "Zero regressions in father/Marcus search classification and CV generation; completed/partial searches properly distinguished"
   ],
-  "deployment": "After confirming scope and test build, update main; synchronize only approved files into existing Render production branch and deploy; no merge of experimental CV engine."
+  "deployment": "Render isolated existing service srv-dbfk472jnfac73cm9kig (homologacao-busca), Neon isolated branch br-shy-snow-b7pqynjd; deploy manual. Main and production never changed."
 }

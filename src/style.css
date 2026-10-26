@@ -54,3 +54,7 @@
 /* Block 4: visible progress only while individual JD is actually pending. */
 .jh-score-spinner{display:inline-block;width:13px;height:13px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:jh-score-spin .75s linear infinite;flex:none}
 @keyframes jh-score-spin{to{transform:rotate(360deg)}}
+
+/* Sticky account controls: search results must not push logout off screen. */
+@media(min-width:851px){.shell>aside{position:sticky;top:0;height:100vh;max-height:100vh;overflow-y:auto;align-self:start}}
+@media(max-width:850px){.shell>aside{position:sticky;top:0;z-index:25;padding-right:59px}.shell>aside .sidebar-bottom{display:flex;position:absolute;top:7px;right:7px;margin:0;padding:0;border:0}.shell>aside .avatar,.shell>aside .who{display:none}.shell>aside .logout{margin:0;padding:9px;color:#fff;background:#253957;border-radius:8px}}

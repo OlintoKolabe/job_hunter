@@ -207,7 +207,9 @@ def hydrate_jobs(cursor,jobs,roles,url_key,limit=PER_BATCH_LIMIT):
                 ai_status='not_needed'
             # Resume Matcher-inspired, evidence-grounded AI replaces the legacy
             # extraction + deterministic grading on opt-in; one paid call per JD.
-            if valid and not j.get('needs_verification') and not is_technical_role and (not multiuser_enabled or factual_experience()) and os.getenv('JH_AI_ENABLED')=='1' and os.getenv('OPENAI_API_KEY'):
+            # Paid matchmaking is permanently disabled. Preserve the legacy
+            # branch only for reference; it must never reserve AI budget.
+            if False and valid and not j.get('needs_verification') and not is_technical_role and (not multiuser_enabled or factual_experience()) and os.getenv('JH_AI_ENABLED')=='1' and os.getenv('OPENAI_API_KEY'):
                 with tenant_connect(os.environ['DATABASE_URL'],connect_timeout=7) as budget_conn:
                     with budget_conn.cursor() as budget_cur:
                         usage_id=reserve(budget_cur,key,amount=0.015)

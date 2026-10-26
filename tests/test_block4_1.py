@@ -8,14 +8,16 @@ from block4_score import score_job,merge_semantic_requirements
 from scripts.check_scope import validate
 
 class Block41Tests(unittest.TestCase):
-    def test_historical_job_is_passed_to_cache_lookup(self):
+    def test_paid_matchmaking_endpoint_is_retired(self):
         from unittest.mock import Mock
         from app import jd_enrich,JDRequest
+        from fastapi import HTTPException
         row={"url":"https://example.com/jobs/123","title":"Product Manager","company":"Acme","source":"greenhouse"}
         with patch("app.require_auth"),patch("app.psycopg.connect"),patch("app.hydrate_jobs",return_value=([row],{})) as hydrate:
-            response=jd_enrich(Mock(),JDRequest(jobs=[row],roles="Product Manager"))
-        self.assertEqual(len(response["items"]),1)
-        self.assertEqual(hydrate.call_args.args[1][0]["url"],row["url"])
+            with self.assertRaises(HTTPException) as raised:
+                jd_enrich(Mock(),JDRequest(jobs=[row],roles="Product Manager"))
+        self.assertEqual(raised.exception.status_code,410)
+        hydrate.assert_not_called()
     def test_cached_score_does_not_call_ai_again(self):
         from datetime import datetime,timezone
         from unittest.mock import Mock

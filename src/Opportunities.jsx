@@ -17,8 +17,8 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},pro
  const profileIdentity=JSON.stringify([profile?.id||profile?.user_id||profile?.email||profile?.name||'',profile?.roles||[],profile?.country||'BR',profile?.mode||'remote',profile?.days??0]);
  const cancelActiveSearch=()=>{const running=activeSearchRef.current;if(running){running.abort();activeSearchRef.current=null;setBusy(false);}};
  const visibleUndecided=jobs=>jobs.filter(j=>!decidedUrlsRef.current.has(j.url));
- const [onlyNew,setOnlyNew]=useState(false),[searchedQuery,setSearchedQuery]=useState(''),[source,setSource]=useState('all'),[sources,setSources]=useState([{value:'all',label:'Todas as fontes'},{value:'inhire',label:'inHire'},{value:'quickin',label:'Quickin'},{value:'gupy',label:'Gupy'}]),[roles,setRoles]=useState(profile?boundedRoles(catalog):defaultRoles),[days,setDays]=useState(String(profile?.days??0)),[country,setCountry]=useState(profile?.country||'BR'),[countries,setCountries]=useState(initialCountries),[mode,setMode]=useState(profile?.mode||'remote'),[sort,setSort]=useState('score');
- const [sourceStats,setSourceStats]=useState({}),[reviews,setReviews]=useState([]),[excluded,setExcluded]=useState([]),[filterStats,setFilterStats]=useState({}),[rawScanned,setRawScanned]=useState(0),[busy,setBusy]=useState(false),[results,setResults]=useState([]),[message,setMessage]=useState(''),[error,setError]=useState(''),[cvErrors,setCvErrors]=useState({}),[checked,setChecked]=useState(0),[counts,setCounts]=useState({new:0,total:0}),[completed,setCompleted]=useState(false),[visibleCount,setVisibleCount]=useState(10),[evaluated,setEvaluated]=useState(0),[evaluationTotal,setEvaluationTotal]=useState(0),[scoringNow,setScoringNow]=useState([]),[scoringFailed,setScoringFailed]=useState([]),[scoringAttempted,setScoringAttempted]=useState([]);
+ const [onlyNew,setOnlyNew]=useState(false),[searchedQuery,setSearchedQuery]=useState(''),[source,setSource]=useState('all'),[sources,setSources]=useState([{value:'all',label:'Todas as fontes'},{value:'inhire',label:'inHire'},{value:'quickin',label:'Quickin'},{value:'gupy',label:'Gupy'}]),[roles,setRoles]=useState(profile?boundedRoles(catalog):defaultRoles),[days,setDays]=useState(String(profile?.days??0)),[country,setCountry]=useState(profile?.country||'BR'),[countries,setCountries]=useState(initialCountries),[mode,setMode]=useState(profile?.mode||'remote'),[sort,setSort]=useState('newest');
+ const [sourceStats,setSourceStats]=useState({}),[reviews,setReviews]=useState([]),[excluded,setExcluded]=useState([]),[filterStats,setFilterStats]=useState({}),[rawScanned,setRawScanned]=useState(0),[busy,setBusy]=useState(false),[results,setResults]=useState([]),[message,setMessage]=useState(''),[error,setError]=useState(''),[cvErrors,setCvErrors]=useState({}),[checked,setChecked]=useState(0),[counts,setCounts]=useState({new:0,total:0}),[completed,setCompleted]=useState(false),[visibleCount,setVisibleCount]=useState(10);
  const [flowTrace,setFlowTrace]=useState({raw:0,classified_confirmed:0,classified_review:0,history_excluded:0,display_confirmed:0,display_review:0});
  const [eligibilityTrace,setEligibilityTrace]=useState({eligible_for_detail:0,attempted:0,complete:0,failed:0,absent:0,deferred:0});
  const [sourceFieldStats,setSourceFieldStats]=useState({});
@@ -58,7 +58,7 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},pro
   const searchSignal=ms=>AbortSignal.any([controller.signal,AbortSignal.timeout(ms)]);
   setSourceFieldStats({});setSourceQuality({});
   setFlowTrace({raw:0,classified_confirmed:0,classified_review:0,history_excluded:0,display_confirmed:0,display_review:0});setEligibilityTrace({eligible_for_detail:0,attempted:0,complete:0,failed:0,absent:0,deferred:0});
-  setVisibleCount(10);setEvaluated(0);setEvaluationTotal(0);setScoringNow([]);setScoringFailed([]);setScoringAttempted([]);setBusy(true);setSearchedQuery(query());setError('');setResults([]);setReviews([]);setExcluded([]);setSourceStats({});setFilterStats({});setRawScanned(0);setChecked(0);setCompleted(false);setMessage('Consultando '+(sources.find(x=>x.value===source)?.label||source)+'…');
+  setVisibleCount(10);setBusy(true);setSearchedQuery(query());setError('');setResults([]);setReviews([]);setExcluded([]);setSourceStats({});setFilterStats({});setRawScanned(0);setChecked(0);setCompleted(false);setMessage('Consultando '+(sources.find(x=>x.value===source)?.label||source)+'…');
   const qs=query();const all=new Map();const uncertain=new Map();const outOfFilter=new Map();const totals={};const sourceTotals={};let inspected=0;const record=(d)=>{if(!isCurrent())return;setFlowTrace(old=>Object.fromEntries(Object.keys(old).map(k=>[k,old[k]+(d.flow_stats?.[k]||0)])));setEligibilityTrace(old=>Object.fromEntries(Object.keys(old).map(k=>[k,old[k]+(d.eligibility_fetch?.[k]||0)])));(d.details||[]).forEach(x=>{const src=(x.source||'desconhecida').toLowerCase();const n=sourceTotals[src]||{consultas:0,recebidas:0,erros:0,jdValidos:0,jdAusentes:0};n.consultas++;n.recebidas+=x.received||0;if(x.status==='error'||x.state==='pendente')n.erros++;sourceTotals[src]=n});for(const [src,v] of Object.entries(d.source_jd_stats||{})){const key=src.toLowerCase();const n=sourceTotals[key]||{consultas:0,recebidas:0,erros:0,jdValidos:0,jdAusentes:0};n.jdValidos+=(v.jd_valid||0);n.jdAusentes+=(v.jd_missing||0);sourceTotals[key]=n}setSourceStats({...sourceTotals});(d.review_items||[]).forEach(j=>uncertain.set(j.url,j));(d.excluded_items||[]).forEach(j=>{if(outOfFilter.size<300)outOfFilter.set(j.url,j)});setExcluded(visibleUndecided([...outOfFilter.values()]));for(const [key,n] of Object.entries(d.filter_stats||{})){totals[key]=(totals[key]||0)+n}inspected+=d.raw_count||0;setReviews(visibleUndecided([...uncertain.values()]));setFilterStats({...totals});setRawScanned(inspected)};let count=0;let completedAll=false;
   try{
    const requestJson=async (url,timeoutMs=30000)=>{
@@ -82,69 +82,9 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},pro
 
    (d.items||[]).forEach(j=>all.set(j.url,j));record(d);count+=d.total||0;
    setResults(visibleUndecided([...all.values()]));setCounts({new:all.size,total:count});
-   // Select from the entire discovery universe before spending any AI tokens.
-   const scoredOrAttempted=new Set();
-   let resolved=0;
-   async function enrichAvailable(selectedUrls){
-     const selected=new Set(selectedUrls);
-     const candidates=[...all.values()].filter(j=>selected.has(j.url)&&!scoredOrAttempted.has(j.url) &&
-       j.ranking?.score==null);
-     const waiting=[...new Map(candidates.map(j=>[j.url,j])).values()];
-     if(!waiting.length)return;
-     setEvaluationTotal(v=>v+waiting.length);
-     for(let start=0;start<waiting.length;start+=2){
-       if(!isCurrent())return;
-       const chunk=waiting.slice(start,start+2);
-       chunk.forEach(j=>scoredOrAttempted.add(j.url));
-       setScoringNow(chunk.map(j=>j.url));
-       try{
-         const response=await fetch('/api/jd/enrich',{method:'POST',headers:{'Content-Type':'application/json'},
-           signal:searchSignal(65000),body:JSON.stringify({jobs:chunk,roles})});
-         if(!response.ok)throw Error('Falha HTTP '+response.status);
-         const data=await response.json();
-         if(!isCurrent())return;
-         for(const j of data.items||[]){
-           if(all.has(j.url))all.set(j.url,{...all.get(j.url),...j});
-           if(uncertain.has(j.url))uncertain.set(j.url,{...uncertain.get(j.url),...j});
-         }
-         setResults(visibleUndecided([...all.values()]));setReviews(visibleUndecided([...uncertain.values()]));
-       }catch(err){
-         if(isCurrent())setScoringFailed(prev=>[...prev,...chunk.map(j=>j.url)]);
-       }finally{
-         if(!isCurrent())return;
-         setScoringAttempted(prev=>[...prev,...chunk.map(j=>j.url)]);
-         setScoringNow([]);
-         resolved+=chunk.length;setEvaluated(resolved);
-       }
-     }
-   }
-   async function rankEntireCollection(maxNew=10){
-     const available=[...all.values()].filter(j=>!scoredOrAttempted.has(j.url)&&j.jd_available===true&&!j.needs_verification?.length);
-     if(!available.length||maxNew<=0||!isCurrent())return;
-     setMessage('Selecionando as melhores candidatas de '+all.size+' vagas antes da avaliação por IA…');
-     const response=await fetch('/api/ranking/shortlist',{method:'POST',headers:{'Content-Type':'application/json'},
-       signal:searchSignal(15000),body:JSON.stringify({jobs:available.map(j=>({url:j.url,title:j.title,description:(j.description||'').slice(0,1500),ranking:j.ranking,needs_verification:j.needs_verification})),roles,limit:maxNew})});
-     if(!response.ok)throw Error('Triagem global indisponível (HTTP '+response.status+'); nenhuma avaliação paga foi iniciada.');
-     const selection=await response.json();
-     if(!isCurrent())return;
-     if(!Array.isArray(selection.urls))throw Error('Resposta inválida da triagem global');
-     setMessage('Triagem de '+all.size+' vagas concluída. Avaliando até '+selection.urls.length+' candidatas prioritárias com IA…');
-     await enrichAvailable(selection.urls);
-   }
-   // Surface an initial, tightly bounded set of real scores while the slower
-   // multi-board catalog continues scanning. Leave six slots for the complete
-   // collection; never re-evaluate a URL or silently use mock scores.
-   const earlyRanking=rankEntireCollection(4).catch(err=>{
-     if(!isCurrent())return;
-     setScoringFailed(prev=>[...prev,'shortlist-initial']);
-     setMessage('Triagem inicial indisponível; continuando a busca de vagas. '+err.message);
-   });
    // Indeed is an on-demand provider, not a catalog board. A catalog scan
    // with source=indeed always returns 400 and can flood the UI with retries.
    if(['himalayas','remotive','remoteok','indeed'].includes(source)){
-     await earlyRanking;
-     if(!isCurrent())return;
-     await rankEntireCollection(Math.max(0,10-scoredOrAttempted.size));
      if(!isCurrent())return;
      setCompleted(true);
      setMessage('Consulta à fonte '+source+' concluída; vagas apresentadas após filtros e exclusões do Histórico.');
@@ -196,7 +136,7 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},pro
       throw Error('Catálogo mudou durante a busca; execute nova consulta.');
      expectedTotal=batch.total_sources;
      expectedBoardCount=expectedTotal;
-     (batch.items||[]).filter(j=>source==='all'||j.source?.toLowerCase()===source||(source==='greenhouse'&&j.source?.toLowerCase()==='greenhouse_eu')).forEach(j=>{const old=all.get(j.url);all.set(j.url,old&&(old.ranking?.score!=null||scoredOrAttempted.has(j.url))?old:j)});
+     (batch.items||[]).filter(j=>source==='all'||j.source?.toLowerCase()===source||(source==='greenhouse'&&j.source?.toLowerCase()==='greenhouse_eu')).forEach(j=>all.set(j.url,j));
      record(batch);
      scannedBoards+=(batch.details||[]).length;
      count+=batch.found||0;setResults(visibleUndecided([...all.values()]));setChecked(x=>x+(batch.details||[]).length);setCounts({new:all.size,total:count});
@@ -209,10 +149,6 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},pro
    await scanWorker();
    if(!isCurrent())return;
    completedAll=reachedEnd&&skipped===0;
-   await earlyRanking;
-   if(!isCurrent())return;
-   await rankEntireCollection(Math.max(0,10-scoredOrAttempted.size));
-   if(!isCurrent())return;
    const failedSources=Object.values(sourceTotals).reduce((n,v)=>n+v.erros,0);
    const fullyComplete=completedAll&&failedSources===0;
    setCompleted(fullyComplete);
@@ -220,21 +156,6 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},pro
    setMessage(fullyComplete?'Busca concluída — '+catalogCoverage+'.':('Busca parcial — '+catalogCoverage+', '+skipped+' lotes e '+failedSources+' quadros com falha ou dados pendentes'+(truncatedByTime?', busca interrompida por limite de tempo':'')+'. Zero resultado não significa zero vagas. Confira Fontes.'));
   }catch(e){if(isCurrent()){setError(e.message);setMessage('Busca parcial — os resultados encontrados continuam disponíveis. '+e.message);}}
   finally{if(activeSearchRef.current===controller){activeSearchRef.current=null;setBusy(false)}}
- }
- async function evaluateManually(job){
-   setScoringNow([job.url]);setScoringFailed(prev=>prev.filter(x=>x!==job.url));
-   try{
-     const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),30000);
-     let response;
-     try{response=await fetch('/api/jd/enrich',{method:'POST',headers:{'Content-Type':'application/json'},signal:controller.signal,body:JSON.stringify({jobs:[job],roles,manual:true})})}
-     finally{clearTimeout(timeout)}
-     if(!response.ok)throw Error('Avaliação indisponível: HTTP '+response.status);
-     const data=await response.json();const scored=(data.items||[]).find(x=>x.url===job.url);
-     if(!scored)throw Error('A vaga não pôde ser avaliada');
-     setReviews(prev=>prev.map(x=>x.url===job.url?{...x,...scored}:x));
-     setResults(prev=>prev.map(x=>x.url===job.url?{...x,...scored}:x));
-   }catch(e){setScoringFailed(prev=>[...prev,job.url]);setError(e.message)}
-   finally{setScoringNow([]);setScoringAttempted(prev=>[...prev,job.url])}
  }
  const [cvNow,setCvNow]=useState([]);
  const [decisionNow,setDecisionNow]=useState([]),[hiddenDecisions,setHiddenDecisions]=useState([]);
@@ -303,36 +224,6 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},pro
  // The main list is a strict result set: uncertainty about the selected
  // country/mode belongs only in the separate collapsed diagnostics section.
  const combined=new Map();(currentMatches?results:[]).filter(v=>!v.needs_verification?.length).forEach(v=>combined.set(v.url,{...v,confirmed:true}));
- const scoreStatus=v=>{
-   if(v.jd_available===false)return 'no_jd';
-   if(v.ranking?.score!==null&&v.ranking?.score!==undefined)return 'scored';
-   if(scoringFailed.includes(v.url))return 'failed';
-   if(scoringNow.includes(v.url))return 'calculating';
-   if(v.confirmed && busy && !scoringAttempted.includes(v.url) && v.ranking?.score==null)return 'waiting';
-   return 'inconclusive';
- };
- const scoreDisplay=v=>{
-   const state=scoreStatus(v);
-   if(state==='scored')return <span style={{display:'grid',gap:3}}><strong>{v.ranking?.method==='local'?'Aderência local estimada':'Aderência'}: {v.ranking.score}/100</strong>{v.ranking?.method==='local'&&<small>Sem custo de IA · baseada apenas nos requisitos interpretados</small>}{v.needs_verification?.length>0&&<small>Elegibilidade a confirmar: {v.needs_verification.join(', ')}</small>}{v.ranking?.application_recommendation?.score!=null&&<strong>Recomendação: {v.ranking.application_recommendation.score}/100</strong>}<small>{({recomendada:'Vale candidatar-se',avaliar:'Avaliar candidatura',nao_prioritaria:'Baixa prioridade',nao_recomendada:'Não recomendar',confirmar:'Confirmar localização'})[v.ranking?.application_recommendation?.decision]||'Recomendação não calculada'}</small></span>;
-   if(state==='waiting'||state==='calculating')return <span role="status" style={{display:'inline-flex',alignItems:'center',gap:6}}><span aria-hidden="true" className="jh-score-spinner"/>{state==='calculating'?'Calculando nota…':'Aguardando avaliação'}</span>;
-   return <strong>{state==='no_jd'?'JD indisponível':state==='failed'?'Falha na avaliação':'Nota inconclusiva'}</strong>;
- };
- const scoreExplanation=v=>{
-   const state=scoreStatus(v);
-   if(state==='no_jd')return 'Descrição de vaga ausente ou inválida: sem nota, sem IA paga e sem geração de currículo.';
-   if(state==='waiting'||state==='calculating')return 'Analisando os requisitos da vaga. A nota aparecerá quando a avaliação terminar.';
-   if(state==='failed')return 'O lote falhou; tente uma nova busca';
-   if(state==='scored' && v.ranking?.confidence==='essential_gap')return 'Exigência técnica obrigatória não comprovada no perfil';
-   if(state==='scored' && v.ranking?.confidence==='hard_role_mismatch')return 'Incompatibilidade essencial com função técnica — nenhuma chamada de IA foi necessária';
-   if(state==='scored')return v.ranking?.confidence==='requisitos_extraidos'?'% dos requisitos extraídos':v.ranking?.confidence==='amostra_limitada'?'Amostra limitada — conferir JD':'Nota calculada';
-   if(v.ai_status==='failed')return 'A análise automática falhou. Tente uma nova busca.';
-   if(v.ai_status==='cached_failure')return 'A análise automática falhou; o resultado foi guardado para evitar nova cobrança na mesma vaga.';
-   if(v.ai_status==='disabled')return 'IA desativada — avaliação apenas por regras';
-   if(v.ai_status==='budget_exhausted')return 'Limite mensal de IA atingido';
-   if(v.jd_status==='indisponivel')return 'Não foi possível obter a descrição completa da vaga.';
-   if(v.jd_status==='pendente')return 'A descrição ainda aguarda avaliação.';
-   return (v.ai_status==='interpreted'||v.ai_status==='cache')?'A IA analisou a descrição, mas os requisitos e as evidências identificados ainda não sustentam uma nota confiável.':v.ranking?.confidence==='cobertura_insuficiente'?'JD disponível, mas a extração de requisitos é insuficiente para uma nota confiável.':'JD disponível, mas não há evidências suficientes para uma nota confiável.';
- };
  const geoPriority=v=>{
    const raw=String(v.location||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
    const explicitBrazil=/(^|[^a-z])(brazil|brasil|brazilian|sao paulo|rio de janeiro|belo horizonte|brasilia|curitiba|goiania|porto alegre|recife|campinas|florianopolis)([^a-z]|$)/.test(raw)||/(^|[\s,(/])br([\s,)/]|$)/.test(raw);
@@ -346,21 +237,15 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},pro
    if(v.needs_verification?.includes('pais'))return 3;
    return 4;
  };
- const ordered=[...combined.values()].filter(v=>!hiddenDecisions.includes(v.url)&&(!onlyNew||(v.is_new&&v.ranking?.score==null))).sort((a,b)=>{
+ const ordered=[...combined.values()].filter(v=>!hiddenDecisions.includes(v.url)&&(!onlyNew||v.is_new)).sort((a,b)=>{
    const date=v=>{const x=Date.parse(v.published||'');return Number.isFinite(x)?x:0};
    // Unconfirmed country/mode must not crowd out the confirmed opportunities.
    if(Boolean(a.confirmed)!==Boolean(b.confirmed))return a.confirmed?-1:1;
-   // In the score view, an evaluated strong match must reach the first ten
-   // even if its eligible remote location says LATAM rather than Brazil.
-   if(sort==='score'){
-     const scoreDiff=(b.ranking?.score??-1)-(a.ranking?.score??-1);
-     if(scoreDiff)return scoreDiff;
-   }
    if(country==='BR'||country==='LATAM'){
      const geoDiff=geoPriority(a)-geoPriority(b);
      if(geoDiff)return geoDiff;
    }
-   return sort==='recommendation'?((b.ranking?.application_recommendation?.score??-1)-(a.ranking?.application_recommendation?.score??-1)||date(b)-date(a)):sort==='score'?((b.ranking?.score??-1)-(a.ranking?.score??-1)||((b.ranking?.requirements?.length||0)-(a.ranking?.requirements?.length||0))||date(b)-date(a)):(sort==='newest'?date(b)-date(a):date(a)-date(b))
+   return sort==='newest'?date(b)-date(a):date(a)-date(b)
  });
  return <section className="history-pane">
   <div className="infra-title"><div><h3>Encontrar oportunidades</h3><p>Personalize sua busca. Os quadros são verificados automaticamente ao pesquisar.</p></div></div>
@@ -370,23 +255,23 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},pro
    <label className="jh-field jh-roles"><span>Quais vagas você procura? <button type="button" style={{marginLeft:12,fontSize:12}} disabled={busy} onClick={()=>setRoles(defaultRoles)}>Restaurar cargos padrão</button></span><textarea rows="3" value={roles} onChange={e=>setRoles(e.target.value)} maxLength={5000} placeholder="Separe os cargos por vírgula"/></label>}
    <label className="jh-field"><span>Fonte / site</span><select value={source} onChange={e=>changeSource(e.target.value)}>{sources.map(x=><option key={x.value} value={x.value}>{x.label}</option>)}</select></label>
    <label className="jh-field"><span>Publicadas nos últimos</span><select value={days} onChange={e=>setDays(e.target.value)}>{[['1','1 dia'],['3','3 dias'],['7','7 dias'],['15','15 dias'],['30','30 dias'],['60','60 dias'],['90','90 dias'],['0','Qualquer período']].map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label>
-   <label className="jh-field"><span>Ordenar por</span><select value={sort} onChange={e=>setSort(e.target.value)}><option value="score">Maior aderência primeiro</option><option value="recommendation">Mais recomendadas primeiro</option><option value="newest">Mais recentes primeiro</option><option value="oldest">Mais antigas primeiro</option></select></label>
+   <label className="jh-field"><span>Ordenar por</span><select value={sort} onChange={e=>setSort(e.target.value)}><option value="newest">Mais recentes primeiro</option><option value="oldest">Mais antigas primeiro</option></select></label>
    <label className="jh-field"><span>País / Região</span><select value={country} onChange={e=>setCountry(e.target.value)}>{countries.map(c=><option key={c.value} value={c.value}>{c.label}</option>)}</select></label>
    <label className="jh-field"><span>Modalidade</span><select value={mode} onChange={e=>setMode(e.target.value)}><option value="remote">Remoto / Home office</option><option value="hybrid">Híbrido</option><option value="onsite">Presencial</option><option value="all">Todas as modalidades</option></select></label>
-   <label style={{display:"inline-flex",alignItems:"center",gap:8,fontWeight:700,cursor:"pointer",gridColumn:"1 / -1"}}><input type="checkbox" checked={onlyNew} onChange={e=>setOnlyNew(e.target.checked)}/> Somente vagas novas <small style={{fontWeight:400,opacity:.8}}>(primeira descoberta, ainda sem nota)</small></label>
+   <label style={{display:"inline-flex",alignItems:"center",gap:8,fontWeight:700,cursor:"pointer",gridColumn:"1 / -1"}}><input type="checkbox" checked={onlyNew} onChange={e=>setOnlyNew(e.target.checked)}/> Somente vagas novas <small style={{fontWeight:400,opacity:.8}}>(primeira descoberta)</small></label>
   </div>
-  {busy&&<div role="status" className="notice"><p>Busca e avaliação em andamento: {checked} quadros consultados · {evaluated}/{evaluationTotal} JDs adicionais processados</p><progress value={evaluationTotal?evaluated:checked} max={evaluationTotal||Math.max(checked+4,1)} style={{width:"100%"}} /></div>}
+  {busy&&<div role="status" className="notice"><p>Busca em andamento: {checked} quadros consultados</p><progress value={checked} max={Math.max(checked+4,1)} style={{width:"100%"}} /></div>}
   <button className="import-btn" disabled={busy||!roles.trim()} onClick={search}>{busy?'Pesquisando vagas e verificando quadros…':'Buscar oportunidades'}</button>
   {message&&<p className="notice" role="status">{message}{checked>0?' · Quadros verificados agora: '+checked:''}</p>}
   {error&&<p className="notice" role="alert">{error}</p>}
   {!currentMatches&&searchedQuery&&<p className="notice">Os filtros mudaram após a última pesquisa. Clique em Buscar oportunidades para atualizar os resultados.</p>}
-  {currentMatches&&(results.length>0||reviews.length>0||completed)&&<><div className="history-stats"><span>{onlyNew?"Vagas novas nesta busca":"Oportunidades para avaliar"}: <b>{ordered.length}</b></span><span>Confirmadas: <b>{results.length}</b></span><span>Precisam de confirmação: <b>{visibleReviews.filter(v=>!results.some(r=>r.url===v.url)).length}</b></span><span>Anúncios analisados: <b>{rawScanned}</b></span><span>Quadros consultados: <b>{checked}</b></span>{mode!=='all'&&<span>Modalidade a confirmar: <b>{unknownModeCount}</b></span>}{country!=='GLOBAL'&&<span>País a confirmar: <b>{unknownCountryCount}</b></span>}</div>
-  {ordered.length===0?<p>{onlyNew?"Nenhuma vaga inédita e sem nota nesta pesquisa. Desmarque o filtro para conferir os demais resultados e abra Fontes para verificar os quadros consultados.":"Nenhuma vaga correspondente foi identificada nos quadros consultados. Abra Fontes e Auditoria dos filtros para ver falhas e exclusões."}</p>:
+  {currentMatches&&(results.length>0||reviews.length>0||completed)&&<><div className="history-stats"><span>{onlyNew?"Vagas novas nesta busca":"Oportunidades encontradas"}: <b>{ordered.length}</b></span><span>Confirmadas: <b>{results.length}</b></span><span>Precisam de confirmação: <b>{visibleReviews.filter(v=>!results.some(r=>r.url===v.url)).length}</b></span><span>Anúncios analisados: <b>{rawScanned}</b></span><span>Quadros consultados: <b>{checked}</b></span>{mode!=='all'&&<span>Modalidade a confirmar: <b>{unknownModeCount}</b></span>}{country!=='GLOBAL'&&<span>País a confirmar: <b>{unknownCountryCount}</b></span>}</div>
+  {ordered.length===0?<p>{onlyNew?"Nenhuma vaga inédita nesta pesquisa. Desmarque o filtro para conferir os demais resultados e abra Fontes para verificar os quadros consultados.":"Nenhuma vaga correspondente foi identificada nos quadros consultados. Abra Fontes e Auditoria dos filtros para ver falhas e exclusões."}</p>:
   <><p>Somente vagas confirmadas para o país, modalidade e período selecionados. Vagas sem comprovação ficam separadas em "Vagas não confirmadas pelos filtros", inclusive anúncios sem data verificável.</p>
-  <div className="table-wrap"><table><thead><tr><th>Nota / evidências</th><th>Cargo e situação</th><th>Empresa</th><th>Local informado</th><th>Data</th><th>Modalidade detectada</th><th>Fonte</th><th style={{textAlign:'right'}}>Ações</th></tr></thead><tbody>{ordered.slice(0,visibleCount).map(v=><tr key={v.url}><td>{scoreDisplay(v)}<small style={{display:'block'}}>{scoreExplanation(v)}</small><details><summary>Como foi avaliada?</summary><p>{v.ranking?.reason||'Sem análise'}</p>{v.ranking?.application_recommendation&&<p><strong>Recomendação de candidatura:</strong> {v.ranking.application_recommendation.score==null?'A confirmar':v.ranking.application_recommendation.score+'/100'} — {v.ranking.application_recommendation.reason} {v.ranking.application_recommendation.factors?.join(' · ')}</p>}{v.ranking?.match_summary&&<p><strong>Comparação profissional:</strong> {v.ranking.match_summary.direct} diretas · {v.ranking.match_summary.transferable} transferíveis · {v.ranking.match_summary.unproven} sem evidência documentada</p>}<small>Requisitos identificados: {v.ranking?.evaluated_requirements??0} · Obrigatórios: {v.ranking?.mandatory_count??0} · Desejáveis analisados: {v.ranking?.desirable_count??0} · Não comprovados: {v.ranking?.unverified_count??0} · Não interpretados: {v.ranking?.uninterpreted_count??0} · Cobertura: {v.ranking?.coverage_pct??0}%</small>{v.ranking?.requirements?.map((r,i)=><p key={i}><b>{r.type}: {r.name}</b> — {r.match_level==='direta'?'Correspondência direta':r.match_level==='transferivel'?'Experiência transferível':r.status==='nao_interpretado'?'Não interpretado':'Sem evidência comprovada'}{r.evidence?' · Evidência: '+r.evidence:''}{r.explanation?' · '+r.explanation:''}</p>)}<p>Prioridade (fora da nota): {v.ranking?.priority?.remote?'Remoto':'Modalidade não remota/indefinida'} · {v.ranking?.priority?.salary_informed?'Salário informado':'Salário não informado'} · Setor: {v.ranking?.priority?.sector||'não identificado'}</p></details></td><td><a href={v.url} target="_blank" rel="noopener noreferrer">{v.title}</a>{v.is_new&&v.ranking?.score==null&&<span title="Vaga descoberta pela primeira vez pelo Caçador" style={{display:'inline-flex',verticalAlign:'middle',marginLeft:8,background:'#ffedd5',color:'#9a3412',border:'1px solid #fdba74',borderRadius:999,padding:'2px 8px',fontWeight:800,fontSize:11}}>Novo!</span>}<small style={{display:'block',fontWeight:600,marginTop:4}}> {v.confirmed?'Confirmada':'A confirmar: '+(v.needs_verification||[]).join(', ')}</small>{v.jd_evidence?.family_evidence?.length>0&&<small style={{display:'block',opacity:.75}}>JD: {v.jd_evidence.family_evidence.flatMap(e=>e.evidence).slice(0,2).join(' / ')}</small>}</td><td>{v.company||'Não informada'}{v.already_known&&<small style={{display:'block',opacity:.65}}>Já conhecida</small>}</td><td>{v.location||'Não informada'}</td><td>{v.published?String(v.published).slice(0,10):'—'}</td><td>{({remote:'Remoto',hybrid:'Híbrido',onsite:'Presencial'})[v.detected_mode]||'Não identificada'}</td><td>{v.source||'—'}{v.board_slug&&<small style={{display:'block',opacity:.76}}>Quadro: {v.board_slug}</small>}</td><td style={{textAlign:'right',whiteSpace:'nowrap'}}><DecisionActions job={v} pending={decisionNow.includes(v.url)} onDecision={markDecision} onGenerateCv={generateCv} cvPending={cvNow.includes(v.url)} cvError={cvErrors[v.url]}/></td></tr>)}</tbody></table></div>{ordered.length>visibleCount&&<button type="button" className="import-btn" onClick={()=>setVisibleCount(v=>v+10)}>Mostrar mais 10 resultados ({Math.min(visibleCount,ordered.length)} de {ordered.length})</button>}</>}
-  {reviewDiagnostics.length>0&&<details className="catalog-diagnostics"><summary>Vagas não confirmadas pelos filtros ({reviewDiagnostics.length})</summary><p>Essas vagas não foram incluídas entre as elegíveis. País, modalidade ou data precisam ser comprovados; a nota não representa elegibilidade.</p><div className="table-wrap"><table><thead><tr><th>Vaga</th><th>Fonte</th><th>Motivo</th><th>Nota</th></tr></thead><tbody>{reviewDiagnostics.map(v=><tr key={v.url}><td><a href={v.url} target="_blank" rel="noopener noreferrer">{v.title}</a></td><td>{v.source||'—'}</td><td>{(v.needs_verification||[]).join(', ')}</td><td>{scoreDisplay(v)} {v.jd_available===true&&<button type="button" disabled={scoringNow.includes(v.url)} onClick={()=>evaluateManually(v)}>Avaliar esta vaga</button>} <DecisionActions job={v} pending={decisionNow.includes(v.url)} onDecision={markDecision} onGenerateCv={generateCv} cvPending={cvNow.includes(v.url)} cvError={cvErrors[v.url]}/></td></tr>)}</tbody></table></div></details>}
+  <div className="table-wrap"><table><thead><tr><th>Cargo e situação</th><th>Empresa</th><th>Local informado</th><th>Data</th><th>Modalidade detectada</th><th>Fonte</th><th style={{textAlign:'right'}}>Ações</th></tr></thead><tbody>{ordered.slice(0,visibleCount).map(v=><tr key={v.url}><td><a href={v.url} target="_blank" rel="noopener noreferrer">{v.title}</a>{v.is_new&&<span title="Vaga descoberta pela primeira vez pelo Caçador" style={{display:'inline-flex',verticalAlign:'middle',marginLeft:8,background:'#ffedd5',color:'#9a3412',border:'1px solid #fdba74',borderRadius:999,padding:'2px 8px',fontWeight:800,fontSize:11}}>Novo!</span>}<small style={{display:'block',fontWeight:600,marginTop:4}}> {v.confirmed?'Confirmada':'A confirmar: '+(v.needs_verification||[]).join(', ')}</small>{v.jd_evidence?.family_evidence?.length>0&&<small style={{display:'block',opacity:.75}}>JD: {v.jd_evidence.family_evidence.flatMap(e=>e.evidence).slice(0,2).join(' / ')}</small>}</td><td>{v.company||'Não informada'}{v.already_known&&<small style={{display:'block',opacity:.65}}>Já conhecida</small>}</td><td>{v.location||'Não informada'}</td><td>{v.published?String(v.published).slice(0,10):'—'}</td><td>{({remote:'Remoto',hybrid:'Híbrido',onsite:'Presencial'})[v.detected_mode]||'Não identificada'}</td><td>{v.source||'—'}{v.board_slug&&<small style={{display:'block',opacity:.76}}>Quadro: {v.board_slug}</small>}</td><td style={{textAlign:'right',whiteSpace:'nowrap'}}><DecisionActions job={v} pending={decisionNow.includes(v.url)} onDecision={markDecision} onGenerateCv={generateCv} cvPending={cvNow.includes(v.url)} cvError={cvErrors[v.url]}/></td></tr>)}</tbody></table></div>{ordered.length>visibleCount&&<button type="button" className="import-btn" onClick={()=>setVisibleCount(v=>v+10)}>Mostrar mais 10 resultados ({Math.min(visibleCount,ordered.length)} de {ordered.length})</button>}</>}
+  {reviewDiagnostics.length>0&&<details className="catalog-diagnostics"><summary>Vagas não confirmadas pelos filtros ({reviewDiagnostics.length})</summary><p>Essas vagas não foram incluídas entre as elegíveis. País, modalidade ou data precisam ser comprovados.</p><div className="table-wrap"><table><thead><tr><th>Vaga</th><th>Fonte</th><th>Motivo</th><th>Ações</th></tr></thead><tbody>{reviewDiagnostics.map(v=><tr key={v.url}><td><a href={v.url} target="_blank" rel="noopener noreferrer">{v.title}</a></td><td>{v.source||'—'}</td><td>{(v.needs_verification||[]).join(', ')}</td><td><DecisionActions job={v} pending={decisionNow.includes(v.url)} onDecision={markDecision} onGenerateCv={generateCv} cvPending={cvNow.includes(v.url)} cvError={cvErrors[v.url]}/></td></tr>)}</tbody></table></div></details>}
   {excluded.length>0&&<details className="catalog-diagnostics"><summary>Fora dos filtros — decidir manualmente ({excluded.length} nesta amostra)</summary><p>Esses anúncios não passaram nos critérios selecionados. Não são considerados elegíveis. Mostramos até 25 por lote e 300 nesta busca, sem repetir vagas já decididas.</p><div className="table-wrap"><table><thead><tr><th>Vaga</th><th>Empresa</th><th>Fonte</th><th>Motivo da exclusão</th><th>Ações</th></tr></thead><tbody>{excluded.filter(v=>!hiddenDecisions.includes(v.url)).sort((a,b)=>geoPriority(a)-geoPriority(b)).map(v=><tr key={v.url}><td><a href={v.url} target="_blank" rel="noopener noreferrer">{v.title}</a></td><td>{v.company||'Não informada'}</td><td>{v.source||'—'}</td><td>{({cargo:'Cargo',pais:'País',modalidade:'Modalidade',data:'Data',espanhol_obrigatorio:'Espanhol obrigatório'})[v.excluded_reason]||v.excluded_reason}</td><td><DecisionActions job={v} pending={decisionNow.includes(v.url)} onDecision={markDecision} onGenerateCv={generateCv} cvPending={cvNow.includes(v.url)} cvError={cvErrors[v.url]}/></td></tr>)}</tbody></table></div></details>}
-  <details className="catalog-diagnostics"><summary>Fontes consultadas nesta busca</summary><p>JDs válidos e ausentes: somente vagas elegíveis ou em revisão, antes da análise paga. Não representam todos os anúncios brutos.</p><div className="table-wrap"><table><thead><tr><th>Fonte</th><th>Consultas</th><th>Anúncios brutos</th><th>JDs válidos</th><th>JDs ausentes</th><th>Pendências</th></tr></thead><tbody>{Object.entries(sourceStats).sort((a,b)=>b[1].recebidas-a[1].recebidas).map(([source,v])=><tr key={source}><td>{source}</td><td>{v.consultas}</td><td>{v.recebidas}</td><td>{v.jdValidos||0}</td><td>{v.jdAusentes||0}</td><td>{v.erros}</td></tr>)}</tbody></table></div></details>
+  <details className="catalog-diagnostics"><summary>Fontes consultadas nesta busca</summary><p>JDs válidos e ausentes: somente vagas elegíveis ou em revisão, Não representam todos os anúncios brutos.</p><div className="table-wrap"><table><thead><tr><th>Fonte</th><th>Consultas</th><th>Anúncios brutos</th><th>JDs válidos</th><th>JDs ausentes</th><th>Pendências</th></tr></thead><tbody>{Object.entries(sourceStats).sort((a,b)=>b[1].recebidas-a[1].recebidas).map(([source,v])=><tr key={source}><td>{source}</td><td>{v.consultas}</td><td>{v.recebidas}</td><td>{v.jdValidos||0}</td><td>{v.jdAusentes||0}</td><td>{v.erros}</td></tr>)}</tbody></table></div></details>
   <details className="catalog-diagnostics"><summary>Auditoria dos filtros</summary><p>Total bruto analisado: {rawScanned}. As exclusões são contadas por motivo, antes da deduplicação com o histórico.</p>{Object.entries(filterStats).map(([reason,n])=><p key={reason}>{reason}: <b>{n}</b></p>)}</details>
   <details className="catalog-diagnostics"><summary>Integridade dos dados por fonte</summary>
    <p>Campos efetivamente recebidos nos anúncios brutos, após a recuperação de detalhes disponível. Ausência não prova que o site original não possua a informação.</p>

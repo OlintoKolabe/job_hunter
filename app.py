@@ -847,6 +847,7 @@ def ranking_shortlist(request: Request, payload: ShortlistRequest):
 @app.post("/api/jd/enrich")
 def jd_enrich(request: Request, payload: JDRequest):
     require_auth(request)
+    raise HTTPException(410, "Avaliações de matchmaking foram desativadas; a IA permanece disponível somente para gerar currículos")
     if len(payload.jobs)>10:raise HTTPException(400,"Máximo de 10 vagas por lote")
     if len(payload.roles)>5000:raise HTTPException(400,"Filtro inválido")
     rows=[]

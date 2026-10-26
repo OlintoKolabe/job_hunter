@@ -1,63 +1,50 @@
 {
-  "id": "JOB-HUNTER-MERGE-APPROVED-SEARCH-LOGOUT-20261026",
+  "id": "JOB-HUNTER-DISABLE-PAID-MATCHMAKING-20261026",
   "kind": "bugfix",
-  "status": "active",
-  "base_ref": "6e3868330c26e604702204b9a541850e193ef0ea",
-  "feature_ref": "fix/merge-approved-search-logout-20261026",
+  "status": "canary",
+  "base_ref": "db95fe1d0de48362481c5c1c4201573934bddc09",
+  "feature_ref": "fix/disable-matchmaking-ai-20261026",
   "allowed_files": [
     "scope/active.json",
-    "Dockerfile",
-    "app.py",
-    "catalog_engine.py",
-    "collectors.py",
-    "search_filters.py",
-    "ai_resume_matcher.py",
     "src/Opportunities.jsx",
-    "src/style.css",
+    "app.py",
+    "ai_resume_matcher.py",
+    "jd_enrichment.py",
+    "ai_interpreter.py",
     "tests/test_opportunity_ui_contracts.py",
-    "tests/test_p0_search_canary.py",
-    "tests/test_search_role_scope.py",
-    "tests/test_search_source_fallbacks.py",
-    "tests/test_sidebar_logout_visibility.py"
+    "tests/test_gate12_scoring.py",
+    "tests/test_block4_1.py"
   ],
   "allowed_paths": [
     "scope/active.json",
-    "Dockerfile",
-    "app.py",
-    "catalog_engine.py",
-    "collectors.py",
-    "search_filters.py",
-    "ai_resume_matcher.py",
     "src/Opportunities.jsx",
-    "src/style.css",
+    "app.py",
+    "ai_resume_matcher.py",
+    "jd_enrichment.py",
+    "ai_interpreter.py",
     "tests/test_opportunity_ui_contracts.py",
-    "tests/test_p0_search_canary.py",
-    "tests/test_search_role_scope.py",
-    "tests/test_search_source_fallbacks.py",
-    "tests/test_sidebar_logout_visibility.py"
+    "tests/test_gate12_scoring.py",
+    "tests/test_block4_1.py"
   ],
   "forbidden_paths": [
     ".github/",
     "vercel/"
   ],
-  "objective": "Merge only father/Marcus-approved search canary fixes, keep CV generation unchanged, and pin the logout action inside the always-visible sidebar.",
+  "objective": "Remove paid matchmaking scores and controls while reserving OpenAI exclusively for DOCX CV generation, preserving search and multi-profile operations.",
   "allowed_changes": [
-    "Transfer only homologated search collection, selection, paging, source matching and filter adjustments",
-    "Fix the engineering shortlist KeyError without changing resume generation methods, factual evidence or scoring rubric",
-    "Keep logout visible while long search results scroll",
-    "Run mandatory existing CV and search tests and React build",
-    "Sync operational Render branch without overwriting non-search changes"
+    "Remove ranking and scoring display, automatic and manual evaluation requests in Opportunities UI",
+    "Reject deprecated matchmaking endpoint and guard evaluation-only OpenAI provider paths",
+    "Adjust focused regression contracts and verify CV download unchanged"
   ],
   "forbidden_changes": [
-    "Alterations to resume_engine.py, resume_hybrid.py, job history, saved profiles, user credentials, database schema, costs",
-    "Changes to business logic of CV/ATS generation, notes/scoring formula or third-party source catalogue beyond approved search fixes",
-    "GitHub Actions, Vercel, new environments, unapproved migrations or replacement of existing multiuser database"
+    "Change CV creation contracts, DOCX engines, job search sources/filters, profiles, history or schema",
+    "Main merge, production deploy, new services or paid AI validation without explicit approval",
+    "GitHub Actions or Vercel build"
   ],
   "acceptance": [
-    "Approved father and Marcus search paths match homologated canary, son search remains for future canary work",
-    "Resume generation files unchanged; factual and DOCX regression tests pass",
-    "Logout remains visible on desktop/mobile while scrolling",
-    "Render operational deploy reports live with UI build and health OK; prior main rollback preserved"
+    "Zero evaluation OpenAI network requests from UI or legacy backend paths",
+    "Three sections preserve disposition and CV buttons",
+    "Existing CV endpoint intact, frontend build and targeted tests pass"
   ],
-  "deployment": "After confirming scope and test build, update main; synchronize only approved files into existing Render production branch and deploy; no merge of experimental CV engine."
+  "deployment": "Canary branch only; no main merge or production deploy without explicit approval."
 }

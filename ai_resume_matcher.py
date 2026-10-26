@@ -43,6 +43,8 @@ def evidence_catalog():
 
 
 def _ask(task, jd, title, company=""):
+    if task == "evaluate":
+        raise AIUnavailable("Avaliações de matchmaking foram desativadas; a IA é exclusiva para currículos")
     if os.getenv("JH_AI_ENABLED") != "1" or not os.getenv("OPENAI_API_KEY"):
         raise AIUnavailable("IA indisponível: ative JH_AI_ENABLED e OPENAI_API_KEY no Render")
     jd_clean=relevant_jd_text(jd)

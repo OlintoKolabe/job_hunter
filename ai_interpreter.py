@@ -9,6 +9,8 @@ from block4_score import SKILLS
 MODEL=os.getenv("JH_AI_MODEL","gpt-4.1-nano")
 MAX_OUTPUT=1000
 def interpret(description):
+    # Matchmaking OpenAI use is retired. CV generation has its own path.
+    return None
     if os.getenv("JH_AI_ENABLED")!="1" or not os.getenv("OPENAI_API_KEY"):
         return None
     plain=re.sub(r'</(?:p|li|div|h[1-6])>', '\n', description, flags=re.I)

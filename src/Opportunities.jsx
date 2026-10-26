@@ -123,28 +123,35 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},pro
      setMessage('Consulta à fonte '+source+' concluída; vagas apresentadas após filtros e exclusões do Histórico.');
      return;
    }
-   const scanBatchSize=6; // Match the backend's six concurrent catalog workers.
-   let offset=0;
+   const scanBatchSize=6;
+   const scanConcurrency=2; // Disjoint catalog strides; no duplicate board requests.
    let skipped=0;
-   let nextIntermediateRanking=12;
-   for(let n=0;n<180;n++){
-    let batch;
+   let reachedEnd=false;
+   const scanWorker=async(workerIndex)=>{
+    let offset=workerIndex*scanBatchSize;
+    for(let n=0;n<90;n++){
+     let batch;
      for(let attempt=0;attempt<2;attempt++){
       try{batch=await requestJson('/api/catalog/scan?offset='+offset+'&limit='+scanBatchSize+'&'+qs);accumulateSourceFields(batch);break}
       catch(err){if(!['TimeoutError','AbortError'].includes(err.name)&&!(err instanceof TypeError))break}
      }
-     if(!batch){skipped++;offset+=scanBatchSize;setMessage('Alguns quadros falharam após tentativa de recuperação; continuando os demais. Falhas: '+skipped);continue}
-    (batch.items||[]).filter(j=>source==='all'||j.source?.toLowerCase()===source||(source==='greenhouse'&&j.source?.toLowerCase()==='greenhouse_eu')).forEach(j=>{const old=all.get(j.url);all.set(j.url,old&&(old.ranking?.score!=null||scoredOrAttempted.has(j.url))?old:j)});record(batch);
-    offset=batch.next_offset;if(!Number.isFinite(offset))throw Error('Paginação inválida');
-    count+=batch.found||0;setResults(visibleUndecided([...all.values()]));setChecked(x=>x+(batch.details||[]).length);setCounts({new:all.size,total:count});
-    if(n+1>=nextIntermediateRanking && scoredOrAttempted.size<10 && [...all.values()].some(j=>j.jd_available===true && j.ranking?.score==null && !scoredOrAttempted.has(j.url))){
-      await earlyRanking;
-      try{await rankEntireCollection(Math.min(2,10-scoredOrAttempted.size))}catch(err){setScoringFailed(prev=>[...prev,'shortlist-intermediate'])}
-      nextIntermediateRanking=n+13;
+     if(!batch){
+      skipped++;
+      setMessage('Alguns quadros falharam após tentativa de recuperação; continuando os demais. Falhas: '+skipped);
+      offset+=scanBatchSize*scanConcurrency;continue;
+     }
+     (batch.items||[]).filter(j=>source==='all'||j.source?.toLowerCase()===source||(source==='greenhouse'&&j.source?.toLowerCase()==='greenhouse_eu')).forEach(j=>{const old=all.get(j.url);all.set(j.url,old&&(old.ranking?.score!=null||scoredOrAttempted.has(j.url))?old:j)});
+     record(batch);
+     if(!Number.isFinite(batch.next_offset)||batch.next_offset<offset)throw Error('Paginação inválida');
+     count+=batch.found||0;setResults(visibleUndecided([...all.values()]));setChecked(x=>x+(batch.details||[]).length);setCounts({new:all.size,total:count});
+     if(batch.complete){reachedEnd=true;break}
+     if(!(batch.details||[]).length)break;
+     offset+=scanBatchSize*scanConcurrency;
     }
-    if(batch.complete){completedAll=true;break}
-    if(!(batch.details||[]).length)break;
-   }
+   };
+   // Catalog collection no longer pauses for optional scoring.
+   await Promise.all(Array.from({length:scanConcurrency},(_,index)=>scanWorker(index)));
+   completedAll=reachedEnd&&skipped===0;
    await earlyRanking;
    await rankEntireCollection(Math.max(0,10-scoredOrAttempted.size));
    setCompleted(completedAll);

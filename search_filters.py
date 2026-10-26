@@ -116,6 +116,10 @@ def role_match(title,terms):
     title=fold(title)
     terms=[fold(t) for t in terms]
     if not terms:return True
+    # Marketing must be explicitly selected. A bare "Growth" selection is
+    # not permission to add unrelated marketing vacancies to a PM/PO search.
+    if contains_phrase(title,"marketing") and not any(t in ("marketing","product marketing") for t in terms):
+        return False
     # An explicitly selected title must not silently mean its entire family.
     # E.g. Product Manager is not Product Analyst or Head of Product.
     for term in terms:
@@ -124,9 +128,13 @@ def role_match(title,terms):
             aliases=("product manager","gerente de produto","gestor de produto")
         elif term=="product owner":
             aliases=("product owner","dono de produto","product ownership")
+        elif term=="growth":
+            # Require a recognizable Growth job role, not incidental use of
+            # the generic word in an unrelated marketing/company title.
+            aliases=tuple(alias for alias in TITLE_ALIASES["growth"] if "marketing" not in alias)
         if any(contains_phrase(title,alias) for alias in aliases):return True
     if NON_TARGET_TITLE.search(title):return False
-    return any(len(t)>=3 and contains_phrase(title,t) for t in terms)
+    return any(len(t)>=3 and t!="growth" and contains_phrase(title,t) for t in terms)
 # Small bilingual discovery set per selected family, not the entire synonym lexicon.
 DISCOVERY={
  "product":("product manager","product owner","gerente de produto","especialista de produtos"),
@@ -250,7 +258,12 @@ def geo_verdict(job,country,evidence=None):
     if br:codes.add("BR")
     if country=="BR":
         if us_only and not (br or regional or global_eligible):return "excluded"
-        if global_eligible and contains_phrase(loc,"worldwide") and not (br or regional):return "unknown"
+        # Himalayas' public API emits precisely "Worldwide" when its
+        # locationRestrictions array is empty (the a73a8e0 contract).
+        # Do not grant this exception to other feeds or ambiguous locations.
+        himalayas_unrestricted=(fold(job.get("source"))=="himalayas" and
+                                fold(job.get("location")).strip()=="worldwide")
+        if global_eligible and contains_phrase(loc,"worldwide") and not (br or regional or himalayas_unrestricted):return "unknown"
         if br or regional or global_eligible:return "eligible"
         if any(contains_phrase(loc,p) for p in OTHER_FOREIGN_COUNTRIES+FOREIGN_CITY_ONLY):return "excluded"
         # If the vacancy explicitly names a different country but not BR/LATAM, don't silently confirm Brazil.

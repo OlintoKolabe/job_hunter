@@ -578,7 +578,11 @@ def ordered_catalog_tasks(tasks):
     rounds=max((len(v) for v in by_source.values()),default=0)
     interleaved=[by_source[source][i] for i in range(rounds)
                  for source in sorted(by_source) if i<len(by_source[source])]
-    return starters+interleaved
+    # Boards requiring a browser fallback repeatedly timed out during the
+    # user's 16:33-16:41 UTC run. Keep them in the catalog, after faster APIs.
+    js_slow={"quickin","kaszek","gupy","jobbol","dynamite"}
+    return starters+[task for task in interleaved if task[0].casefold() not in js_slow]+[
+        task for task in interleaved if task[0].casefold() in js_slow]
 
 
 def active_source_tasks(roles=DEFAULT_ROLES):
@@ -751,7 +755,9 @@ def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False
     offset=max(0,min(offset,len(tasks)))
     limit=max(1,min(limit,15))
     batch=tasks[offset:offset+limit]
-    details,found=scan(batch,workers=4)
+    # An all-source search must not wait on Scrapling's three browser retries
+    # for each blocked board. Targeted source scans retain the JS fallback.
+    details,found=scan(batch,workers=4,allow_js=source!="all")
     # Only deduplicate identical URLs. Company + role can represent distinct
     # openings, offices or requisition IDs and must not discard jobs here.
     unique=unique_jobs_by_url(found)

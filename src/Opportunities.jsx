@@ -151,6 +151,10 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},pro
      return;
    }
    const scanBatchSize=12;
+   // The free Render service must not promise an endless full catalog crawl.
+   // Keep verified matches and name unfinished coverage explicitly.
+   const scanDeadline=Date.now()+120000;
+   let truncatedByTime=false;
    // Exclude only starter boards with successful initial responses.
    const starters=initialSucceeded?(d.details||[]).filter(x=>x.status==='ok'&&x.source&&x.term)
      .map(x=>String(x.source).toLowerCase()+':'+String(x.term).toLowerCase()).join(','):'';
@@ -163,6 +167,7 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},pro
     let offset=0;
     let expectedTotal=null;
     for(let n=0;n<125&&isCurrent();n++){
+     if(Date.now()>scanDeadline){truncatedByTime=true;break}
      let batch;
      for(let attempt=0;attempt<2&&isCurrent();attempt++){
       try{
@@ -212,7 +217,7 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},pro
    const fullyComplete=completedAll&&failedSources===0;
    setCompleted(fullyComplete);
    const catalogCoverage=scannedBoards+' de '+(expectedBoardCount??'total indisponível')+' quadros do catálogo';
-   setMessage(fullyComplete?'Busca concluída — '+catalogCoverage+'.':('Busca parcial — '+catalogCoverage+', '+skipped+' lotes e '+failedSources+' quadros com falha ou dados pendentes. Zero resultado não significa zero vagas. Confira Fontes.'));
+   setMessage(fullyComplete?'Busca concluída — '+catalogCoverage+'.':('Busca parcial — '+catalogCoverage+', '+skipped+' lotes e '+failedSources+' quadros com falha ou dados pendentes'+(truncatedByTime?', busca interrompida por limite de tempo':'')+'. Zero resultado não significa zero vagas. Confira Fontes.'));
   }catch(e){if(isCurrent()){setError(e.message);setMessage('Busca parcial — os resultados encontrados continuam disponíveis. '+e.message);}}
   finally{if(activeSearchRef.current===controller){activeSearchRef.current=null;setBusy(false)}}
  }

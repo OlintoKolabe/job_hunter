@@ -54,8 +54,8 @@ class P0SearchRegressionTests(unittest.TestCase):
         ordered=ordered_catalog_tasks(tasks)
         self.assertEqual(set(ordered),set(tasks))
         self.assertEqual(len(ordered),len(tasks))
-        self.assertGreaterEqual(len(set(s for s,_ in ordered[:12])),4)
-        self.assertLessEqual(sum(s=="quickin" for s,_ in ordered[:12]),3)
+        self.assertGreaterEqual(len(set(s for s,_ in ordered[:12])),3)
+        self.assertEqual(sum(s=="quickin" for s,_ in ordered[:12]),0)
 
     def test_brazil_remote_is_classified_consistently_across_sources(self):
         now=datetime.now(timezone.utc).isoformat()

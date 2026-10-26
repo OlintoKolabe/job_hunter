@@ -43,14 +43,16 @@ class Gate12Scoring(unittest.TestCase):
             self.assertEqual(classify(job,terms,"BR","remote",days)[0],"confirmed")
             self.assertEqual(classify({**job,"published":""},terms,"BR","remote",days), ("review","data"))
 
-    def test_himalayas_api_worldwide_is_brazil_remote(self):
+    def test_worldwide_without_brazil_eligibility_remains_unconfirmed(self):
         terms=search_terms("Product Manager")
         recent=(datetime.now(timezone.utc)-timedelta(days=1)).isoformat()
-        job={"title":"Product Manager", "location":"Worldwide", "source":"himalayas", "published":recent}
-        self.assertEqual(classify(job,terms,"BR","remote",7),("confirmed",""))
-        # The same ambiguous location on a generic board stays unconfirmed.
+        job={"title":"Product Manager", "location":"Worldwide - Remote", "source":"himalayas", "published":recent}
+        self.assertEqual(classify(job,terms,"BR","remote",7),("review","pais"))
+        # Brazil evidence is required regardless of the collector.
         job["source"]="Greenhouse"
-        self.assertEqual(classify(job,terms,"BR","remote",7)[0],"review")
+        self.assertEqual(classify(job,terms,"BR","remote",7),("review","pais"))
+        job["location"]="Brazil - Remote"
+        self.assertEqual(classify(job,terms,"BR","remote",7),("confirmed",""))
 
     def test_remote_feed_does_not_override_explicit_onsite(self):
         terms=search_terms("Product Manager")

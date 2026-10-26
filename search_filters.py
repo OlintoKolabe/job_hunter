@@ -251,16 +251,6 @@ def classify(job,terms,country,mode,days):
     if re.search(r"\b(?:internship|intern|estagio|estagiari[oa])\b",title) and not any(
         re.search(r"\b(?:internship|intern|estagio|estagiari[oa])\b",term) for term in terms):
         return "excluded","cargo"
-    # Generic family aliases such as "marketing"/"acquisition" must not
-    # admit engineering roles or HR recruitment into an executive search.
-    # Protect explicitly named PM/PO/BA/project/marketing management roles,
-    # including e.g. "Technical Product Manager - Engineering".
-    explicit_target=any(phrase in title for phrase in (
-        "product manager", "product owner", "project manager", "program manager",
-        "business analyst", "marketing manager", "growth manager", "product marketing manager",
-        "gerente de produto", "gerente de projetos", "analista de negocios",
-        "gerente de marketing"))
-    if NON_TARGET_TITLE.search(title) and not explicit_target:return "excluded","cargo"
     if "talent acquisition" in title and not any("talent acquisition" in term for term in terms):
         return "excluded","cargo"
     # Match the requested role before applying generic negative title tokens.

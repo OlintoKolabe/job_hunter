@@ -1,63 +1,51 @@
 {
-  "id": "JOB-HUNTER-MERGE-APPROVED-SEARCH-LOGOUT-20261026",
-  "kind": "bugfix",
+  "id": "JOB-HUNTER-OLINTO-PAI-SEARCH-REGRESSION-CANARY-20261026",
+  "kind": "audit-and-bugfix",
   "status": "active",
-  "base_ref": "6e3868330c26e604702204b9a541850e193ef0ea",
-  "feature_ref": "fix/merge-approved-search-logout-20261026",
+  "base_ref": "db95fe1d0de48362481c5c1c4201573934bddc09",
+  "feature_ref": "homologacao/olinto-pai-busca-20261026",
   "allowed_files": [
     "scope/active.json",
-    "Dockerfile",
     "app.py",
     "catalog_engine.py",
     "collectors.py",
     "search_filters.py",
-    "ai_resume_matcher.py",
     "src/Opportunities.jsx",
-    "src/style.css",
-    "tests/test_opportunity_ui_contracts.py",
-    "tests/test_p0_search_canary.py",
     "tests/test_search_role_scope.py",
-    "tests/test_search_source_fallbacks.py",
-    "tests/test_sidebar_logout_visibility.py"
+    "tests/test_p0_search_canary.py"
   ],
   "allowed_paths": [
     "scope/active.json",
-    "Dockerfile",
     "app.py",
     "catalog_engine.py",
     "collectors.py",
     "search_filters.py",
-    "ai_resume_matcher.py",
     "src/Opportunities.jsx",
-    "src/style.css",
-    "tests/test_opportunity_ui_contracts.py",
-    "tests/test_p0_search_canary.py",
     "tests/test_search_role_scope.py",
-    "tests/test_search_source_fallbacks.py",
-    "tests/test_sidebar_logout_visibility.py"
+    "tests/test_p0_search_canary.py"
   ],
   "forbidden_paths": [
     ".github/",
     "vercel/"
   ],
-  "objective": "Merge only father/Marcus-approved search canary fixes, keep CV generation unchanged, and pin the logout action inside the always-visible sidebar.",
+  "objective": "Isolate and diagnose incomplete Olinto Pai Brazil/remote searches (120/373 boards; 1 confirmed; 40 pending; 120s cutoff); compare against proven historical search behaviors and current live sources.",
   "allowed_changes": [
-    "Transfer only homologated search collection, selection, paging, source matching and filter adjustments",
-    "Fix the engineering shortlist KeyError without changing resume generation methods, factual evidence or scoring rubric",
-    "Keep logout visible while long search results scroll",
-    "Run mandatory existing CV and search tests and React build",
-    "Sync operational Render branch without overwriting non-search changes"
+    "Read-only baseline audit of source response counts, run duration, filters, terminal history and all catalog scan stages",
+    "Capture real canary evidence by account and source, with denominators and reproducible regressions",
+    "Apply only code-level search fixes backed by observed failures after separate testing, exclusively in this canary",
+    "Re-use existing collection and search machinery; measure before and after; verify no father/Marcus/junior contamination"
   ],
   "forbidden_changes": [
-    "Alterations to resume_engine.py, resume_hybrid.py, job history, saved profiles, user credentials, database schema, costs",
-    "Changes to business logic of CV/ATS generation, notes/scoring formula or third-party source catalogue beyond approved search fixes",
-    "GitHub Actions, Vercel, new environments, unapproved migrations or replacement of existing multiuser database"
+    "Main or production Render/Neon deployments, writes to original user records, accounts, passwords, history, saved profile or candidates",
+    "Changes to CV/ATS, scoring, recommendation, profile handling, registrations or authentication",
+    "New paid services, new collection mechanisms, GitHub Actions and Vercel, or unverified search broadening",
+    "Any merge into main without a separate explicit approval"
   ],
   "acceptance": [
-    "Approved father and Marcus search paths match homologated canary, son search remains for future canary work",
-    "Resume generation files unchanged; factual and DOCX regression tests pass",
-    "Logout remains visible on desktop/mobile while scrolling",
-    "Render operational deploy reports live with UI build and health OK; prior main rollback preserved"
+    "Canary bootstraps from exact production main commit, with separate Neon copy and fresh session secret",
+    "Evidence per source proves where candidates are lost: collection, role, time, country, mode, history or timeout",
+    "Any fix has red/green regression and negative cross-profile cases",
+    "Production and existing Olinto Filho canary are unmodified"
   ],
-  "deployment": "After confirming scope and test build, update main; synchronize only approved files into existing Render production branch and deploy; no merge of experimental CV engine."
+  "deployment": "Dedicated Render free service, manual deploy, unique URL; Neon child of production branch only; no main writes."
 }

@@ -260,7 +260,7 @@ def classify(job,terms,country,mode,days):
         "business analyst", "marketing manager", "growth manager", "product marketing manager",
         "gerente de produto", "gerente de projetos", "analista de negocios",
         "gerente de marketing"))
-    if NON_TARGET_TITLE.search(title) and not explicit_target:return "excluded","cargo"
+    if NON_TARGET_TITLE.search(title) and not explicit_target and not role_match(title,terms):return "excluded","cargo"
     if "talent acquisition" in title and not any("talent acquisition" in term for term in terms):
         return "excluded","cargo"
     # Match the requested role before applying generic negative title tokens.

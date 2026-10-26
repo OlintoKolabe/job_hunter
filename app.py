@@ -12,6 +12,7 @@ import hashlib
 import unicodedata
 from urllib.parse import urlsplit
 
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from fastapi import FastAPI, Request, Response, HTTPException
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
@@ -455,16 +456,25 @@ def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:
         except Exception as exc:
             raise HTTPException(502,"Fonte "+source+" indisponível: "+type(exc).__name__) from exc
         sources=[{"source":source,"state":"validado","received":len(items)}]
-    else:
-        items,sources=collect(discovery_queries(roles),country,source) if source in ("all","jobgether","workable") else ([],[])
-        if source=="all":
-            for feed in ("himalayas","remotive","remoteok"):
+    elif source=="all":
+        # Static company boards are already scanned by /api/catalog/scan.
+        # Preserve keyword searches and remote feeds without querying those
+        # boards twice or serializing three independent feed requests.
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            catalog_boards=source_tasks()
+            keyword_job=pool.submit(collect,discovery_queries(roles),country,"all",catalog_boards)
+            feeds={feed:pool.submit(fetch_public_remote,feed,roles,country)
+                   for feed in ("himalayas","remotive","remoteok")}
+            items,sources=keyword_job.result()
+            for feed,future in feeds.items():
                 try:
-                    added=fetch_public_remote(feed,roles,country)
+                    added=future.result()
                     items.extend(added)
                     sources.append({"source":feed,"state":"validado","received":len(added)})
                 except Exception as exc:
                     sources.append({"source":feed,"state":"error","received":0,"error":type(exc).__name__})
+    else:
+        items,sources=collect(discovery_queries(roles),country,source) if source in ("jobgether","workable") else ([],[])
     raw_count=len(items)
     items,eligibility_fetch=enrich_inhire_before_filter(items,roles)
     raw_jobs=list(items)

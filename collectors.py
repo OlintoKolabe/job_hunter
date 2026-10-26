@@ -212,11 +212,14 @@ def pull(source,slug,location='brazil'):
     # Keep all parsed jobs. Role relevance belongs to search_filters, not the collector.
     return {"source":source,"term":slug,"status":"ok","received":len(jobs),"target":len(jobs)},jobs
 
-def collect(terms=None,country="BR",only_source="all"):
+def collect(terms=None,country="BR",only_source="all",skip_boards=()):
     country_locations={"BR":"Brazil","AR":"Argentina","CL":"Chile","CO":"Colombia","MX":"Mexico","PE":"Peru","UY":"Uruguay","PY":"Paraguay","BO":"Bolivia","EC":"Ecuador","CR":"Costa Rica","PA":"Panama","GT":"Guatemala","DO":"Dominican Republic","VE":"Venezuela","US":"United States","CA":"Canada","PT":"Portugal","ES":"Spain","GB":"United Kingdom"}
     location=country_locations.get(country,"")
     terms=[str(t).strip()[:100] for t in (terms or TERMS) if str(t).strip()][:12]
     tasks=[("Jobgether",t) for t in terms]+[("Workable",t) for t in terms]+[(source,slug) for source,slugs in BOARDS.items() for slug in slugs]
+    if skip_boards:
+        skipped={(str(src).lower(),str(slug).lower()) for src,slug in skip_boards}
+        tasks=[(src,slug) for src,slug in tasks if (src.lower(),slug.lower()) not in skipped]
     if only_source!="all":tasks=[(src,slug) for src,slug in tasks if src.lower()==only_source.lower()]
     found={};details=[]
     with ThreadPoolExecutor(max_workers=8) as pool:

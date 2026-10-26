@@ -479,12 +479,10 @@ def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:
             raise HTTPException(502,"Fonte "+source+" indisponível: "+type(exc).__name__) from exc
         sources=[{"source":source,"state":"validado","received":len(items)}]
     elif source=="all":
-        # Static company boards are already scanned by /api/catalog/scan.
-        # Preserve keyword searches and remote feeds without querying those
-        # boards twice or serializing three independent feed requests.
+        # Restore stable Brazil-oriented boards in the first response (a73a8e0).
+        # Catalog skips these only after a successful first response.
         with ThreadPoolExecutor(max_workers=4) as pool:
-            catalog_boards=source_tasks()
-            keyword_job=pool.submit(collect,discovery_queries(roles),country,"all",catalog_boards)
+            keyword_job=pool.submit(collect,discovery_queries(roles),country,"all")
             feeds={feed:pool.submit(fetch_public_remote,feed,roles,country)
                    for feed in ("himalayas","remotive","remoteok")}
             items,sources=keyword_job.result()
@@ -586,12 +584,13 @@ def active_source_tasks(roles=DEFAULT_ROLES):
     # Both public boards expose their own keyword search. Restrict discovery
     # to selected families instead of crawling fixed unrelated vacancy lists.
     tasks={task for task in tasks if task[0] not in ("geekhunter","nerdin")}
-    family_order=("product","projects","marketing","growth","business")
+    family_order=("product","projects","marketing","growth","business","engineering")
     families=requested_families(search_terms(roles))
     geek_terms={"product":"product","projects":"project","marketing":"marketing",
-                "growth":"growth","business":"business"}
+                "growth":"growth","business":"business","engineering":"software developer"}
     nerdin_terms={"product":"product manager","projects":"project manager",
-                  "marketing":"marketing","growth":"growth","business":"business analyst"}
+                  "marketing":"marketing","growth":"growth","business":"business analyst",
+                  "engineering":"junior developer"}
     for family in family_order:
         if family in families:
             tasks.add(("geekhunter","search:"+geek_terms[family]))
@@ -705,13 +704,21 @@ def unique_jobs_by_url(found):
     return unique
 
 @app.post("/api/catalog/scan")
-def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False,roles:str=DEFAULT_ROLES,country:str="BR",mode:str="remote",days:int=30,sort:str="newest",source:str="all"):
+def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False,skip_starter:str="",roles:str=DEFAULT_ROLES,country:str="BR",mode:str="remote",days:int=30,sort:str="newest",source:str="all"):
     require_auth(request)
     roles,country,mode,days=resolved_search_filters(request,roles,country,mode,days)
     if source not in {"all","inhire","quickin","gupy","greenhouse","ashby","lever","bamboohr","dynamite","linkedin_guest","jobgether","workable","himalayas","remotive","remoteok","geekhunter","nerdin","recruitee"}:raise HTTPException(400,"Fonte não reconhecida")
     tasks=active_source_tasks(roles)
     if source!="all":
         tasks=[(src,slug) for src,slug in tasks if src==source or (source=="greenhouse" and src=="greenhouse_eu")]
+    elif skip_starter:
+        # Skip only boards proven successful in the initial response; errors are retried.
+        fetched=set()
+        for pair in skip_starter.split(","):
+            src,sep,slug=pair.partition(":")
+            if sep:fetched.add((src.strip().casefold(),slug.strip().casefold()))
+        fetched &= WARM_SOURCE_TASKS
+        tasks=[(src,slug) for src,slug in tasks if (src.casefold(),slug.casefold()) not in fetched]
     if due_only:
         with mu.connect(DATABASE,connect_timeout=8) as conn:
             with conn.cursor() as cur:
@@ -730,7 +737,7 @@ def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False
     offset=max(0,min(offset,len(tasks)))
     limit=max(1,min(limit,15))
     batch=tasks[offset:offset+limit]
-    details,found=scan(batch,workers=6)
+    details,found=scan(batch,workers=4)
     # Only deduplicate identical URLs. Company + role can represent distinct
     # openings, offices or requisition IDs and must not discard jobs here.
     unique=unique_jobs_by_url(found)

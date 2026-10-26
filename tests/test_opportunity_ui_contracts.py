@@ -54,7 +54,7 @@ class OpportunityUIContracts(unittest.TestCase):
 
     def test_initial_scoring_starts_before_full_catalog_scan_with_ten_job_cap(self):
         s=Path("src/Opportunities.jsx").read_text()
-        self.assertLess(s.index("const earlyRanking=rankEntireCollection(4)"),s.index("const scanWorker=async(workerIndex)=>"))
+        self.assertLess(s.index("const earlyRanking=rankEntireCollection(4)"),s.index("const scanWorker=async()=>"))
         self.assertIn("rankEntireCollection(Math.max(0,10-scoredOrAttempted.size))",s)
         self.assertIn("filter(j=>!scoredOrAttempted.has(j.url)&&j.jd_available===true",s)
 
@@ -68,9 +68,9 @@ class OpportunityUIContracts(unittest.TestCase):
 
     def test_catalog_scanning_does_not_wait_for_intermediate_scoring(self):
         s=Path('src/Opportunities.jsx').read_text()
-        self.assertIn('const scanConcurrency=2',s)
-        self.assertIn('await Promise.all(Array.from({length:scanConcurrency},(_,index)=>scanWorker(index)))',s)
-        self.assertLess(s.index('await Promise.all(Array.from({length:scanConcurrency}'),s.index('await earlyRanking;',s.index('const scanBatchSize=6')))
+        self.assertIn('const scanWorker=async()=>',s)
+        self.assertIn('await scanWorker();',s)
+        self.assertLess(s.index('await scanWorker();'),s.index('await earlyRanking;',s.index('const scanBatchSize=12')))
         self.assertIn('await rankEntireCollection(Math.max(0,10-scoredOrAttempted.size))',s)
 
 if __name__=="__main__":unittest.main()

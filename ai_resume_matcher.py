@@ -417,10 +417,18 @@ def shortlist_jobs(jobs, roles, limit=40):
     the existing bilingual job-family aliases and the existing AI evaluator.
     """
     import re
-    from search_filters import fold, search_terms, requested_families, ROLE_FAMILIES
+    from search_filters import fold, search_terms, requested_families, ROLE_FAMILIES, TITLE_ALIASES
     limit = max(1, min(50, int(limit)))
     terms = search_terms(roles)
     families = requested_families(terms) or set(ROLE_FAMILIES)
+    # Technical junior/intern terms were added to requested_families without
+    # adding a matching legacy executive family. Reuse their existing
+    # bilingual title aliases, strictly for this request's shortlist.
+    family_aliases = dict(ROLE_FAMILIES)
+    if "engineering" in families:
+        family_aliases["engineering"] = tuple(dict.fromkeys(
+            alias for term in terms for alias in TITLE_ALIASES.get(term, (term,))
+        ))
     clues = {
         'product': ('backlog', 'roadmap', 'product discovery', 'product strategy', 'produto', 'stakeholder', 'agile'),
         'projects': ('project management', 'gestao de projetos', 'delivery', 'pmo', 'cronograma', 'budget'),
@@ -433,9 +441,9 @@ def shortlist_jobs(jobs, roles, limit=40):
         jd = fold(str(job.get('description') or '')[:7000])
         matched = [family for family in families if any(
             re.search(r'(?<![a-z])' + re.escape(alias) + r'(?![a-z])', title)
-            for alias in ROLE_FAMILIES[family])]
+            for alias in family_aliases.get(family, ()))]
         strength = (80 if matched else 0) + min(20, sum(4 for term in terms if len(term) > 3 and term in title))
-        strength += min(16, sum(2 for family in (matched or families) for token in clues[family] if token in jd))
+        strength += min(16, sum(2 for family in (matched or families) for token in clues.get(family, ()) if token in jd))
         if len(jd) >= 300:
             strength += 12
         return strength
@@ -454,7 +462,7 @@ def shortlist_jobs(jobs, roles, limit=40):
     selected, used = [], set()
     for family in sorted(families):
         candidate = next((j for j in ranked if j['url'] not in used and any(
-            alias in fold(j.get('title')) for alias in ROLE_FAMILIES[family])), None)
+            alias in fold(j.get('title')) for alias in family_aliases.get(family, ()))), None)
         if candidate:
             selected.append(candidate['url'])
             used.add(candidate['url'])

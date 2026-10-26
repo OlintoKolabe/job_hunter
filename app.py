@@ -24,7 +24,7 @@ from psycopg.types.json import Jsonb
 import multiuser as mu
 from public_remote_feeds import fetch as fetch_public_remote
 from indeed_provider import search as indeed_search, enabled as indeed_enabled
-from collectors import collect,source_field_coverage
+from collectors import collect,source_field_coverage,BOARDS
 from search_filters import analyze_filters,apply_filters,search_terms,discovery_queries,requested_families,DEFAULT_ROLES,COUNTRIES
 from first_seen import flag_new_jobs
 from catalog_engine import source_tasks,scan
@@ -435,9 +435,31 @@ def restore_persisted_scores(cursor, jobs, roles, url_key):
     return output, restored
 
 
+def resolved_search_filters(request,roles,country,mode,days):
+    """Keep omitted query defaults tenant-specific; reject cross-profile roles."""
+    if not mu.enabled:
+        return roles,country,mode,days
+    profile=mu.current_profile.get() or {}
+    saved=[str(r).strip() for r in profile.get("roles",[]) if str(r).strip()]
+    if "roles" not in request.query_params:
+        roles=", ".join(saved)
+    else:
+        requested=[r.strip() for r in roles.split(",") if r.strip()]
+        allowed={r.casefold() for r in saved}
+        if not requested or any(r.casefold() not in allowed for r in requested):
+            raise HTTPException(400,"Seleção de cargos diferente do perfil autenticado")
+    if not roles.strip():
+        raise HTTPException(400,"Cadastre cargos em Meu Perfil")
+    if "country" not in request.query_params:country=profile.get("country") or country
+    if "mode" not in request.query_params:mode=profile.get("mode") or mode
+    if "days" not in request.query_params:days=int(profile.get("days") or 0)
+    return roles,country,mode,days
+
+
 @app.post("/api/search-jobs")
 def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:str="remote",days:int=30,sort:str="newest",source:str="all"):
     require_auth(request)
+    roles,country,mode,days=resolved_search_filters(request,roles,country,mode,days)
     allowed_sources={"all","inhire","quickin","gupy","greenhouse","ashby","lever","bamboohr","dynamite","linkedin_guest","jobgether","workable","himalayas","remotive","remoteok","indeed","geekhunter","nerdin","recruitee"}
     if source not in allowed_sources:raise HTTPException(400,"Fonte não reconhecida")
     if source=="indeed":
@@ -457,12 +479,10 @@ def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:
             raise HTTPException(502,"Fonte "+source+" indisponível: "+type(exc).__name__) from exc
         sources=[{"source":source,"state":"validado","received":len(items)}]
     elif source=="all":
-        # Static company boards are already scanned by /api/catalog/scan.
-        # Preserve keyword searches and remote feeds without querying those
-        # boards twice or serializing three independent feed requests.
+        # Restore stable Brazil-oriented boards in the first response (a73a8e0).
+        # Catalog skips these only after a successful first response.
         with ThreadPoolExecutor(max_workers=4) as pool:
-            catalog_boards=source_tasks()
-            keyword_job=pool.submit(collect,discovery_queries(roles),country,"all",catalog_boards)
+            keyword_job=pool.submit(collect,discovery_queries(roles),country,"all")
             feeds={feed:pool.submit(fetch_public_remote,feed,roles,country)
                    for feed in ("himalayas","remotive","remoteok")}
             items,sources=keyword_job.result()
@@ -538,6 +558,33 @@ def source_freshness(source, checked_at):
     return {"interval_days":days,"due":next_time<=datetime.now(timezone.utc),
             "next_check":next_time.isoformat()}
 
+WARM_SOURCE_TASKS={(source.casefold(),slug.casefold()) for source,slugs in BOARDS.items() for slug in slugs}
+
+
+def ordered_catalog_tasks(tasks):
+    """Surface proven Brazil boards first, then rotate between providers.
+
+    Previously alphabetical provider blocks meant a partial scan could spend
+    dozens of requests on one source; consecutive Quickin fallbacks also
+    competed for the one existing Scrapling browser semaphore.
+    """
+    valid=[(src,slug) for src,slug in tasks if slug.casefold() not in ("kraken","kraken.com","payward")]
+    ordered=sorted(valid,key=lambda x:(x[0].casefold(),x[1].casefold()))
+    starters=[task for task in ordered if (task[0].casefold(),task[1].casefold()) in WARM_SOURCE_TASKS]
+    remainder=[task for task in ordered if (task[0].casefold(),task[1].casefold()) not in WARM_SOURCE_TASKS]
+    by_source={}
+    for source,slug in remainder:
+        by_source.setdefault(source.casefold(),[]).append((source,slug))
+    rounds=max((len(v) for v in by_source.values()),default=0)
+    interleaved=[by_source[source][i] for i in range(rounds)
+                 for source in sorted(by_source) if i<len(by_source[source])]
+    # Boards requiring a browser fallback repeatedly timed out during the
+    # user's 16:33-16:41 UTC run. Keep them in the catalog, after faster APIs.
+    js_slow={"quickin","kaszek","gupy","jobbol","dynamite"}
+    return starters+[task for task in interleaved if task[0].casefold() not in js_slow]+[
+        task for task in interleaved if task[0].casefold() in js_slow]
+
+
 def active_source_tasks(roles=DEFAULT_ROLES):
     tasks=set(source_tasks())
     # Search the complete default role family on keyword-based LinkedIn guest.
@@ -555,12 +602,13 @@ def active_source_tasks(roles=DEFAULT_ROLES):
     # Both public boards expose their own keyword search. Restrict discovery
     # to selected families instead of crawling fixed unrelated vacancy lists.
     tasks={task for task in tasks if task[0] not in ("geekhunter","nerdin")}
-    family_order=("product","projects","marketing","growth","business")
+    family_order=("product","projects","marketing","growth","business","engineering")
     families=requested_families(search_terms(roles))
     geek_terms={"product":"product","projects":"project","marketing":"marketing",
-                "growth":"growth","business":"business"}
+                "growth":"growth","business":"business","engineering":"software developer"}
     nerdin_terms={"product":"product manager","projects":"project manager",
-                  "marketing":"marketing","growth":"growth","business":"business analyst"}
+                  "marketing":"marketing","growth":"growth","business":"business analyst",
+                  "engineering":"junior developer"}
     for family in family_order:
         if family in families:
             tasks.add(("geekhunter","search:"+geek_terms[family]))
@@ -569,7 +617,7 @@ def active_source_tasks(roles=DEFAULT_ROLES):
     for term in search_terms(roles)[:3]:
         if len(term)>2 and term not in nerdin_terms.values():
             tasks.add(("nerdin",term))
-    return sorted((source,slug) for source,slug in tasks if slug.casefold() not in ("kraken","kraken.com","payward"))
+    return ordered_catalog_tasks(tasks)
 
 def source_filter_quality(jobs,roles,country,mode,days):
     """Source-level filter outcomes, without extra HTTP or AI calls."""
@@ -674,12 +722,21 @@ def unique_jobs_by_url(found):
     return unique
 
 @app.post("/api/catalog/scan")
-def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False,roles:str=DEFAULT_ROLES,country:str="BR",mode:str="remote",days:int=30,sort:str="newest",source:str="all"):
+def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False,skip_starter:str="",roles:str=DEFAULT_ROLES,country:str="BR",mode:str="remote",days:int=30,sort:str="newest",source:str="all"):
     require_auth(request)
+    roles,country,mode,days=resolved_search_filters(request,roles,country,mode,days)
     if source not in {"all","inhire","quickin","gupy","greenhouse","ashby","lever","bamboohr","dynamite","linkedin_guest","jobgether","workable","himalayas","remotive","remoteok","geekhunter","nerdin","recruitee"}:raise HTTPException(400,"Fonte não reconhecida")
     tasks=active_source_tasks(roles)
     if source!="all":
         tasks=[(src,slug) for src,slug in tasks if src==source or (source=="greenhouse" and src=="greenhouse_eu")]
+    elif skip_starter:
+        # Skip only boards proven successful in the initial response; errors are retried.
+        fetched=set()
+        for pair in skip_starter.split(","):
+            src,sep,slug=pair.partition(":")
+            if sep:fetched.add((src.strip().casefold(),slug.strip().casefold()))
+        fetched &= WARM_SOURCE_TASKS
+        tasks=[(src,slug) for src,slug in tasks if (src.casefold(),slug.casefold()) not in fetched]
     if due_only:
         with mu.connect(DATABASE,connect_timeout=8) as conn:
             with conn.cursor() as cur:
@@ -698,7 +755,9 @@ def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False
     offset=max(0,min(offset,len(tasks)))
     limit=max(1,min(limit,15))
     batch=tasks[offset:offset+limit]
-    details,found=scan(batch,workers=6)
+    # An all-source search must not wait on Scrapling's three browser retries
+    # for each blocked board. Targeted source scans retain the JS fallback.
+    details,found=scan(batch,workers=4,allow_js=source!="all")
     # Only deduplicate identical URLs. Company + role can represent distinct
     # openings, offices or requisition IDs and must not discard jobs here.
     unique=unique_jobs_by_url(found)

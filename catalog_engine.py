@@ -180,7 +180,7 @@ def extra_pull(source,slug):
             if v:jobs.append(v)
     return jobs,"ok"
 
-def run_task(source,slug):
+def run_task(source,slug,allow_js=True):
     try:
         if source in ("ashby","greenhouse","inhire","lever"):
             detail,jobs=pull(source.capitalize() if source!="inhire" else "inHire",slug)
@@ -188,14 +188,14 @@ def run_task(source,slug):
                 "received":detail["received"],"target":len(jobs)},jobs
         if source in ("smartrecruiters","teamtailor","recruitee","personio","workable_account","dynamite","linkedin_guest","gupy","kaszek","jobbol","geekhunter","nerdin"):
             jobs,state,count=expanded_pull(source,slug)
-            if not jobs and source in ("dynamite","gupy","kaszek","jobbol"):
+            if allow_js and not jobs and source in ("dynamite","gupy","kaszek","jobbol"):
                 try:
                     fallback=js_fallback(source,slug)
                     if fallback:jobs=fallback;state="validado";count=len(jobs)
                 except RuntimeError:pass
             return {"source":source,"slug":slug,"state":state,"received":count,"target":len(jobs)},jobs
         jobs,_=extra_pull(source,slug)
-        if not jobs and source=="quickin":
+        if allow_js and not jobs and source=="quickin":
             jobs=js_fallback(source,slug)
         uncertain=source in ("quickin","zoho","solides","trakstar","compleo")
         state=("validado" if jobs else ("pendente" if uncertain else "sem_vagas"))
@@ -205,10 +205,14 @@ def run_task(source,slug):
     except Exception as e:
         return {"source":source,"slug":slug,"state":"pendente","received":0,"error":str(e)[:140]},[]
 
-def scan(tasks,workers=6):
+def scan(tasks,workers=6,allow_js=True):
     out=[];jobs=[]
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        future={pool.submit(run_task,source,slug):(source,slug) for source,slug in tasks}
+        # Preserve the existing two-argument task contract for callers/tests
+        # unless this search explicitly suppresses expensive JS fallbacks.
+        future={(pool.submit(run_task,source,slug) if allow_js
+                 else pool.submit(run_task,source,slug,False)):(source,slug)
+                for source,slug in tasks}
         for f in as_completed(future):
             source,slug=future[f]
             d,j=f.result()

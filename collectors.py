@@ -25,7 +25,17 @@ BOARDS={
  "inHire": ("amcom","zallpy","radix","brq","trinca","vinta"),
  "Lever": ("jobgether",),
 }
-TITLE_RE=re.compile(r"product|project|marketing|growth|business analyst|gerente de (projetos|produto)|gestor de (projetos|produto)|analista de neg[oó]cios|pmo",re.I)
+# This is only a cheap prefilter for public HTML/JS fallbacks. Final role,
+# seniority, geography and remote eligibility remain in search_filters.
+TITLE_RE=re.compile(
+    r"product|project|marketing|growth|business analyst|gerente de (projetos|produto)"
+    r"|gestor de (projetos|produto)|analista de neg[oó]cios|pmo"
+    r"|software|developers?|desenvolvedores?|desenvolvedoras?|desenvolvimento"
+    r"|est[aá]gios?|estagi[aá]ri[oa]s?|\binterns?\b|analista de dados|cientista de dados"
+    r"|data (?:analyst|scientist|engineer)|machine learning|artificial intelligence"
+    r"|ai engineer|analytics|business intelligence|engenheir[oa] de dados",
+    re.I,
+)
 
 def fetch_json(url,headers=None):
     req=urllib.request.Request(url,headers={"Accept":"application/json","User-Agent":"Mozilla/5.0 JobHunter/0.3",**(headers or {})})

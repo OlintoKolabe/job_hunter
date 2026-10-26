@@ -310,6 +310,7 @@ def analyze_filters(jobs,roles=DEFAULT_ROLES,country="BR",mode="remote",days=30,
     if mode not in ("remote","hybrid","onsite","all"):raise ValueError("Regime inválido")
     if days not in (0,1,3,7,15,30,60,90):raise ValueError("Período inválido")
     if sort not in ("score","recommendation","newest","oldest"):raise ValueError("Ordem inválida")
+    import multiuser as mu
     confirmed=[];review=[];reasons={}
     for j in jobs:
         bucket,reason=classify(j,terms,country,mode,days)
@@ -319,7 +320,7 @@ def analyze_filters(jobs,roles=DEFAULT_ROLES,country="BR",mode="remote",days=30,
             valid=valid_listing_jd(description)
             evidence=signals(j,roles)
             result={**j,"detected_mode":detect_work_mode(j,evidence),"jd_evidence":evidence,
-                    "jd_available":valid,"ranking":score_job(j,roles) if valid else {"score":None,"confidence":"jd_indisponivel"},
+                    "jd_available":valid,"ranking":({"score":None,"confidence":"aguardando_evidencias_do_perfil"} if mu.enabled else score_job(j,roles)) if valid else {"score":None,"confidence":"jd_indisponivel"},
                     "_listing_jd_hash":hashlib.sha256(description.encode()).hexdigest() if valid else None,
                     "description":""}
             if bucket=="confirmed":confirmed.append(result)

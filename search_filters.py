@@ -59,6 +59,28 @@ TITLE_ALIASES={
  "growth":["growth manager","growth lead","head of growth","head de growth","growth marketing","gerente de growth","coordenador de growth","growth specialist","especialista de growth","growth strategist","growth marketer","growth operations","acquisition manager","lifecycle marketing"],
  "marketing":["marketing manager","marketing lead","head of marketing","head de marketing","gerente de marketing","diretor de marketing","marketing director","product marketing","marketing specialist","especialista de marketing","coordenador de marketing","coordenadora de marketing","analista de marketing","marketing operations","marketing ops","demand generation","field marketing","lifecycle marketing","acquisition marketing"],
 }
+# Bilingual technical terms: preserve seniority and specialization when matching.
+TITLE_ALIASES.update({
+ "estagio em desenvolvimento de software":("estagio em desenvolvimento de software","estagiario de desenvolvimento de software","software engineering intern","software engineer intern","software developer intern","software development intern","estagio em engenharia de software"),
+ "estagiario em desenvolvimento de sistemas":("estagiario em desenvolvimento de sistemas","estagio em desenvolvimento de sistemas","systems development intern","software developer intern"),
+ "estagiario de ti":("estagiario de ti","estagio de ti","estagio em ti","it intern","information technology intern"),
+ "estagio em ti":("estagio em ti","estagiario de ti","it intern","information technology intern"),
+ "estagio em tecnologia":("estagio em tecnologia","estagiario de tecnologia","technology intern","it intern"),
+ "estagiario de desenvolvimento":("estagiario de desenvolvimento","estagio em desenvolvimento","software developer intern","software development intern"),
+ "software engineer intern":("software engineer intern","software engineering intern","software developer intern","estagiario em engenharia de software"),
+ "software developer intern":("software developer intern","software development intern","estagiario de desenvolvimento de software"),
+ "desenvolvedor junior":("desenvolvedor junior","desenvolvedora junior","junior developer","developer junior","junior software developer","junior software engineer","software engineer junior","engenheiro de software junior"),
+ "desenvolvedor de software junior":("desenvolvedor de software junior","desenvolvedora de software junior","junior software developer","software developer junior","junior software engineer","engenheiro de software junior"),
+ "desenvolvedor full stack junior":("desenvolvedor full stack junior","desenvolvedor fullstack junior","junior full stack developer","junior fullstack developer","full stack developer junior","fullstack developer junior"),
+ "desenvolvedor front end junior":("desenvolvedor front end junior","desenvolvedor frontend junior","junior front end developer","junior frontend developer","frontend developer junior","front end developer junior"),
+ "desenvolvedor back end junior":("desenvolvedor back end junior","desenvolvedor backend junior","junior back end developer","junior backend developer","backend developer junior","back end developer junior"),
+ "analista de dados junior":("analista de dados junior","analista de dados jr","junior data analyst","data analyst junior"),
+ "junior developer":("junior developer","developer junior","desenvolvedor junior","desenvolvedora junior","junior software developer"),
+ "junior software developer":("junior software developer","software developer junior","desenvolvedor de software junior","junior software engineer"),
+ "junior software engineer":("junior software engineer","software engineer junior","engenheiro de software junior","junior software developer"),
+ "junior data analyst":("junior data analyst","data analyst junior","analista de dados junior"),
+ "estagio desenvolvimento":("estagio desenvolvimento","estagiario de desenvolvimento","software developer intern","software engineering intern"),
+})
 # Broader role discovery, without treating unrelated engineering/science jobs as matches.
 NON_TARGET_TITLE=re.compile(r"\b(developer|engineer|scientist|researcher|designer|intern|estagiario|estagiaria|recruiter|sales|account executive|sdr|devops|software|backend|frontend)\b")
 RELATED_TITLE=re.compile(r"(product|produto|project|projetos|marketing|growth|pmo|negocios|business analy)")
@@ -76,6 +98,7 @@ ROLE_KEYS={
  "marketing":("marketing","mercadologia","market intelligence","crm"),
  "growth":("growth","crescimento","acquisition"),
  "business":("business analyst","analista de negocios","analista de negocio","business operations"),
+ "engineering":("desenvolvimento","desenvolvedor","desenvolvedora","software engineer intern","software developer intern","engenharia de software","estagio","estagiario","estagiaria","junior developer","junior software","junior data analyst","analista de dados junior","frontend","backend","front end","back end","full stack","fullstack"),
 }
 NON_TARGET_TITLE=re.compile(r"\b(developers?|engineers?|engineering|scientists?|researchers?|designers?|interns?|estagiarios?|estagiarias?|recruiters?|account executive|sdr|devops|backend|frontend)\b")
 def requested_families(terms):
@@ -111,10 +134,11 @@ DISCOVERY={
  "marketing":("marketing manager","gerente de marketing","marketing ops"),
  "growth":("growth manager","growth marketing","gerente de growth"),
  "business":("business analyst","analista de negocios","business operations"),
+ "engineering":("software engineer intern","software developer intern","junior software developer","junior developer","desenvolvedor junior","estagio em desenvolvimento de software","junior data analyst","junior frontend developer","junior backend developer"),
 }
 def discovery_queries(roles,limit=12):
     terms=search_terms(roles)
-    families=[f for f in ("product","projects","marketing","growth","business") if f in requested_families(terms)]
+    families=[f for f in ("product","projects","marketing","growth","business","engineering") if f in requested_families(terms)]
     queues={f:list(DISCOVERY[f]) for f in families}
     out=[]
     while len(out)<limit and any(queues.values()):
@@ -221,15 +245,13 @@ def geo_verdict(job,country,evidence=None):
     br=any(contains_phrase(loc,p) for p in ("brazil","brasil","br")) or any(contains_phrase(loc,p) for p in BR_CITIES) or "brazil" in jd_geo
     regional=any(contains_phrase(loc,p) for p in LATAM_MARKERS)
     global_eligible=any(contains_phrase(loc,p) for p in GLOBAL_MARKERS)
-    # Himalayas uses exactly "Worldwide" when locationRestrictions is empty.
-    # Only this feed-specific, explicit API convention proves BR eligibility.
-    if fold(job.get("source", "")) == "himalayas" and loc.strip() == "worldwide":
-        global_eligible=True
+    # Worldwide without explicit Brazil/LATAM evidence is not verified for BR.
     codes={code for code,aliases in TOKENS.items() if any(contains_phrase(loc,p) for p in aliases)}
     if br:codes.add("BR")
     if country=="BR":
         if us_only and not (br or regional or global_eligible):return "excluded"
-        if br or regional or global_eligible:return "eligible"
+        if br or regional:return "eligible"
+        if global_eligible:return "unknown"
         if any(contains_phrase(loc,p) for p in OTHER_FOREIGN_COUNTRIES+FOREIGN_CITY_ONLY):return "excluded"
         # If the vacancy explicitly names a different country but not BR/LATAM, don't silently confirm Brazil.
         if codes and "BR" not in codes:return "excluded"
@@ -271,7 +293,8 @@ def classify(job,terms,country,mode,days):
     if NON_TARGET_TITLE.search(title) and not title_matches:return "excluded","cargo"
     # Missing JDs on adjacent management roles deserve a review queue, not
     # silent exclusion. They are never confirmed automatically.
-    adjacent=bool(re.search(r"\b(?:operations|operacoes|strategy|estrategia|transformation|transformacao|program|delivery|commercial|comercial)\b",title)) and bool(re.search(r"\b(?:lead|manager|head|director|gerente|coordenador|coordenadora|especialista)\b",title))
+    business_profile=bool(requested_families(terms)&{"product","projects","marketing","growth","business"})
+    adjacent=business_profile and bool(re.search(r"\b(?:operations|operacoes|strategy|estrategia|transformation|transformacao|program|delivery|commercial|comercial)\b",title)) and bool(re.search(r"\b(?:lead|manager|head|director|gerente|coordenador|coordenadora|especialista)\b",title))
     # JD vocabulary describes collaboration as well as the role itself.
     # A technical lead or designer may mention product roadmaps many times;
     # JD keywords alone must not turn such a title into a PM opening.

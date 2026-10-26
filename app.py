@@ -205,6 +205,16 @@ def require_auth(request: Request):
         raise HTTPException(503, "Banco indisponível")
     return True
 
+def require_profile_roles(roles):
+    """In multiuser mode, searches and ranking may use only this account's saved role selections."""
+    if not mu.enabled:
+        return
+    saved=mu.current_profile.get() or {}
+    allowed=set(search_terms(', '.join(saved.get('roles') or [])))
+    selected=search_terms(roles)
+    if not selected or not allowed or any(role not in allowed for role in selected):
+        raise HTTPException(400,'Cargos da busca não pertencem ao perfil autenticado. Reabra Oportunidades para recarregar seu perfil.')
+
 def normalized(value):
     return ''.join(ch for ch in unicodedata.normalize("NFKD", (value or "").casefold()) if not unicodedata.combining(ch)).strip()
 
@@ -437,6 +447,7 @@ def restore_persisted_scores(cursor, jobs, roles, url_key):
 @app.post("/api/search-jobs")
 def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:str="remote",days:int=30,sort:str="newest",source:str="all"):
     require_auth(request)
+    require_profile_roles(roles)
     allowed_sources={"all","inhire","quickin","gupy","greenhouse","ashby","lever","bamboohr","dynamite","linkedin_guest","jobgether","workable","himalayas","remotive","remoteok","indeed","geekhunter","nerdin","recruitee"}
     if source not in allowed_sources:raise HTTPException(400,"Fonte não reconhecida")
     if source=="indeed":
@@ -666,6 +677,7 @@ def unique_jobs_by_url(found):
 @app.post("/api/catalog/scan")
 def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False,roles:str=DEFAULT_ROLES,country:str="BR",mode:str="remote",days:int=30,sort:str="newest",source:str="all"):
     require_auth(request)
+    require_profile_roles(roles)
     if source not in {"all","inhire","quickin","gupy","greenhouse","ashby","lever","bamboohr","dynamite","linkedin_guest","jobgether","workable","himalayas","remotive","remoteok","geekhunter","nerdin","recruitee"}:raise HTTPException(400,"Fonte não reconhecida")
     tasks=active_source_tasks(roles)
     if source!="all":
@@ -769,6 +781,7 @@ class ShortlistRequest(BaseModel):
 def ranking_shortlist(request: Request, payload: ShortlistRequest):
     """Cost-free shortlist over the *whole* collected set, before AI spending."""
     require_auth(request)
+    require_profile_roles(payload.roles)
     if len(payload.jobs)>2500 or len(payload.roles)>5000:
         raise HTTPException(400,'Seleção grande demais')
     from ai_resume_matcher import shortlist_jobs
@@ -778,6 +791,7 @@ def ranking_shortlist(request: Request, payload: ShortlistRequest):
 @app.post("/api/jd/enrich")
 def jd_enrich(request: Request, payload: JDRequest):
     require_auth(request)
+    require_profile_roles(payload.roles)
     if len(payload.jobs)>10:raise HTTPException(400,"Máximo de 10 vagas por lote")
     if len(payload.roles)>5000:raise HTTPException(400,"Filtro inválido")
     rows=[]

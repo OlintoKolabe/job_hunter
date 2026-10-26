@@ -34,8 +34,9 @@ def fold(x):
     return unicodedata.normalize("NFKD",str(x or "")).encode("ascii","ignore").decode().lower()
 
 def search_terms(value):
-    raw=[x.strip() for x in re.split(r"[,;\n]+",str(value or ""))]
-    return [fold(x) for x in raw if x.strip()][:250]
+    # Some pasted role lists escape comma separators (\\,); treat them as separators.
+    raw=[x.strip().rstrip("\\").strip() for x in re.split(r"[,;\n]+",str(value or ""))]
+    return [fold(x) for x in raw if x][:250]
 
 def parse_date(value):
     if not value:return None
@@ -78,6 +79,11 @@ ROLE_KEYS={
  "business":("business analyst","analista de negocios","analista de negocio","business operations"),
 }
 NON_TARGET_TITLE=re.compile(r"\b(developers?|engineers?|engineering|scientists?|researchers?|designers?|interns?|estagiarios?|estagiarias?|recruiters?|account executive|sdr|devops|backend|frontend)\b")
+EARLY_CAREER_ROLE=re.compile(r"\b(internship|intern|estagio|estagiario|estagiaria|junior|jr)\b")
+
+def early_career_search(terms):
+    return any(EARLY_CAREER_ROLE.search(fold(term)) for term in terms)
+
 def requested_families(terms):
     families=set()
     for term in terms:
@@ -260,7 +266,8 @@ def classify(job,terms,country,mode,days):
         "business analyst", "marketing manager", "growth manager", "product marketing manager",
         "gerente de produto", "gerente de projetos", "analista de negocios",
         "gerente de marketing"))
-    if NON_TARGET_TITLE.search(title) and not explicit_target:return "excluded","cargo"
+    if NON_TARGET_TITLE.search(title) and not explicit_target and not (early_career_search(terms) and role_match(title,terms)):
+        return "excluded","cargo"
     if "talent acquisition" in title and not any("talent acquisition" in term for term in terms):
         return "excluded","cargo"
     # Match the requested role before applying generic negative title tokens.
@@ -320,6 +327,8 @@ def analyze_filters(jobs,roles=DEFAULT_ROLES,country="BR",mode="remote",days=30,
     if mode not in ("remote","hybrid","onsite","all"):raise ValueError("Regime inválido")
     if days not in (0,1,3,7,15,30,60,90):raise ValueError("Período inválido")
     if sort not in ("score","recommendation","newest","oldest"):raise ValueError("Ordem inválida")
+    import multiuser as mu
+    early_career=mu.enabled and early_career_search(terms)
     confirmed=[];review=[];reasons={}
     for j in jobs:
         bucket,reason=classify(j,terms,country,mode,days)
@@ -329,7 +338,7 @@ def analyze_filters(jobs,roles=DEFAULT_ROLES,country="BR",mode="remote",days=30,
             valid=valid_listing_jd(description)
             evidence=signals(j,roles)
             result={**j,"detected_mode":detect_work_mode(j,evidence),"jd_evidence":evidence,
-                    "jd_available":valid,"ranking":score_job(j,roles) if valid else {"score":None,"confidence":"jd_indisponivel"},
+                    "jd_available":valid,"ranking":({"score":None,"confidence":"aguardando_evidencias_do_perfil"} if early_career else score_job(j,roles)) if valid else {"score":None,"confidence":"jd_indisponivel"},
                     "_listing_jd_hash":hashlib.sha256(description.encode()).hexdigest() if valid else None,
                     "description":""}
             if bucket=="confirmed":confirmed.append(result)

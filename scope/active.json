@@ -13,7 +13,8 @@
     "ai_interpreter.py",
     "tests/test_opportunity_ui_contracts.py",
     "tests/test_gate12_scoring.py",
-    "tests/test_block4_1.py"
+    "tests/test_block4_1.py",
+    "tests/test_ai_resume_matcher.py"
   ],
   "allowed_paths": [
     "scope/active.json",
@@ -24,7 +25,8 @@
     "ai_interpreter.py",
     "tests/test_opportunity_ui_contracts.py",
     "tests/test_gate12_scoring.py",
-    "tests/test_block4_1.py"
+    "tests/test_block4_1.py",
+    "tests/test_ai_resume_matcher.py"
   ],
   "forbidden_paths": [
     ".github/",

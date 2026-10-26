@@ -1,21 +1,20 @@
 {
-  "id": "JOB-HUNTER-P0-P1-SEARCH-20261026",
+  "id": "JOB-HUNTER-P0-P1-FOLLOWUP-20261026",
   "kind": "bugfix",
   "status": "active",
-  "base_ref": "8469f4520e8221a8e474e9bc93e13abf1a02d0ac",
+  "base_ref": "55ece44a3a3d4eb71c996184a2236d48e643d814",
   "feature_ref": "homologacao/busca-20261026-limpa",
-  "allowed_files": ["scope/active.json", "app.py", "ai_resume_matcher.py", "src/Opportunities.jsx", "collectors.py", "tests/test_p0_search_canary.py", "tests/test_opportunity_ui_contracts.py", "tests/test_search_source_fallbacks.py"],
+  "allowed_files": ["scope/active.json", "app.py", "search_filters.py", "catalog_engine.py", "src/Opportunities.jsx", "tests/test_p0_search_canary.py", "tests/test_search_role_scope.py"],
   "forbidden_paths": [".github/", "vercel/"],
-  "objective": "Fix evidence-confirmed P0/P1 search regressions on the isolated canary only: engineering shortlist error, catalog 502 recovery, and junior/data title loss at legacy HTML/JS source prefilter.",
-  "allowed_paths": ["scope/active.json", "app.py", "ai_resume_matcher.py", "src/Opportunities.jsx", "collectors.py", "tests/test_p0_search_canary.py", "tests/test_opportunity_ui_contracts.py", "tests/test_search_source_fallbacks.py"],
+  "objective": "Fix user-reproduced search regressions against a73a8e0: unwanted Growth/marketing role bleed, Himalayas Worldwide BR exclusion and JS-only boards blocking the general scan. Canary only.",
+  "allowed_paths": ["scope/active.json", "app.py", "search_filters.py", "catalog_engine.py", "src/Opportunities.jsx", "tests/test_p0_search_canary.py", "tests/test_search_role_scope.py"],
   "allowed_changes": [
-    "Use existing job-role aliases to fix engineering shortlist KeyError without changing the scoring formula",
-    "Handle transient HTTP 502/503/504/429 catalog responses with bounded retry and preserve partial scan evidence",
-    "Expose completed versus total catalog boards and explicit partial status",
-    "Extend existing HTML/JS source title prefilter only to include junior, internship, data and AI technical roles",
-    "Interleave existing catalog source queues after the verified starter boards so early partial scans sample multiple providers without adding requests",
-    "Verify source limitations with Neon evidence; no unproven Quickin adapter rewrite",
-    "Run red-green regression, UI build, canary deploy and three-profile tests"
+    "Match Growth via explicit job-role aliases, and do not re-admit unselected marketing titles",
+    "Restore stable Himalayas Worldwide eligibility only for the source's verified empty locationRestrictions convention",
+    "Defer evidence-backed slow browser-only boards after healthy catalog sources without dropping them",
+    "Avoid expensive Scrapling JS fallback during all-source scan; retain explicit single-source fallback",
+    "Bound the general UI scan time, and honestly report partial coverage without claiming completion",
+    "Run red-green regression, full tests, UI build, isolated canary deploy and read-only Render/Neon checks"
   ],
   "forbidden_changes": [
     "main, production Render and Neon, credentials, saved profiles, history, CV generation, scoring formula",
@@ -23,10 +22,10 @@
     "New collectors, schedulers, unrelated UI redesign, GitHub Actions or Vercel"
   ],
   "acceptance": [
-    "Engineering junior and internship shortlist does not throw KeyError",
-    "Transient 502 on a catalog batch retries and does not prematurely claim full completion",
-    "Legacy HTML/JS fallbacks consider technical junior and data roles, leaving eligibility to strict per-profile filters",
-    "Canary passes targeted regressions, React build and real Render/Neon verification; main untouched"
+    "Unselected marketing titles excluded even when Growth is selected; Growth Manager, PM/PO, Marcus and junior matches preserved",
+    "Source-specific Himalayas Worldwide Brazil behavior equals reference a73a8e0",
+    "Broad catalog does not wait for three Scrapling JS retries on bad boards, and preserves pending source evidence",
+    "Canary passes targeted regressions, full tests, React build and real Render/Neon verification; main untouched"
   ],
-  "deployment": "Only Render canary srv-dbfk472jnfac73cm9kig and Neon branch br-shy-snow-b7pqynjd. Source evidence: Render 2026-10-26 15:02-15:03 UTC KeyError engineering, HTML 502 in UI, Neon Quickin 24 Scrapling JS busy."
+  "deployment": "Only Render canary srv-dbfk472jnfac73cm9kig and Neon branch br-shy-snow-b7pqynjd. Source evidence: Render 16:33-16:41 UTC three consecutive 15s Scrapling page timeouts on Kaszek/Quickin; father roles included Growth; stable a73a8e0 marked Himalayas Worldwide eligible while 55ece44 marks unknown."
 }

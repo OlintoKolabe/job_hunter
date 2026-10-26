@@ -7,8 +7,9 @@ from unittest.mock import patch
 from fastapi import HTTPException
 
 import multiuser as mu
-from app import resolved_search_filters, ordered_catalog_tasks, WARM_SOURCE_TASKS
-from search_filters import classify, search_terms
+from app import resolved_search_filters, ordered_catalog_tasks, WARM_SOURCE_TASKS, search_jobs, catalog_scan
+from search_filters import classify, search_terms, discovery_queries
+import inspect
 
 
 class P0SearchRegressionTests(unittest.TestCase):
@@ -61,14 +62,50 @@ class P0SearchRegressionTests(unittest.TestCase):
                 job["published"]=(datetime.now(timezone.utc)-timedelta(days=20)).isoformat()
                 self.assertEqual(classify(job,terms,"BR","remote",7)[0],"excluded")
 
-    def test_catalog_strides_cover_every_offset_without_duplicates(self):
+    def test_search_stops_old_runs_and_invalid_or_unauthorized_pages(self):
         source=Path(__file__).resolve().parent.parent.joinpath("src","Opportunities.jsx").read_text()
-        self.assertIn("const scanConcurrency=2",source)
-        self.assertIn("offset+=scanBatchSize*scanConcurrency",source)
-        self.assertNotIn("nextIntermediateRanking",source)
-        first=list(range(0,336,12))
-        second=list(range(6,336,12))
-        self.assertEqual(sorted(first+second),list(range(0,336,6)))
+        self.assertIn("const activeSearchRef=useRef(null)",source)
+        self.assertIn("activeSearchRef.current=null",source)
+        self.assertIn("signal:searchSignal(65000)",source)
+        self.assertIn("const scanWorker=async()=>",source)
+        self.assertIn("if([400,401,403].includes(err.status))throw err",source)
+        self.assertIn("offset=batch.next_offset",source)
+        self.assertIn("await scanWorker();",source)
+        self.assertNotIn("const scanConcurrency=2",source)
+        self.assertNotIn("offset+=scanBatchSize*scanConcurrency",source)
+
+    def test_only_successful_initial_starter_boards_are_skipped(self):
+        first=inspect.getsource(search_jobs)
+        later=inspect.getsource(catalog_scan)
+        self.assertIn('pool.submit(collect,discovery_queries(roles),country,"all")',first)
+        self.assertIn('skip_starter:str=""',later)
+        self.assertIn('fetched &= WARM_SOURCE_TASKS',later)
+        self.assertIn('tasks=[(src,slug) for src,slug in tasks if',later)
+        frontend=Path(__file__).resolve().parent.parent.joinpath("src","Opportunities.jsx").read_text()
+        self.assertIn("x.status==='ok'&&x.source&&x.term",frontend)
+        self.assertIn("&skip_starter=",frontend)
+
+    def test_junior_and_intern_roles_do_not_admit_unrelated_management(self):
+        now=datetime.now(timezone.utc).isoformat()
+        roles=search_terms("Estagiário de TI, Desenvolvedor Júnior, Desenvolvedor Front End Júnior")
+        for title in ("IT Intern","Junior Software Developer","Junior Frontend Developer"):
+            with self.subTest(title=title):
+                job={"source":"ashby","title":title,"location":"Brazil - Remote","published":now}
+                self.assertEqual(classify(job,roles,"BR","remote",7)[0],"confirmed")
+        unrelated={"source":"ashby","title":"Commercial Operations Manager",
+                   "location":"Brazil - Remote","published":now}
+        self.assertEqual(classify(unrelated,roles,"BR","remote",7)[0],"excluded")
+        self.assertIn("software engineer intern",discovery_queries("Estagiário de TI, Desenvolvedor Júnior"))
+        # Existing Product Manager vocabulary must not admit junior developers.
+        self.assertEqual(classify({"source":"ashby","title":"Junior Developer",
+            "location":"Brazil - Remote","published":now},search_terms("Product Manager"),"BR","remote",7)[0],"excluded")
+
+    def test_worldwide_himalayas_needs_explicit_brazil_proof(self):
+        now=datetime.now(timezone.utc).isoformat()
+        job={"source":"himalayas","title":"Product Manager","location":"Worldwide - Remote","published":now}
+        self.assertEqual(classify(job,search_terms("Product Manager"),"BR","remote",7)[0],"review")
+        job["location"]="Brazil - Remote"
+        self.assertEqual(classify(job,search_terms("Product Manager"),"BR","remote",7)[0],"confirmed")
 
 
 if __name__=="__main__":

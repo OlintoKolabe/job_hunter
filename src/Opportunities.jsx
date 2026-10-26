@@ -13,6 +13,9 @@ function DecisionActions({job,pending,cvPending,cvError,onDecision,onGenerateCv}
 export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},profile=null}){
  const catalog=profile?.roles||[];
  const decidedUrlsRef=useRef(new Set());
+ const activeSearchRef=useRef(null);
+ const profileIdentity=JSON.stringify([profile?.id||profile?.user_id||profile?.email||profile?.name||'',profile?.roles||[],profile?.country||'BR',profile?.mode||'remote',profile?.days??0]);
+ const cancelActiveSearch=()=>{const running=activeSearchRef.current;if(running){running.abort();activeSearchRef.current=null;setBusy(false);}};
  const visibleUndecided=jobs=>jobs.filter(j=>!decidedUrlsRef.current.has(j.url));
  const [onlyNew,setOnlyNew]=useState(false),[searchedQuery,setSearchedQuery]=useState(''),[source,setSource]=useState('all'),[sources,setSources]=useState([{value:'all',label:'Todas as fontes'},{value:'inhire',label:'inHire'},{value:'quickin',label:'Quickin'},{value:'gupy',label:'Gupy'}]),[roles,setRoles]=useState(profile?boundedRoles(catalog):defaultRoles),[days,setDays]=useState(String(profile?.days??0)),[country,setCountry]=useState(profile?.country||'BR'),[countries,setCountries]=useState(initialCountries),[mode,setMode]=useState(profile?.mode||'remote'),[sort,setSort]=useState('score');
  const [sourceStats,setSourceStats]=useState({}),[reviews,setReviews]=useState([]),[excluded,setExcluded]=useState([]),[filterStats,setFilterStats]=useState({}),[rawScanned,setRawScanned]=useState(0),[busy,setBusy]=useState(false),[results,setResults]=useState([]),[message,setMessage]=useState(''),[error,setError]=useState(''),[cvErrors,setCvErrors]=useState({}),[checked,setChecked]=useState(0),[counts,setCounts]=useState({new:0,total:0}),[completed,setCompleted]=useState(false),[visibleCount,setVisibleCount]=useState(10),[evaluated,setEvaluated]=useState(0),[evaluationTotal,setEvaluationTotal]=useState(0),[scoringNow,setScoringNow]=useState([]),[scoringFailed,setScoringFailed]=useState([]),[scoringAttempted,setScoringAttempted]=useState([]);
@@ -20,7 +23,9 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},pro
  const [eligibilityTrace,setEligibilityTrace]=useState({eligible_for_detail:0,attempted:0,complete:0,failed:0,absent:0,deferred:0});
  const [sourceFieldStats,setSourceFieldStats]=useState({});
  const [sourceQuality,setSourceQuality]=useState({});
- useEffect(()=>{if(!profile)return;setRoles(boundedRoles(profile.roles||[]));setDays(String(profile.days??0));setCountry(profile.country||'BR');setMode(profile.mode||'remote');setResults([]);setReviews([]);setExcluded([]);setSearchedQuery('');setCompleted(false);},[profile]);
+ useEffect(()=>{cancelActiveSearch();if(!profile)return;setRoles(boundedRoles(profile.roles||[]));setDays(String(profile.days??0));setCountry(profile.country||'BR');setMode(profile.mode||'remote');setResults([]);setReviews([]);setExcluded([]);setSearchedQuery('');setCompleted(false);},[profileIdentity]);
+ useEffect(()=>{if(activeSearchRef.current)cancelActiveSearch();},[roles,country,mode,days,source,sort]);
+ useEffect(()=>()=>{activeSearchRef.current?.abort();activeSearchRef.current=null;},[]);
   useEffect(()=>{fetch('/api/search-filters',{cache:'no-store'}).then(r=>{if(!r.ok)throw Error('HTTP '+r.status);return r.json()}).then(d=>{if(d?.countries)setCountries(d.countries);if(!Array.isArray(d?.sources)||d.sources.length<4)throw Error('Lista de fontes incompleta');setSources(d.sources);}).catch(()=>setError('Não foi possível carregar a lista completa de fontes. Atualize a página; se persistir, consulte o serviço.'))},[]);
  const query=()=>new URLSearchParams({roles,country,mode,days,sort,source}).toString();
  const accumulateSourceFields=payload=>{
@@ -46,18 +51,33 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},pro
  };
  const changeSource=value=>{setSource(value);setResults([]);setReviews([]);setExcluded([]);setChecked(0);setCompleted(false);setMessage("Fonte alterada. Clique em Buscar oportunidades para executar a nova seleção.");setError("");};
  async function search(){
+  cancelActiveSearch();
+  const controller=new AbortController();
+  activeSearchRef.current=controller;
+  const isCurrent=()=>activeSearchRef.current===controller&&!controller.signal.aborted;
+  const searchSignal=ms=>AbortSignal.any([controller.signal,AbortSignal.timeout(ms)]);
   setSourceFieldStats({});setSourceQuality({});
   setFlowTrace({raw:0,classified_confirmed:0,classified_review:0,history_excluded:0,display_confirmed:0,display_review:0});setEligibilityTrace({eligible_for_detail:0,attempted:0,complete:0,failed:0,absent:0,deferred:0});
   setVisibleCount(10);setEvaluated(0);setEvaluationTotal(0);setScoringNow([]);setScoringFailed([]);setScoringAttempted([]);setBusy(true);setSearchedQuery(query());setError('');setResults([]);setReviews([]);setExcluded([]);setSourceStats({});setFilterStats({});setRawScanned(0);setChecked(0);setCompleted(false);setMessage('Consultando '+(sources.find(x=>x.value===source)?.label||source)+'…');
-  const qs=query();const all=new Map();const uncertain=new Map();const outOfFilter=new Map();const totals={};const sourceTotals={};let inspected=0;const record=(d)=>{setFlowTrace(old=>Object.fromEntries(Object.keys(old).map(k=>[k,old[k]+(d.flow_stats?.[k]||0)])));setEligibilityTrace(old=>Object.fromEntries(Object.keys(old).map(k=>[k,old[k]+(d.eligibility_fetch?.[k]||0)])));(d.details||[]).forEach(x=>{const src=(x.source||'desconhecida').toLowerCase();const n=sourceTotals[src]||{consultas:0,recebidas:0,erros:0,jdValidos:0,jdAusentes:0};n.consultas++;n.recebidas+=x.received||0;if(x.status==='error'||x.state==='pendente')n.erros++;sourceTotals[src]=n});for(const [src,v] of Object.entries(d.source_jd_stats||{})){const key=src.toLowerCase();const n=sourceTotals[key]||{consultas:0,recebidas:0,erros:0,jdValidos:0,jdAusentes:0};n.jdValidos+=(v.jd_valid||0);n.jdAusentes+=(v.jd_missing||0);sourceTotals[key]=n}setSourceStats({...sourceTotals});(d.review_items||[]).forEach(j=>uncertain.set(j.url,j));(d.excluded_items||[]).forEach(j=>{if(outOfFilter.size<300)outOfFilter.set(j.url,j)});setExcluded(visibleUndecided([...outOfFilter.values()]));for(const [key,n] of Object.entries(d.filter_stats||{})){totals[key]=(totals[key]||0)+n}inspected+=d.raw_count||0;setReviews(visibleUndecided([...uncertain.values()]));setFilterStats({...totals});setRawScanned(inspected)};let count=0;let completedAll=false;
+  const qs=query();const all=new Map();const uncertain=new Map();const outOfFilter=new Map();const totals={};const sourceTotals={};let inspected=0;const record=(d)=>{if(!isCurrent())return;setFlowTrace(old=>Object.fromEntries(Object.keys(old).map(k=>[k,old[k]+(d.flow_stats?.[k]||0)])));setEligibilityTrace(old=>Object.fromEntries(Object.keys(old).map(k=>[k,old[k]+(d.eligibility_fetch?.[k]||0)])));(d.details||[]).forEach(x=>{const src=(x.source||'desconhecida').toLowerCase();const n=sourceTotals[src]||{consultas:0,recebidas:0,erros:0,jdValidos:0,jdAusentes:0};n.consultas++;n.recebidas+=x.received||0;if(x.status==='error'||x.state==='pendente')n.erros++;sourceTotals[src]=n});for(const [src,v] of Object.entries(d.source_jd_stats||{})){const key=src.toLowerCase();const n=sourceTotals[key]||{consultas:0,recebidas:0,erros:0,jdValidos:0,jdAusentes:0};n.jdValidos+=(v.jd_valid||0);n.jdAusentes+=(v.jd_missing||0);sourceTotals[key]=n}setSourceStats({...sourceTotals});(d.review_items||[]).forEach(j=>uncertain.set(j.url,j));(d.excluded_items||[]).forEach(j=>{if(outOfFilter.size<300)outOfFilter.set(j.url,j)});setExcluded(visibleUndecided([...outOfFilter.values()]));for(const [key,n] of Object.entries(d.filter_stats||{})){totals[key]=(totals[key]||0)+n}inspected+=d.raw_count||0;setReviews(visibleUndecided([...uncertain.values()]));setFilterStats({...totals});setRawScanned(inspected)};let count=0;let completedAll=false;
   try{
-   const requestJson=async (url,timeoutMs=30000)=>{const r=await fetch(url,{method:'POST',signal:AbortSignal.timeout(timeoutMs)});const ct=r.headers.get('content-type')||'';if(!ct.includes('application/json'))throw Error('Servidor retornou HTML ('+r.status+'); lote não processado');const d=await r.json();if(!r.ok)throw Error(typeof d.detail==='string'?d.detail:('Erro HTTP '+r.status+' ao consultar vagas'));return d};
-   let d;
-   try{d=await requestJson('/api/search-jobs?'+qs,source==='all'?30000:90000)}
-   catch(err){if(source!=='all'||(err.name!=='TimeoutError'&&err.name!=='AbortError'&&!(err instanceof TypeError)))throw err;
-    setMessage('Consulta inicial demorou; continuando a busca nas fontes do catálogo sem repetir a mesma requisição.');
+   const requestJson=async (url,timeoutMs=30000)=>{
+    const r=await fetch(url,{method:'POST',signal:searchSignal(timeoutMs)});
+    const ct=r.headers.get('content-type')||'';
+    if(!ct.includes('application/json')){const err=Error('Servidor retornou HTML ('+r.status+'); lote não processado');err.status=r.status;throw err;}
+    const d=await r.json();
+    if(!r.ok){const err=Error(typeof d.detail==='string'?d.detail:('Erro HTTP '+r.status+' ao consultar vagas'));err.status=r.status;throw err;}
+    if(!isCurrent())throw Error('Busca cancelada por troca de perfil ou filtros');
+    return d;
+   };
+   let d;let initialSucceeded=true;
+   try{d=await requestJson('/api/search-jobs?'+qs,source==='all'?45000:90000)}
+   catch(err){if(!isCurrent()||source!=='all'||(err.name!=='TimeoutError'&&!(err instanceof TypeError)))throw err;
+    initialSucceeded=false;
+    setMessage('Consulta inicial demorou; continuando no catálogo, inclusive nas fontes iniciais ainda não confirmadas.');
     d={items:[],details:[],total:0,raw_count:0};
    }
+   if(!isCurrent())return;
    accumulateSourceFields(d);
 
    (d.items||[]).forEach(j=>all.set(j.url,j));record(d);count+=d.total||0;
@@ -73,22 +93,25 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},pro
      if(!waiting.length)return;
      setEvaluationTotal(v=>v+waiting.length);
      for(let start=0;start<waiting.length;start+=2){
+       if(!isCurrent())return;
        const chunk=waiting.slice(start,start+2);
        chunk.forEach(j=>scoredOrAttempted.add(j.url));
        setScoringNow(chunk.map(j=>j.url));
        try{
          const response=await fetch('/api/jd/enrich',{method:'POST',headers:{'Content-Type':'application/json'},
-           signal:AbortSignal.timeout(65000),body:JSON.stringify({jobs:chunk,roles})});
+           signal:searchSignal(65000),body:JSON.stringify({jobs:chunk,roles})});
          if(!response.ok)throw Error('Falha HTTP '+response.status);
          const data=await response.json();
+         if(!isCurrent())return;
          for(const j of data.items||[]){
            if(all.has(j.url))all.set(j.url,{...all.get(j.url),...j});
            if(uncertain.has(j.url))uncertain.set(j.url,{...uncertain.get(j.url),...j});
          }
          setResults(visibleUndecided([...all.values()]));setReviews(visibleUndecided([...uncertain.values()]));
        }catch(err){
-         setScoringFailed(prev=>[...prev,...chunk.map(j=>j.url)]);
+         if(isCurrent())setScoringFailed(prev=>[...prev,...chunk.map(j=>j.url)]);
        }finally{
+         if(!isCurrent())return;
          setScoringAttempted(prev=>[...prev,...chunk.map(j=>j.url)]);
          setScoringNow([]);
          resolved+=chunk.length;setEvaluated(resolved);
@@ -97,12 +120,13 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},pro
    }
    async function rankEntireCollection(maxNew=10){
      const available=[...all.values()].filter(j=>!scoredOrAttempted.has(j.url)&&j.jd_available===true&&!j.needs_verification?.length);
-     if(!available.length||maxNew<=0)return;
+     if(!available.length||maxNew<=0||!isCurrent())return;
      setMessage('Selecionando as melhores candidatas de '+all.size+' vagas antes da avaliação por IA…');
      const response=await fetch('/api/ranking/shortlist',{method:'POST',headers:{'Content-Type':'application/json'},
-       signal:AbortSignal.timeout(15000),body:JSON.stringify({jobs:available.map(j=>({url:j.url,title:j.title,description:(j.description||'').slice(0,1500),ranking:j.ranking,needs_verification:j.needs_verification})),roles,limit:maxNew})});
+       signal:searchSignal(15000),body:JSON.stringify({jobs:available.map(j=>({url:j.url,title:j.title,description:(j.description||'').slice(0,1500),ranking:j.ranking,needs_verification:j.needs_verification})),roles,limit:maxNew})});
      if(!response.ok)throw Error('Triagem global indisponível (HTTP '+response.status+'); nenhuma avaliação paga foi iniciada.');
      const selection=await response.json();
+     if(!isCurrent())return;
      if(!Array.isArray(selection.urls))throw Error('Resposta inválida da triagem global');
      setMessage('Triagem de '+all.size+' vagas concluída. Avaliando até '+selection.urls.length+' candidatas prioritárias com IA…');
      await enrichAvailable(selection.urls);
@@ -111,6 +135,7 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},pro
    // multi-board catalog continues scanning. Leave six slots for the complete
    // collection; never re-evaluate a URL or silently use mock scores.
    const earlyRanking=rankEntireCollection(4).catch(err=>{
+     if(!isCurrent())return;
      setScoringFailed(prev=>[...prev,'shortlist-initial']);
      setMessage('Triagem inicial indisponível; continuando a busca de vagas. '+err.message);
    });
@@ -118,46 +143,69 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},pro
    // with source=indeed always returns 400 and can flood the UI with retries.
    if(['himalayas','remotive','remoteok','indeed'].includes(source)){
      await earlyRanking;
+     if(!isCurrent())return;
      await rankEntireCollection(Math.max(0,10-scoredOrAttempted.size));
+     if(!isCurrent())return;
      setCompleted(true);
      setMessage('Consulta à fonte '+source+' concluída; vagas apresentadas após filtros e exclusões do Histórico.');
      return;
    }
-   const scanBatchSize=6;
-   const scanConcurrency=2; // Disjoint catalog strides; no duplicate board requests.
+   const scanBatchSize=12;
+   // Exclude only starter boards with successful initial responses.
+   const starters=initialSucceeded?(d.details||[]).filter(x=>x.status==='ok'&&x.source&&x.term)
+     .map(x=>String(x.source).toLowerCase()+':'+String(x.term).toLowerCase()).join(','):'';
+   const starterQuery=starters?'&skip_starter='+encodeURIComponent(starters):'';
    let skipped=0;
    let reachedEnd=false;
-   const scanWorker=async(workerIndex)=>{
-    let offset=workerIndex*scanBatchSize;
-    for(let n=0;n<90;n++){
+   const scanWorker=async()=>{
+    let offset=0;
+    let expectedTotal=null;
+    for(let n=0;n<125&&isCurrent();n++){
      let batch;
-     for(let attempt=0;attempt<2;attempt++){
-      try{batch=await requestJson('/api/catalog/scan?offset='+offset+'&limit='+scanBatchSize+'&'+qs);accumulateSourceFields(batch);break}
-      catch(err){if(!['TimeoutError','AbortError'].includes(err.name)&&!(err instanceof TypeError))break}
+     for(let attempt=0;attempt<2&&isCurrent();attempt++){
+      try{
+       batch=await requestJson('/api/catalog/scan?offset='+offset+'&limit='+scanBatchSize+'&'+qs+starterQuery,90000);
+       accumulateSourceFields(batch);
+       break;
+      }catch(err){
+       if(!isCurrent())throw err;
+       if([400,401,403].includes(err.status))throw err;
+       if(!['TimeoutError','AbortError'].includes(err.name)&&!(err instanceof TypeError))throw err;
+      }
      }
+     if(!isCurrent())return;
      if(!batch){
       skipped++;
-      setMessage('Alguns quadros falharam após tentativa de recuperação; continuando os demais. Falhas: '+skipped);
-      offset+=scanBatchSize*scanConcurrency;continue;
+      if(skipped>2)throw Error('Três lotes de catálogo indisponíveis; resultados parciais preservados.');
+      setMessage('Falha transitória em lote; prosseguindo com as demais fontes.');
+      offset+=scanBatchSize;
+      continue;
      }
+     if(!Number.isFinite(batch.total_sources)||!Number.isFinite(batch.next_offset)||batch.next_offset<=offset)
+      throw Error('Paginação inválida no catálogo; resultados parciais preservados.');
+     if(expectedTotal!==null&&expectedTotal!==batch.total_sources)
+      throw Error('Catálogo mudou durante a busca; execute nova consulta.');
+     expectedTotal=batch.total_sources;
      (batch.items||[]).filter(j=>source==='all'||j.source?.toLowerCase()===source||(source==='greenhouse'&&j.source?.toLowerCase()==='greenhouse_eu')).forEach(j=>{const old=all.get(j.url);all.set(j.url,old&&(old.ranking?.score!=null||scoredOrAttempted.has(j.url))?old:j)});
      record(batch);
-     if(!Number.isFinite(batch.next_offset)||batch.next_offset<offset)throw Error('Paginação inválida');
      count+=batch.found||0;setResults(visibleUndecided([...all.values()]));setChecked(x=>x+(batch.details||[]).length);setCounts({new:all.size,total:count});
-     if(batch.complete){reachedEnd=true;break}
-     if(!(batch.details||[]).length)break;
-     offset+=scanBatchSize*scanConcurrency;
+     offset=batch.next_offset;
+     if(batch.complete||offset>=expectedTotal){reachedEnd=true;break}
+     if(!(batch.details||[]).length)throw Error('Lote vazio antes do fim do catálogo; busca parcial preservada.');
     }
    };
-   // Catalog collection no longer pauses for optional scoring.
-   await Promise.all(Array.from({length:scanConcurrency},(_,index)=>scanWorker(index)));
+   // Single bounded cursor avoids overlap and limits canary CPU/memory pressure.
+   await scanWorker();
+   if(!isCurrent())return;
    completedAll=reachedEnd&&skipped===0;
    await earlyRanking;
+   if(!isCurrent())return;
    await rankEntireCollection(Math.max(0,10-scoredOrAttempted.size));
+   if(!isCurrent())return;
    setCompleted(completedAll);
    setMessage(completedAll&&!skipped&&!Object.values(sourceTotals).some(v=>v.erros)?'Busca concluída.':('Busca com fontes indisponíveis: '+(skipped+Object.values(sourceTotals).reduce((n,v)=>n+v.erros,0))+' falhas registradas. Zero resultado não significa zero vagas. Confira Fontes.'));
-  }catch(e){setError(e.message);setMessage('Busca parcial — os resultados encontrados continuam disponíveis.')}
-  finally{setBusy(false)}
+  }catch(e){if(isCurrent()){setError(e.message);setMessage('Busca parcial — os resultados encontrados continuam disponíveis. '+e.message);}}
+  finally{if(activeSearchRef.current===controller){activeSearchRef.current=null;setBusy(false)}}
  }
  async function evaluateManually(job){
    setScoringNow([job.url]);setScoringFailed(prev=>prev.filter(x=>x!==job.url));

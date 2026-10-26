@@ -231,41 +231,12 @@ class Block41Tests(unittest.TestCase):
         self.assertEqual(out["requirements"][0]["evidence_id"],"roadmap")
         self.assertIsNone(out["requirements"][1]["evidence_id"])
         self.assertLess(out["score"],100)
-    def test_ai_discards_requirements_not_in_jd(self):
-        import json
-        from io import BytesIO
-        jd="Must have roadmap and backlog experience, plus CRM skills."
-        response={"choices":[{"message":{"content":json.dumps({"requirements":[
-            {"name":"roadmap","type":"obrigatorio","skill_id":"roadmap"},
-            {"name":"invented SQL requirement","type":"obrigatorio","skill_id":None}
-        ]})}}],"usage":{"prompt_tokens":30,"completion_tokens":20}}
+    def test_legacy_ai_interpreter_never_calls_provider(self):
         with patch.dict("os.environ",{"JH_AI_ENABLED":"1","OPENAI_API_KEY":"test-only"}):
-            with patch("urllib.request.urlopen",return_value=BytesIO(json.dumps(response).encode())):
-                result=interpret(jd)
-        self.assertEqual([item["name"] for item in result["requirements"]],["roadmap"])
-    def test_ai_unexpected_skill_id_type_is_safe(self):
-        import json
-        from io import BytesIO
-        jd="Required roadmap expertise and backlog planning."
-        payload={"choices":[{"message":{"content":json.dumps({"requirements":[
-            {"name":"roadmap","type":"obrigatorio","skill_id":["roadmap"]},
-            {"name":"backlog","type":"obrigatorio","skill_id":"backlog"}]})}}],"usage":{}}
-        with patch.dict("os.environ",{"JH_AI_ENABLED":"1","OPENAI_API_KEY":"test-only"}):
-            with patch("urllib.request.urlopen",return_value=BytesIO(json.dumps(payload).encode())):
-                result=interpret(jd)
-        self.assertIsNone(result["requirements"][0]["skill_id"])
-        self.assertEqual(result["requirements"][1]["skill_id"],"backlog")
-    def test_ai_normalizes_html_whitespace_before_literal_match(self):
-        import json
-        from io import BytesIO
-        jd="<h3>Requirements</h3><li>Manage product&nbsp; roadmap</li>"
-        payload={"choices":[{"message":{"content":json.dumps({"requirements":[
-            {"name":"Manage product roadmap","type":"obrigatorio","skill_id":"roadmap"}
-        ]})}}],"usage":{}}
-        with patch.dict("os.environ",{"JH_AI_ENABLED":"1","OPENAI_API_KEY":"test-only"}):
-            with patch("urllib.request.urlopen",return_value=BytesIO(json.dumps(payload).encode())):
-                result=interpret(jd)
-        self.assertEqual(len(result["requirements"]),1)
+            with patch("urllib.request.urlopen",side_effect=AssertionError("OpenAI evaluation forbidden")) as provider:
+                self.assertIsNone(interpret("Required roadmap expertise and backlog planning."))
+                self.assertIsNone(interpret("<h3>Requirements</h3><li>Manage product roadmap</li>"))
+        provider.assert_not_called()
     def test_failed_interpretation_is_persistently_cached(self):
         from datetime import datetime,timezone,timedelta
         from unittest.mock import Mock
@@ -278,14 +249,6 @@ class Block41Tests(unittest.TestCase):
         cur.fetchone.return_value=({"score":None,"_ai_failed":True},"ai_error",datetime.now(timezone.utc)-timedelta(hours=2))
         with patch.dict("os.environ",{"JH_AI_ENABLED":"1","OPENAI_API_KEY":"test-only"}):
             self.assertTrue(get_cached(cur,"https://example.com/job","hash","Product Manager")["_ai_failed"])
-    def test_ai_empty_output_fails_explicitly(self):
-        import json
-        from io import BytesIO
-        payload={"choices":[{"message":{"content":""}}]}
-        with patch.dict("os.environ",{"JH_AI_ENABLED":"1","OPENAI_API_KEY":"test-only"}):
-            with patch("urllib.request.urlopen",return_value=BytesIO(json.dumps(payload).encode())):
-                with self.assertRaises(ValueError):
-                    interpret("Required roadmap")
     def test_unknown_semantic_skills_are_not_awarded_points(self):
         rows=[{"name":str(i),"type":"obrigatorio","skill_id":"imaginary_skill"} for i in range(4)]
         self.assertIsNone(merge_semantic_requirements({"score":None},rows)["score"])

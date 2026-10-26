@@ -46,6 +46,17 @@ class P0SearchRegressionTests(unittest.TestCase):
         self.assertEqual(len(ordered),len(tasks))
         self.assertIn(("inhire","brq"),WARM_SOURCE_TASKS)
 
+    def test_catalog_round_robin_covers_sources_before_late_quickin_burst(self):
+        tasks=[("quickin",f"q{i}") for i in range(15)]
+        tasks += [("ashby",f"a{i}") for i in range(15)]
+        tasks += [("greenhouse",f"g{i}") for i in range(15)]
+        tasks += [("lever",f"l{i}") for i in range(15)]
+        ordered=ordered_catalog_tasks(tasks)
+        self.assertEqual(set(ordered),set(tasks))
+        self.assertEqual(len(ordered),len(tasks))
+        self.assertGreaterEqual(len(set(s for s,_ in ordered[:12])),4)
+        self.assertLessEqual(sum(s=="quickin" for s,_ in ordered[:12]),3)
+
     def test_brazil_remote_is_classified_consistently_across_sources(self):
         now=datetime.now(timezone.utc).isoformat()
         terms=search_terms("Product Manager")

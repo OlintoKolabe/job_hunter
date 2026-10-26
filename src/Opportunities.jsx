@@ -157,6 +157,8 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},pro
    const starterQuery=starters?'&skip_starter='+encodeURIComponent(starters):'';
    let skipped=0;
    let reachedEnd=false;
+   let scannedBoards=0;
+   let expectedBoardCount=null;
    const scanWorker=async()=>{
     let offset=0;
     let expectedTotal=null;
@@ -170,7 +172,9 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},pro
       }catch(err){
        if(!isCurrent())throw err;
        if([400,401,403].includes(err.status))throw err;
-       if(!['TimeoutError','AbortError'].includes(err.name)&&!(err instanceof TypeError))throw err;
+       // Render's gateway can return HTML for a temporary 502/503/504.
+       // Such responses must use the same bounded retry as a network timeout.
+       if(!['TimeoutError','AbortError'].includes(err.name)&&!(err instanceof TypeError)&&![429,502,503,504].includes(err.status))throw err;
       }
      }
      if(!isCurrent())return;
@@ -186,8 +190,10 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},pro
      if(expectedTotal!==null&&expectedTotal!==batch.total_sources)
       throw Error('Catálogo mudou durante a busca; execute nova consulta.');
      expectedTotal=batch.total_sources;
+     expectedBoardCount=expectedTotal;
      (batch.items||[]).filter(j=>source==='all'||j.source?.toLowerCase()===source||(source==='greenhouse'&&j.source?.toLowerCase()==='greenhouse_eu')).forEach(j=>{const old=all.get(j.url);all.set(j.url,old&&(old.ranking?.score!=null||scoredOrAttempted.has(j.url))?old:j)});
      record(batch);
+     scannedBoards+=(batch.details||[]).length;
      count+=batch.found||0;setResults(visibleUndecided([...all.values()]));setChecked(x=>x+(batch.details||[]).length);setCounts({new:all.size,total:count});
      offset=batch.next_offset;
      if(batch.complete||offset>=expectedTotal){reachedEnd=true;break}
@@ -202,8 +208,11 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},pro
    if(!isCurrent())return;
    await rankEntireCollection(Math.max(0,10-scoredOrAttempted.size));
    if(!isCurrent())return;
-   setCompleted(completedAll);
-   setMessage(completedAll&&!skipped&&!Object.values(sourceTotals).some(v=>v.erros)?'Busca concluída.':('Busca com fontes indisponíveis: '+(skipped+Object.values(sourceTotals).reduce((n,v)=>n+v.erros,0))+' falhas registradas. Zero resultado não significa zero vagas. Confira Fontes.'));
+   const failedSources=Object.values(sourceTotals).reduce((n,v)=>n+v.erros,0);
+   const fullyComplete=completedAll&&failedSources===0;
+   setCompleted(fullyComplete);
+   const catalogCoverage=scannedBoards+' de '+(expectedBoardCount??'total indisponível')+' quadros do catálogo';
+   setMessage(fullyComplete?'Busca concluída — '+catalogCoverage+'.':('Busca parcial — '+catalogCoverage+', '+skipped+' lotes e '+failedSources+' quadros com falha ou dados pendentes. Zero resultado não significa zero vagas. Confira Fontes.'));
   }catch(e){if(isCurrent()){setError(e.message);setMessage('Busca parcial — os resultados encontrados continuam disponíveis. '+e.message);}}
   finally{if(activeSearchRef.current===controller){activeSearchRef.current=null;setBusy(false)}}
  }

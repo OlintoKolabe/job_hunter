@@ -562,9 +562,23 @@ WARM_SOURCE_TASKS={(source.casefold(),slug.casefold()) for source,slugs in BOARD
 
 
 def ordered_catalog_tasks(tasks):
-    """Surface the stable, Brazil-oriented starter boards before the long catalog."""
+    """Surface proven Brazil boards first, then rotate between providers.
+
+    Previously alphabetical provider blocks meant a partial scan could spend
+    dozens of requests on one source; consecutive Quickin fallbacks also
+    competed for the one existing Scrapling browser semaphore.
+    """
     valid=[(src,slug) for src,slug in tasks if slug.casefold() not in ("kraken","kraken.com","payward")]
-    return sorted(valid,key=lambda x:(0 if (x[0].casefold(),x[1].casefold()) in WARM_SOURCE_TASKS else 1,x[0].casefold(),x[1].casefold()))
+    ordered=sorted(valid,key=lambda x:(x[0].casefold(),x[1].casefold()))
+    starters=[task for task in ordered if (task[0].casefold(),task[1].casefold()) in WARM_SOURCE_TASKS]
+    remainder=[task for task in ordered if (task[0].casefold(),task[1].casefold()) not in WARM_SOURCE_TASKS]
+    by_source={}
+    for source,slug in remainder:
+        by_source.setdefault(source.casefold(),[]).append((source,slug))
+    rounds=max((len(v) for v in by_source.values()),default=0)
+    interleaved=[by_source[source][i] for i in range(rounds)
+                 for source in sorted(by_source) if i<len(by_source[source])]
+    return starters+interleaved
 
 
 def active_source_tasks(roles=DEFAULT_ROLES):

@@ -1,30 +1,63 @@
 {
-  "id": "JOB-HUNTER-ATS-DOCX-LAYOUT-IDENTITY-FIX-20261025",
+  "id": "JOB-HUNTER-MERGE-APPROVED-SEARCH-LOGOUT-20261026",
   "kind": "bugfix",
   "status": "active",
-  "base_ref": "07dbbb542e5d19cb80d6ecbee7664969523ab2a8",
-  "feature_ref": "main",
-  "allowed_files": ["scope/active.json", "src/Opportunities.jsx", "resume_engine.py", "ai_resume_matcher.py", "tests/test_ai_resume_matcher.py", "tests/test_resume_engine.py", "tests/test_opportunity_ui_contracts.py"],
-  "forbidden_paths": [".github/", "vercel/"],
-  "objective": "Fix account-specific ATS download names and improve the single-column DOCX layout and evidence relevance without changing saved profiles.",
-  "allowed_paths": ["scope/active.json", "src/Opportunities.jsx", "resume_engine.py", "ai_resume_matcher.py", "tests/test_ai_resume_matcher.py", "tests/test_resume_engine.py", "tests/test_opportunity_ui_contracts.py"],
+  "base_ref": "6e3868330c26e604702204b9a541850e193ef0ea",
+  "feature_ref": "fix/merge-approved-search-logout-20261026",
+  "allowed_files": [
+    "scope/active.json",
+    "Dockerfile",
+    "app.py",
+    "catalog_engine.py",
+    "collectors.py",
+    "search_filters.py",
+    "ai_resume_matcher.py",
+    "src/Opportunities.jsx",
+    "src/style.css",
+    "tests/test_opportunity_ui_contracts.py",
+    "tests/test_p0_search_canary.py",
+    "tests/test_search_role_scope.py",
+    "tests/test_search_source_fallbacks.py",
+    "tests/test_sidebar_logout_visibility.py"
+  ],
+  "allowed_paths": [
+    "scope/active.json",
+    "Dockerfile",
+    "app.py",
+    "catalog_engine.py",
+    "collectors.py",
+    "search_filters.py",
+    "ai_resume_matcher.py",
+    "src/Opportunities.jsx",
+    "src/style.css",
+    "tests/test_opportunity_ui_contracts.py",
+    "tests/test_p0_search_canary.py",
+    "tests/test_search_role_scope.py",
+    "tests/test_search_source_fallbacks.py",
+    "tests/test_sidebar_logout_visibility.py"
+  ],
+  "forbidden_paths": [
+    ".github/",
+    "vercel/"
+  ],
+  "objective": "Merge only father/Marcus-approved search canary fixes, keep CV generation unchanged, and pin the logout action inside the always-visible sidebar.",
   "allowed_changes": [
-    "Use the authenticated profile name in the browser's DOCX download fallback instead of the former owner's name",
-    "Reuse existing evidence selection and relevance ranking to reduce unrelated compact experience entries in tailored CVs",
-    "End AI summaries on a complete word or sentence without changing factual provenance",
-    "Improve the existing DOCX's one-column typography, role hierarchy, whitespace and page breaks without tables or graphics",
-    "Add filename, semantic-selection and rendered-document regressions; verify backend tests and frontend build"
+    "Transfer only homologated search collection, selection, paging, source matching and filter adjustments",
+    "Fix the engineering shortlist KeyError without changing resume generation methods, factual evidence or scoring rubric",
+    "Keep logout visible while long search results scroll",
+    "Run mandatory existing CV and search tests and React build",
+    "Sync operational Render branch without overwriting non-search changes"
   ],
   "forbidden_changes": [
-    "Changing saved profiles, accounts, passwords, searches, history, applications, dismissals or scoring",
-    "Cross-account professional evidence, invented qualifications or fabricated ATS scores",
-    "New CV engines, schedulers, search providers, paid services, GitHub Actions or Vercel"
+    "Alterations to resume_engine.py, resume_hybrid.py, job history, saved profiles, user credentials, database schema, costs",
+    "Changes to business logic of CV/ATS generation, notes/scoring formula or third-party source catalogue beyond approved search fixes",
+    "GitHub Actions, Vercel, new environments, unapproved migrations or replacement of existing multiuser database"
   ],
   "acceptance": [
-    "Browser download never defaults to Olinto's name for another authenticated account",
-    "Selected AI-verified facts remain present, unselected irrelevant roles are bounded",
-    "Long AI summaries are not cut midword; generated DOCX renders cleanly in one or two balanced pages",
-    "Existing factual audits, regression tests and UI build pass"
+    "Approved father and Marcus search paths match homologated canary, son search remains for future canary work",
+    "Resume generation files unchanged; factual and DOCX regression tests pass",
+    "Logout remains visible on desktop/mobile while scrolling",
+    "Render operational deploy reports live with UI build and health OK; prior main rollback preserved"
   ],
-  "deployment": "Follow-up correction of ATS generation requested after inspection of a real downloaded DOCX on 2026-10-25"
+  "deployment": "After confirming scope and test build, update main; synchronize only approved files into existing Render production branch and deploy; no merge of experimental CV engine."
 }

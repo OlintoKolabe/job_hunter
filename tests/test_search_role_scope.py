@@ -20,7 +20,7 @@ def example(title, source="workable", location="Brazil - Remote"):
 class SelectedRoleAndSourceRegressionTests(unittest.TestCase):
     def test_unselected_marketing_does_not_ride_on_growth(self):
         selected = search_terms("Product Manager, Product Owner, Project Manager, Gerente de Projetos, Growth, PMO")
-        for title in ("General Manager - Marketing and Ecommerce Growth", "VR Growth & Live Games", "Growth Marketing Manager"):
+        for title in ("General Manager - Marketing and Ecommerce Growth", "VR Growth & Live Games", "Growth Marketing Manager", "Marketing Operations Manager"):
             with self.subTest(title=title):
                 self.assertEqual(classify(example(title), selected, "BR", "remote", 0)[0], "excluded")
 

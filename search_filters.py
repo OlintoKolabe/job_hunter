@@ -280,6 +280,10 @@ def geo_verdict(job,country,evidence=None):
 
 def classify(job,terms,country,mode,days):
     title=fold(job.get("title",""))
+    # A neighboring operations/project JD must not re-admit an explicitly
+    # unselected marketing title through the adjacent-manager review path.
+    if contains_phrase(title,"marketing") and not any(t in ("marketing","product marketing") for t in terms):
+        return "excluded","cargo"
     from jd_signals import signals
     evidence=signals(job,", ".join(terms))
     if evidence["spanish_required"]:return "excluded","espanhol_obrigatorio"

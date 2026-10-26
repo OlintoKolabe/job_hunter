@@ -251,16 +251,6 @@ def classify(job,terms,country,mode,days):
     if re.search(r"\b(?:internship|intern|estagio|estagiari[oa])\b",title) and not any(
         re.search(r"\b(?:internship|intern|estagio|estagiari[oa])\b",term) for term in terms):
         return "excluded","cargo"
-    # Generic family aliases such as "marketing"/"acquisition" must not
-    # admit engineering roles or HR recruitment into an executive search.
-    # Protect explicitly named PM/PO/BA/project/marketing management roles,
-    # including e.g. "Technical Product Manager - Engineering".
-    explicit_target=any(phrase in title for phrase in (
-        "product manager", "product owner", "project manager", "program manager",
-        "business analyst", "marketing manager", "growth manager", "product marketing manager",
-        "gerente de produto", "gerente de projetos", "analista de negocios",
-        "gerente de marketing"))
-    if NON_TARGET_TITLE.search(title) and not explicit_target:return "excluded","cargo"
     if "talent acquisition" in title and not any("talent acquisition" in term for term in terms):
         return "excluded","cargo"
     # Match the requested role before applying generic negative title tokens.
@@ -320,6 +310,7 @@ def analyze_filters(jobs,roles=DEFAULT_ROLES,country="BR",mode="remote",days=30,
     if mode not in ("remote","hybrid","onsite","all"):raise ValueError("Regime inválido")
     if days not in (0,1,3,7,15,30,60,90):raise ValueError("Período inválido")
     if sort not in ("score","recommendation","newest","oldest"):raise ValueError("Ordem inválida")
+    import multiuser as mu
     confirmed=[];review=[];reasons={}
     for j in jobs:
         bucket,reason=classify(j,terms,country,mode,days)
@@ -329,7 +320,7 @@ def analyze_filters(jobs,roles=DEFAULT_ROLES,country="BR",mode="remote",days=30,
             valid=valid_listing_jd(description)
             evidence=signals(j,roles)
             result={**j,"detected_mode":detect_work_mode(j,evidence),"jd_evidence":evidence,
-                    "jd_available":valid,"ranking":score_job(j,roles) if valid else {"score":None,"confidence":"jd_indisponivel"},
+                    "jd_available":valid,"ranking":({"score":None,"confidence":"aguardando_evidencias_do_perfil"} if mu.enabled else score_job(j,roles)) if valid else {"score":None,"confidence":"jd_indisponivel"},
                     "_listing_jd_hash":hashlib.sha256(description.encode()).hexdigest() if valid else None,
                     "description":""}
             if bucket=="confirmed":confirmed.append(result)

@@ -28,4 +28,29 @@ class SourceIdentityTests(unittest.TestCase):
         p.feed('<li class="base-card"><a href="/jobs/view/789"><h3>Product Owner</h3></a></li>')
         self.assertEqual(p.cards[0]["location"],"")
 
+
+    def test_linkedin_nested_card_matches_current_guest_markup(self):
+        from source_extensions import LinkedInCards
+        html='''<ul><li><div class="base-card relative w-full">
+          <a href="/jobs/view/123"><h3 class="base-search-card__title">Product Manager</h3></a>
+          <h4 class="base-search-card__subtitle">Example</h4>
+          <span class="job-search-card__location">Brazil</span>
+          <time datetime="2026-10-27"></time>
+        </div></li></ul>'''
+        p=LinkedInCards();p.feed(html)
+        self.assertEqual(len(p.cards),1)
+        self.assertEqual(p.cards[0]["title"].strip(),"Product Manager")
+        self.assertEqual(p.cards[0]["company"].strip(),"Example")
+        self.assertEqual(p.cards[0]["location"].strip(),"Brazil")
+
+    def test_bamboohr_keeps_raw_jobs_until_user_filter(self):
+        import json
+        from catalog_engine import extra_pull
+        payload={"result":[{"id":"7","jobOpeningName":"People Operations Coordinator","location":"Remote"},{"id":"8","jobOpeningName":"Senior Data Engineer","location":"Brazil"}]}
+        with patch("catalog_engine.read",return_value=(json.dumps(payload).encode(),200)):
+            jobs,state=extra_pull("bamboohr","example")
+        self.assertEqual(state,"ok")
+        self.assertEqual(len(jobs),2)
+        self.assertEqual([j["title"] for j in jobs],["People Operations Coordinator","Senior Data Engineer"])
+
 if __name__=="__main__":unittest.main()

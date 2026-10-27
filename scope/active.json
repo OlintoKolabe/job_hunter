@@ -1,6 +1,7 @@
 {
   "id": "JOB-HUNTER-QUICKIN-INHIRE-P0-P2-20261027",
   "kind": "bugfix",
+  "objective": "Recover all published Quickin jobs from verified boards and accurately classify valid empty inHire boards without affecting search filters, profiles, or CV generation.",
   "status": "isolated-implementation",
   "base_ref": "53712d72bf8d4ef8ee10e05ad2f014c6b716710b",
   "rollback_ref": "rollback/main-reference-quickin-inhire-20261027",

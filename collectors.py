@@ -217,7 +217,8 @@ def pull(source,slug,location='brazil'):
             if value:
                 value["workplaceType"]=workplace
                 jobs.append(preserve_eligibility_fields(value,j))
-    if source=="inHire" and not jobs:
+    if source=="inHire" and not jobs and not (isinstance(payload,dict)
+            and isinstance(payload.get("jobsPage"),list) and len(payload["jobsPage"])==0):
         raise ValueError("inHire returned no parsed jobs; API response format requires verification")
     # Keep all parsed jobs. Role relevance belongs to search_filters, not the collector.
     return {"source":source,"term":slug,"status":"ok","received":len(jobs),"target":len(jobs)},jobs

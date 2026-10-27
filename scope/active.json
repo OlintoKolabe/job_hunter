@@ -1,24 +1,41 @@
 {
-  "id": "JOB-HUNTER-CV-FILENAME-20261027",
+  "id": "JOB-HUNTER-QUICKIN-INHIRE-P0-P2-20261027",
   "kind": "bugfix",
-  "objective": "Name every ATS Word download NomeCompleto_Cargo_Empresa.docx using the authenticated profile without changing CV content or other features.",
+  "objective": "Recover all published Quickin jobs from verified boards and accurately classify valid empty inHire boards without affecting search filters, profiles, or CV generation.",
+  "status": "isolated-implementation",
   "base_ref": "53712d72bf8d4ef8ee10e05ad2f014c6b716710b",
-  "allowed_paths": ["app.py", "tests/test_resume_engine.py"],
+  "rollback_ref": "rollback/main-reference-quickin-inhire-20261027",
+  "allowed_paths": [
+    "scope/active.json",
+    "catalog_engine.py",
+    "collectors.py",
+    "app.py",
+    "tests/test_quickin_public_api.py",
+    "tests/test_quickin_coverage.py",
+    "tests/test_quickin_html_fallback.py",
+    "tests/test_inhire_collector.py",
+    "docs/SOURCE_QUICKIN_INHIRE_ROLLBACK_20261027.md"
+  ],
   "allowed_changes": [
-    "Reuse one sanitized filename helper in existing ATS and legacy download responses",
-    "Preserve the full name of the active user and separators between name, job title, and company",
-    "Add regression tests for all three existing profile types and invalid filename characters"
+    "Recover Quickin account_id from public published careers page, correctly parse docs and pagination",
+    "Separate legitimate empty inHire board from malformed API payload; verify complete returned pages",
+    "Measure raw-versus-parsed and JD availability with source-level tests and evidence",
+    "Maintain known-board inventory and do not falsely claim global source coverage",
+    "Document exact baseline main SHA and rollback steps"
   ],
   "forbidden_changes": [
-    "Change CV content, JD parsing, scoring, search, filters, profile data, history, or source collectors",
-    "Create migrations, new endpoints, mock source data or paid requests",
-    "Use GitHub Actions or Vercel or overwrite unrelated main commits"
+    "Any change to main before regression evidence and user homologation",
+    "Changes to profiles, JD scoring, ATS CV, auth, history, roles, search filters, schema or paid APIs",
+    "New infrastructure, GitHub Actions, Vercel, mock data replacing real collection",
+    "Expansion to other job sources"
   ],
   "acceptance": [
-    "All download paths return filename*=UTF-8 encoded NomeCompleto_Cargo_Empresa.docx",
-    "No cross-user name contamination or hard-coded Olinto on multiuser route",
-    "Full backend and profile regression suites pass",
-    "Only app.py and tests/test_resume_engine.py code diff relative to the scoped contract"
+    "Quickin BotCity returns 11/11 jobs from confirmed public API at 2026-10-27 sample and Product Owner preserved",
+    "inHire BRQ returns 71/71 from direct public API snapshot",
+    "Quickin pagination returns all pages without truncation and tests pass",
+    "inHire emptiness differentiated from API contract failure",
+    "Current profile/search functionality unchanged, regression suite and UI build pass",
+    "No operational main merge until explicit release approval"
   ],
-  "deployment": "User explicitly authorized the focused main correction; compare SHA immediately before merge and protect existing Render operational branch."
+  "deployment": "Isolated branch and preview only; preserve main and Render release SHA; gated merge after evidence and user confirmation"
 }

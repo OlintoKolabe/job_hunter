@@ -1,76 +1,24 @@
 {
-  "id": "JOB-HUNTER-UNIFIED-CV-QUALITY-20261027",
+  "id": "JOB-HUNTER-CV-FILENAME-20261027",
   "kind": "bugfix",
-  "status": "canary",
-  "base_ref": "db95fe1d0de48362481c5c1c4201573934bddc09",
-  "feature_ref": "fix/disable-matchmaking-ai-20261026",
-  "allowed_files": [
-    "scope/active.json",
-    "src/Opportunities.jsx",
-    "app.py",
-    "ai_resume_matcher.py",
-    "jd_enrichment.py",
-    "ai_interpreter.py",
-    "linkedin_pdf.py",
-    "multiuser.py",
-    "resume_engine.py",
-    "resume_hybrid.py",
-    "tests/test_linkedin_pdf.py",
-    "tests/test_multiuser.py",
-    "tests/test_resume_engine.py",
-    "tests/test_ai_resume_matcher.py",
-    "tests/test_p0_search_canary.py",
-    "tests/test_opportunity_ui_contracts.py",
-    "tests/test_gate12_scoring.py",
-    "tests/test_block4_1.py"
-  ],
-  "allowed_paths": [
-    "scope/active.json",
-    "src/Opportunities.jsx",
-    "app.py",
-    "ai_resume_matcher.py",
-    "jd_enrichment.py",
-    "ai_interpreter.py",
-    "linkedin_pdf.py",
-    "multiuser.py",
-    "resume_engine.py",
-    "resume_hybrid.py",
-    "tests/test_linkedin_pdf.py",
-    "tests/test_multiuser.py",
-    "tests/test_resume_engine.py",
-    "tests/test_ai_resume_matcher.py",
-    "tests/test_p0_search_canary.py",
-    "tests/test_opportunity_ui_contracts.py",
-    "tests/test_gate12_scoring.py",
-    "tests/test_block4_1.py"
-  ],
-  "forbidden_paths": [
-    ".github/",
-    "vercel/"
-  ],
-  "objective": "Preserve disabled paid matchmaking and repair the single shared CV engine: source attribution, JD-semantic evidence selection, profile isolation, language, formatting, and factual QA across all users.",
+  "objective": "Name every ATS Word download NomeCompleto_Cargo_Empresa.docx using the authenticated profile without changing CV content or other features.",
+  "base_ref": "53712d72bf8d4ef8ee10e05ad2f014c6b716710b",
+  "allowed_paths": ["app.py", "tests/test_resume_engine.py"],
   "allowed_changes": [
-    "Preserve the already-homologated UI and API matchmaking disablement",
-    "Fix LinkedIn PDF experience block parsing and validate verified profile records",
-    "Keep per-user evidence, model requests, cache and DOCX rendering isolated",
-    "Use existing AI CV selection with evidence provenance and JD-language translation",
-    "Refine DOCX styles, ATS readability and structural provenance auditing",
-    "Add evidence-backed cross-profile, semantic and document regression contracts"
+    "Reuse one sanitized filename helper in existing ATS and legacy download responses",
+    "Preserve the full name of the active user and separators between name, job title, and company",
+    "Add regression tests for all three existing profile types and invalid filename characters"
   ],
   "forbidden_changes": [
-    "Change job search sources/filters, history, profile ownership semantics or database schema",
-    "Automatically rewrite stored profiles or invent unverifiable work experience",
-    "Main merge, production deploy, new services or paid AI validation without explicit approval",
-    "GitHub Actions or Vercel build"
+    "Change CV content, JD parsing, scoring, search, filters, profile data, history, or source collectors",
+    "Create migrations, new endpoints, mock source data or paid requests",
+    "Use GitHub Actions or Vercel or overwrite unrelated main commits"
   ],
   "acceptance": [
-    "Zero evaluation OpenAI network requests from UI or legacy backend paths",
-    "Every CV fact belongs to the correct employer and authenticated user",
-    "All LinkedIn-exported role boundaries survive parsing and suspicious records block verification",
-    "JD language determines complete resume language without fabricated achievements",
-    "No bullets on titles, no trailing empty bullets and DOCX renders professionally",
-    "Three user profiles, search/disposition controls and CV buttons survive regression tests",
-    "Backend unit suite, UI build and isolated canary tests pass"
+    "All download paths return filename*=UTF-8 encoded NomeCompleto_Cargo_Empresa.docx",
+    "No cross-user name contamination or hard-coded Olinto on multiuser route",
+    "Full backend and profile regression suites pass",
+    "Only app.py and tests/test_resume_engine.py code diff relative to the scoped contract"
   ],
-  "deployment": "Canary branch only; no main merge or production deploy without explicit approval."
+  "deployment": "User explicitly authorized the focused main correction; compare SHA immediately before merge and protect existing Render operational branch."
 }

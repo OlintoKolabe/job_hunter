@@ -18,6 +18,43 @@ current_profile = ContextVar("jh_multiuser_profile", default=None)
 PRIVATE_TABLES = ("jh_history", "jh_seen_jobs", "jh_score_cache", "jh_ai_budget", "jh_ai_usage")
 
 
+def experience_integrity_issues(rows):
+    """Fail closed on demonstrably broken employer/role attribution.
+
+    This is not an AI quality score. It catches malformed imported headers;
+    ambiguous career claims still require the candidate's explicit review.
+    """
+    issues = []
+    duration = re.compile(r"(?i)^\d+\s+(?:anos?|years?|m[eê]s(?:es)?|months?)(?:\s+(?:e\s+)?\d+\s+(?:m[eê]s(?:es)?|months?))?$")
+    technology = re.compile(r"(?i)\b(?:posthog|codex|claude code|lovable|figma|jira|confluence|trello|power bi)\b")
+    prose = re.compile(r"(?i)\b(?:para otimizar|maximizar receitas|entre as principais atividades|atuação como|focando na)\b")
+    employers=[str(row.get("company") or "").strip() for row in rows or []]
+    for idx, row in enumerate(rows or []):
+        if row.get("verified") is not True:
+            continue
+        company = str(row.get("company") or "").strip()
+        role = str(row.get("role") or "").strip()
+        facts = row.get("facts") or []
+        if (not company or not role or duration.fullmatch(company)
+            or company.casefold().startswith(("stacks:", "skills:", "competências:"))
+            or (len(company.split(",")) >= 2 and technology.search(company))
+            or prose.search(company) or len(company) > 100):
+            issues.append(idx)
+        if not isinstance(facts,list) or any(not isinstance(f,str) for f in facts):
+            issues.append(idx)
+            continue
+        for other in employers:
+            if not other or other.casefold()==company.casefold() or len(other)<4:
+                continue
+            # The source claims to work *at* another listed employer. This is
+            # a strong indicator that LinkedIn boundaries were misplaced.
+            at_other=re.compile(r"(?i)\b(?:na|no|at|within)\s+"+re.escape(other)+r"\b.{0,50}\b(?:atu|work|trabalh|exerc|desempenh)")
+            if any(at_other.search(f) for f in facts):
+                issues.append(idx)
+                break
+    return sorted(set(issues))
+
+
 def digest(password, salt):
     return hashlib.pbkdf2_hmac("sha256", password.encode(), bytes.fromhex(salt), 600000).hex()
 
@@ -150,6 +187,9 @@ def change_password(db_url, uid, current, new):
 
 def factual_experience():
     profile = current_profile.get() or {}
+    if experience_integrity_issues(profile.get("experience", [])):
+        # Never pass partially contaminated career records to the CV model.
+        return []
     result = []
     for item in profile.get("experience", []):
         # Verified profile entries may contain PDF fragments (e.g. a city or a

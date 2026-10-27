@@ -220,7 +220,7 @@ class AIResumeMatcherTests(unittest.TestCase):
         self.assertIn(EXPERIENCE[1]["facts"][1],facts)
         self.assertTrue(audit(plan,render_docx(plan))["factual_bullets_verified"])
 
-    def test_post_filter_hydration_uses_ai_fit_and_existing_budget(self):
+    def test_post_filter_hydration_does_not_use_paid_matchmaking(self):
         from datetime import datetime,timezone
         from unittest.mock import Mock
         from jd_enrichment import hydrate_jobs
@@ -239,12 +239,11 @@ class AIResumeMatcherTests(unittest.TestCase):
              patch("jd_enrichment.psycopg.connect") as conn:
             result,_=hydrate_jobs(cursor,[{"url":url,"title":"Senior Product Manager",
                                            "description":JD}],"Product Manager",lambda x:x)
-        self.assertEqual(result[0]["ranking"]["score"],68)
-        self.assertEqual(result[0]["ranking"]["ai_evidence_source"],"resume_matcher_methodology")
-        called.assert_called_once()
-        settled.assert_called_once()
-        saved.assert_called_once()
-        self.assertEqual(result[0]["ai_status"],"interpreted")
+        self.assertIsNone(result[0]["ranking"]["score"])
+        called.assert_not_called()
+        settled.assert_not_called()
+        saved.assert_not_called()
+        self.assertNotEqual(result[0]["ai_status"],"interpreted")
 
     def test_authenticated_route_returns_actual_docx_not_chatgpt_url(self):
         import asyncio
@@ -390,7 +389,7 @@ class ShortlistedJDTests(unittest.TestCase):
                          'https://api.inhire.app/job-posts/public/pages/cf249d92-5a0c-4143-bb3a-c7e5ea688d00')
         self.assertEqual(api.call_args.args[1],{'X-Tenant':'cobli'})
 
-    def test_failed_ai_validation_charges_only_actual_token_usage(self):
+    def test_disabled_ai_matchmaking_does_not_charge_budget(self):
         from jd_enrichment import hydrate_jobs
         from ai_resume_matcher import _last_billable_usage, estimate_cost
         from unittest.mock import Mock
@@ -410,7 +409,7 @@ class ShortlistedJDTests(unittest.TestCase):
              patch('jd_enrichment.psycopg.connect'):
             result,_=hydrate_jobs(cursor,[job],'Product Manager',lambda url:url)
         self.assertIsNone(result[0]['ranking']['score'])
-        settle.assert_called_once_with(unittest.mock.ANY,9,estimate_cost(usage),False)
+        settle.assert_not_called()
 
     def test_indeed_ranking_reuses_existing_exact_jobspy_jd(self):
         from jd_enrichment import fallback_public_jd

@@ -162,6 +162,9 @@ def validated_profile(value, current):
             # evidence until actual source-backed facts are available.
             if row["role"] and row["company"]:
                 verified.append(row)
+        bad=mu.experience_integrity_issues(verified)
+        if bad:
+            raise HTTPException(422,"Experiências com empresa ou cargo inconsistentes: "+", ".join(str(i+1) for i in bad)+". Revise o perfil antes de verificar.")
         clean["experience"]=verified
     return clean
 
@@ -847,6 +850,7 @@ def ranking_shortlist(request: Request, payload: ShortlistRequest):
 @app.post("/api/jd/enrich")
 def jd_enrich(request: Request, payload: JDRequest):
     require_auth(request)
+    raise HTTPException(410, "Avaliações de matchmaking foram desativadas; a IA permanece disponível somente para gerar currículos")
     if len(payload.jobs)>10:raise HTTPException(400,"Máximo de 10 vagas por lote")
     if len(payload.roles)>5000:raise HTTPException(400,"Filtro inválido")
     rows=[]
@@ -1059,6 +1063,9 @@ def ai_resume_download(payload: ResumeAIRequest, request: Request):
     """One-click AI resume download; never silently use the deterministic old CV."""
     authenticated_uid=require_auth(request)
     if mu.enabled:
+        bad=mu.experience_integrity_issues((mu.current_profile.get() or {}).get("experience",[]))
+        if bad:
+            raise HTTPException(422,"Currículo bloqueado: revise os empregadores das experiências "+", ".join(str(i+1) for i in bad)+" em Meu Perfil.")
         if not mu.factual_experience():
             raise HTTPException(422,"Cadastre experiências verificadas em Meu Perfil")
         if not payload.confirmed or payload.needs_verification:

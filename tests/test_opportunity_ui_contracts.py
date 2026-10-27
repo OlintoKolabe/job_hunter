@@ -37,12 +37,12 @@ class OpportunityUIContracts(unittest.TestCase):
         self.assertNotIn("'Olinto Manso Pereira - '+(job.title",s)
         self.assertNotIn("Preparar com ChatGPT</button>",s)
 
-    def test_confirmed_and_scored_jobs_precede_uncertain_results(self):
+    def test_confirmed_and_geographically_relevant_jobs_precede_uncertain_results(self):
         s=Path("src/Opportunities.jsx").read_text()
         self.assertIn("const geoPriority=v=>",s)
         self.assertIn("if(geoDiff)return geoDiff;",s)
         self.assertLess(s.index("if(Boolean(a.confirmed)!==Boolean(b.confirmed))"),s.index("if(geoDiff)return geoDiff;"))
-        self.assertLess(s.index("const scoreDiff=(b.ranking?.score??-1)"),s.index("if(geoDiff)return geoDiff;"))
+        self.assertNotIn("const scoreDiff=",s)
         self.assertIn("if(explicitBrazil)return 0;",s)
         self.assertIn("if(latam)return 1;",s)
         self.assertIn("if(v.needs_verification?.includes('pais'))return 3;",s)
@@ -52,25 +52,25 @@ class OpportunityUIContracts(unittest.TestCase):
         s=Path("src/Opportunities.jsx").read_text()
         self.assertIn("['himalayas','remotive','remoteok','indeed'].includes(source)",s)
 
-    def test_initial_scoring_starts_before_full_catalog_scan_with_ten_job_cap(self):
+    def test_catalog_scan_does_not_start_paid_matchmaking(self):
         s=Path("src/Opportunities.jsx").read_text()
-        self.assertLess(s.index("const earlyRanking=rankEntireCollection(4)"),s.index("const scanWorker=async()=>"))
-        self.assertIn("rankEntireCollection(Math.max(0,10-scoredOrAttempted.size))",s)
-        self.assertIn("filter(j=>!scoredOrAttempted.has(j.url)&&j.jd_available===true",s)
+        self.assertIn("const scanWorker=async()=>",s)
+        self.assertNotIn("/api/jd/enrich",s)
+        self.assertNotIn("rankEntireCollection",s)
 
-    def test_missing_jd_hides_cv_and_manual_scoring_and_has_clear_state(self):
+    def test_missing_jd_hides_cv_and_all_score_controls_are_removed(self):
         s=Path('src/Opportunities.jsx').read_text()
         self.assertIn("job.jd_available===true&&<button",s)
-        self.assertIn("v.jd_available===true&&<button",s)
-        self.assertIn("if(v.jd_available===false)return 'no_jd'",s)
-        self.assertIn("'JD indisponível'",s)
-        self.assertIn('Aderência local estimada',s)
+        self.assertNotIn('Avaliar esta vaga',s)
+        self.assertNotIn('Nota / evidências',s)
+        self.assertNotIn('scoreDisplay',s)
+        self.assertIn('Gerar currículo ATS',s)
 
-    def test_catalog_scanning_does_not_wait_for_intermediate_scoring(self):
+    def test_catalog_scanning_remains_active_without_scoring(self):
         s=Path('src/Opportunities.jsx').read_text()
         self.assertIn('const scanWorker=async()=>',s)
         self.assertIn('await scanWorker();',s)
-        self.assertLess(s.index('await scanWorker();'),s.index('await earlyRanking;',s.index('const scanBatchSize=12')))
-        self.assertIn('await rankEntireCollection(Math.max(0,10-scoredOrAttempted.size))',s)
+        self.assertIn('fetch(\'/api/resume/ai-download\'',s)
+        self.assertNotIn('await earlyRanking;',s)
 
 if __name__=="__main__":unittest.main()

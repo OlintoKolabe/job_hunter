@@ -61,6 +61,23 @@ def quickin_detail(url):
         location=("São Paulo" if location[:2].upper()=="SP" else "Rio de Janeiro")+location[2:]
     return location,body
 
+def quickin_account_id(html, slug):
+    """Read the public Nuxt page state; never guess the Quickin account ID."""
+    match=re.search(r'<script[^>]*id=["\']__NUXT_DATA__["\'][^>]*>(.*?)</script>',html,re.S)
+    if not match:return None
+    try:state=json.loads(match.group(1))
+    except (ValueError,TypeError):return None
+    if not isinstance(state,list):return None
+    for entry in state:
+        if not isinstance(entry,dict) or "account_id" not in entry or "slug" not in entry:continue
+        try:
+            account=state[entry["account_id"]]
+            name=state[entry["slug"]]
+        except (TypeError,IndexError,KeyError):continue
+        if name==slug and isinstance(account,str) and re.fullmatch(r"[a-fA-F0-9]{24}",account):
+            return account
+    return None
+
 def extra_pull(source,slug):
     jobs=[]
     if source=="greenhouse_eu":
@@ -102,17 +119,35 @@ def extra_pull(source,slug):
         return jobs,"ok"
     if source=="quickin":
         # Official public career API; it needs no access token.
-        # Keep the existing HTML parser as a fallback for unsupported account IDs.
+        # The public API requires account_id, which is not the careers slug.
+        base="https://jobs.quickin.io/"+urllib.parse.quote(slug)+"/jobs"
+        board_html=None
         try:
-            endpoint="https://api.quickin.io/public/"+urllib.parse.quote(slug,safe="")+"/jobs?sort=-created_at"
-            data=json.loads(read(endpoint,size=3500000)[0])
+            # First preserve backwards compatibility with valid ID-based boards.
+            try:
+                data=json.loads(read("https://api.quickin.io/public/"+urllib.parse.quote(slug,safe="")+"/jobs?sort=-created_at",size=3500000)[0])
+                account_id=slug
+            except urllib.error.HTTPError as error:
+                if error.code not in (400,404):raise
+                board_html=read(base+"?page=1",size=3500000)[0]
+                account_id=quickin_account_id(board_html.decode("utf-8","replace"),slug)
+                if not account_id:raise ValueError("Quickin account_id absent from public career page")
+                data=json.loads(read("https://api.quickin.io/public/"+account_id+"/jobs?sort=-created_at",size=3500000)[0])
+            pages=int(data.get("pages") or 1) if isinstance(data,dict) else 1
+            if not 1<=pages<=100:raise ValueError("Quickin page count out of safe range")
             records=data if isinstance(data,list) else (
-                data.get("jobs") or data.get("data") or data.get("results") or []
-                if isinstance(data,dict) else [])
-            if isinstance(records,dict):
-                records=records.get("jobs") or records.get("data") or []
-            if not isinstance(records,list):
-                raise ValueError("Quickin invalid jobs response")
+                next((data[k] for k in ("docs","jobs","data","results") if isinstance(data.get(k),list)),None)
+                if isinstance(data,dict) else None)
+            if records is None:raise ValueError("Quickin invalid jobs response")
+            endpoint="https://api.quickin.io/public/"+urllib.parse.quote(account_id,safe="")+"/jobs?sort=-created_at"
+            for page in range(2,pages+1):
+                next_data=json.loads(read(endpoint+"&page="+str(page),size=3500000)[0])
+                next_records=next_data.get("docs") if isinstance(next_data,dict) else None
+                if not isinstance(next_records,list):raise ValueError("Quickin pagination format changed")
+                records.extend(next_records)
+            expected=data.get("total") if isinstance(data,dict) else None
+            if isinstance(expected,int) and len(records)!=expected:
+                raise ValueError("Quickin incomplete pagination")
             for row in records:
                 if not isinstance(row,dict) or row.get("publicate","published")!="published":continue
                 title=row.get("title")
@@ -134,13 +169,12 @@ def extra_pull(source,slug):
                     if isinstance(row.get("remote"),bool):value["remote"]=row["remote"]
                     if isinstance(row.get("isRemote"),bool):value["remote"]=row["isRemote"]
                     jobs.append(preserve_eligibility_fields(value,row))
-            return jobs,"ok"
+            return jobs,"ok" if jobs else "sem_vagas"
         except (ValueError,TypeError,KeyError,urllib.error.URLError,TimeoutError,json.JSONDecodeError):
             jobs=[]
-        base="https://jobs.quickin.io/"+urllib.parse.quote(slug)+"/jobs"
         seen=set()
         for page in range(1,7):
-            raw,_=read(base+"?page="+str(page))
+            raw=board_html if page==1 and board_html is not None else read(base+"?page="+str(page))[0]
             p=BoardHTML();p.feed(raw.decode("utf-8","replace"))
             new=0
             for href,title in p.links:
@@ -194,11 +228,11 @@ def run_task(source,slug,allow_js=True):
                     if fallback:jobs=fallback;state="validado";count=len(jobs)
                 except RuntimeError:pass
             return {"source":source,"slug":slug,"state":state,"received":count,"target":len(jobs)},jobs
-        jobs,_=extra_pull(source,slug)
-        if allow_js and not jobs and source=="quickin":
+        jobs,result=extra_pull(source,slug)
+        if allow_js and not jobs and source=="quickin" and result!="sem_vagas":
             jobs=js_fallback(source,slug)
         uncertain=source in ("quickin","zoho","solides","trakstar","compleo")
-        state=("validado" if jobs else ("pendente" if uncertain else "sem_vagas"))
+        state=("validado" if jobs else ("sem_vagas" if result=="sem_vagas" else ("pendente" if uncertain else "sem_vagas")))
         return {"source":source,"slug":slug,"state":state,"received":len(jobs),"target":len(jobs)},jobs
     except urllib.error.HTTPError as e:
         return {"source":source,"slug":slug,"state":"pendente","received":0,"error":str(e.code)},[]

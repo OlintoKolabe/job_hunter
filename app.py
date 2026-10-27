@@ -463,7 +463,7 @@ def resolved_search_filters(request,roles,country,mode,days):
 def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:str="remote",days:int=30,sort:str="newest",source:str="all"):
     require_auth(request)
     roles,country,mode,days=resolved_search_filters(request,roles,country,mode,days)
-    allowed_sources={"all","inhire","quickin","gupy","greenhouse","ashby","lever","bamboohr","dynamite","linkedin_guest","jobgether","workable","himalayas","remotive","remoteok","indeed","geekhunter","nerdin","recruitee"}
+    allowed_sources={"all","inhire","quickin","gupy","greenhouse","ashby","lever","bamboohr","dynamite","linkedin_guest","jobgether","workable","himalayas","remotive","indeed","geekhunter","nerdin","recruitee"}
     if source not in allowed_sources:raise HTTPException(400,"Fonte não reconhecida")
     if source=="indeed":
         if not indeed_enabled():raise HTTPException(503,"Indeed indisponível")
@@ -475,7 +475,7 @@ def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:
         except Exception as exc:
             raise HTTPException(502,"Indeed indisponível: "+type(exc).__name__) from exc
         sources=[{"source":"indeed","state":"validado","received":len(items)}]
-    elif source in ("himalayas","remotive","remoteok"):
+    elif source in ("himalayas","remotive"):
         try:
             items=fetch_public_remote(source,roles,country)
         except Exception as exc:
@@ -487,7 +487,7 @@ def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:
         with ThreadPoolExecutor(max_workers=4) as pool:
             keyword_job=pool.submit(collect,discovery_queries(roles),country,"all")
             feeds={feed:pool.submit(fetch_public_remote,feed,roles,country)
-                   for feed in ("himalayas","remotive","remoteok")}
+                   for feed in ("himalayas","remotive")}
             items,sources=keyword_job.result()
             for feed,future in feeds.items():
                 try:
@@ -681,7 +681,7 @@ async def catalog_import(request: Request):
 @app.get("/api/search-filters")
 def available_filters(request: Request):
     require_auth(request)
-    return {"roles":DEFAULT_ROLES,"countries":[{"value":k,"label":v} for k,v in COUNTRIES],"sources":[{"value":"all","label":"Todas as fontes"},{"value":"inhire","label":"inHire"},{"value":"quickin","label":"Quickin"},{"value":"gupy","label":"Gupy"},{"value":"greenhouse","label":"Greenhouse"},{"value":"ashby","label":"Ashby"},{"value":"lever","label":"Lever"},{"value":"bamboohr","label":"BambooHR"},{"value":"recruitee","label":"Recruitee"},{"value":"dynamite","label":"Dynamite Jobs"},{"value":"linkedin_guest","label":"LinkedIn"},{"value":"jobgether","label":"Jobgether"},{"value":"workable","label":"Workable"},{"value":"himalayas","label":"Himalayas (remoto)"},{"value":"remotive","label":"Remotive (remoto)"},{"value":"remoteok","label":"Remote OK (remoto)"},{"value":"geekhunter","label":"GeekHunter"},{"value":"nerdin","label":"Nerdin"}]+([{"value":"indeed","label":"Indeed"}] if indeed_enabled() else [])}
+    return {"roles":DEFAULT_ROLES,"countries":[{"value":k,"label":v} for k,v in COUNTRIES],"sources":[{"value":"all","label":"Todas as fontes"},{"value":"inhire","label":"inHire"},{"value":"quickin","label":"Quickin"},{"value":"gupy","label":"Gupy"},{"value":"greenhouse","label":"Greenhouse"},{"value":"ashby","label":"Ashby"},{"value":"lever","label":"Lever"},{"value":"bamboohr","label":"BambooHR"},{"value":"recruitee","label":"Recruitee"},{"value":"dynamite","label":"Dynamite Jobs"},{"value":"linkedin_guest","label":"LinkedIn"},{"value":"jobgether","label":"Jobgether"},{"value":"workable","label":"Workable"},{"value":"himalayas","label":"Himalayas (remoto)"},{"value":"remotive","label":"Remotive (remoto)"},{"value":"geekhunter","label":"GeekHunter"},{"value":"nerdin","label":"Nerdin"}]+([{"value":"indeed","label":"Indeed"}] if indeed_enabled() else [])}
 
 @app.get("/api/catalog")
 def catalog(request: Request):
@@ -728,7 +728,7 @@ def unique_jobs_by_url(found):
 def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False,skip_starter:str="",roles:str=DEFAULT_ROLES,country:str="BR",mode:str="remote",days:int=30,sort:str="newest",source:str="all"):
     require_auth(request)
     roles,country,mode,days=resolved_search_filters(request,roles,country,mode,days)
-    if source not in {"all","inhire","quickin","gupy","greenhouse","ashby","lever","bamboohr","dynamite","linkedin_guest","jobgether","workable","himalayas","remotive","remoteok","geekhunter","nerdin","recruitee"}:raise HTTPException(400,"Fonte não reconhecida")
+    if source not in {"all","inhire","quickin","gupy","greenhouse","ashby","lever","bamboohr","dynamite","linkedin_guest","jobgether","workable","himalayas","remotive","geekhunter","nerdin","recruitee"}:raise HTTPException(400,"Fonte não reconhecida")
     tasks=active_source_tasks(roles)
     if source!="all":
         tasks=[(src,slug) for src,slug in tasks if src==source or (source=="greenhouse" and src=="greenhouse_eu")]

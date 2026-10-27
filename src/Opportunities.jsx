@@ -84,7 +84,7 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},pro
    setResults(visibleUndecided([...all.values()]));setCounts({new:all.size,total:count});
    // Indeed is an on-demand provider, not a catalog board. A catalog scan
    // with source=indeed always returns 400 and can flood the UI with retries.
-   if(['himalayas','remotive','remoteok','indeed'].includes(source)){
+   if(['himalayas','remotive','indeed'].includes(source)){
      if(!isCurrent())return;
      setCompleted(true);
      setMessage('Consulta à fonte '+source+' concluída; vagas apresentadas após filtros e exclusões do Histórico.');
@@ -198,10 +198,10 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},pro
      }
      const content=await response.blob();
      const disposition=response.headers.get('Content-Disposition')||'';
-     const found=disposition.match(/filename\\*=UTF-8''([^;]+)/i);
+     const found=disposition.match(/filename\*=UTF-8''([^;]+)/i);
      const accountName=String(profile?.name||'').trim();
      if(!found&&!accountName)throw Error('Não foi possível identificar o nome da conta para o currículo');
-     const filename=found?decodeURIComponent(found[1]):(accountName+' - '+(job.title||'Vaga')+'.docx');
+     const filename=found?decodeURIComponent(found[1]):([accountName,job.title||'Vaga',job.company||'Empresa'].map(v=>String(v).replace(/[\\/:*?"<>|]/g,' ').replace(/\s+/g,' ').trim()||'Indefinido').join('_')+'.docx');
      const blobUrl=URL.createObjectURL(content);
      const anchor=document.createElement('a');
      anchor.href=blobUrl;anchor.download=filename;document.body.appendChild(anchor);

@@ -282,6 +282,30 @@ class ResumeEngineTests(unittest.TestCase):
 
 class BackendResumeRouteContractTests(unittest.TestCase):
     """Only the new GPT/MCP path can produce a user-selected ATS DOCX."""
+    def test_download_filename_uses_full_name_title_company_for_all_profiles(self):
+        import app,multiuser as mu
+        from unittest.mock import patch
+        profiles=("Olinto Manso Pereira","Olinto Manso Pereira Filho",
+                  "Marcus Pablo Rezende Teixeira Manso Pereira")
+        with patch.object(mu,"enabled",True):
+            for full_name in profiles:
+                token=mu.current_profile.set({"name":full_name})
+                try:
+                    self.assertEqual(app.cv_download_filename("Product Manager","Example Co"),
+                                     f"{full_name}_Product Manager_Example Co.docx")
+                finally:
+                    mu.current_profile.reset(token)
+
+    def test_download_filename_sanitizes_path_characters_without_mixing_users(self):
+        import app,multiuser as mu
+        from unittest.mock import patch
+        with patch.object(mu,"enabled",True):
+            token=mu.current_profile.set({"name":"Ana Maria Souza"})
+            try:
+                self.assertEqual(app.cv_download_filename("PO / Growth","Empresa: Brasil"),
+                                 "Ana Maria Souza_PO Growth_Empresa Brasil.docx")
+            finally:mu.current_profile.reset(token)
+
     def test_verified_gpt_download_reopens_and_audits_docx(self):
         import app, asyncio, hashlib
         from unittest.mock import patch

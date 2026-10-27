@@ -1059,6 +1059,17 @@ class ResumeAIRequest(BaseModel):
     needs_verification: list[str] = []
     manual_outside_filters: bool = False
 
+def cv_download_filename(title,company):
+    """Consistent ATS download name, using only the active user's full name."""
+    profile=(mu.current_profile.get() or {}) if mu.enabled else {}
+    full_name=profile.get("name") if mu.enabled else "Olinto Manso Pereira"
+    def part(value,fallback,limit):
+        clean=re.sub(r"[^\wÀ-ÿ -]","",str(value or ""))
+        return re.sub(r"\s+"," ",clean).strip(" ._-")[:limit] or fallback
+    return "_".join((part(full_name,"Candidato",150),
+                     part(title,"Vaga",120),part(company,"Empresa",120)))+".docx"
+
+
 @app.post("/api/resume/ai-download")
 def ai_resume_download(payload: ResumeAIRequest, request: Request):
     """One-click AI resume download; never silently use the deterministic old CV."""
@@ -1155,8 +1166,7 @@ def ai_resume_download(payload: ResumeAIRequest, request: Request):
         with mu.connect(DATABASE,connect_timeout=7) as conn:
             with conn.cursor() as cur:
                 settle(cur,usage_id,cost,success)
-    safe=lambda v:re.sub(r"[^\wÀ-ÿ -]","",v).strip()[:75]
-    name=(safe(mu.current_profile.get().get("name","")) if mu.enabled else "Olinto Manso Pereira")+" - "+safe(title)+" - "+safe(company or "Empresa")+".docx"
+    name=cv_download_filename(title,company)
     from urllib.parse import quote
     return StreamingResponse(io.BytesIO(document),
        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -1196,8 +1206,7 @@ def gpt_cv_download(ticket:str):
     audit(plan,data)
     quality=evaluate_rendered_resume(plan,data,jd)
     if not quality["factual_ok"]:raise HTTPException(422,"Falha na auditoria factual")
-    safe=lambda v:re.sub(r"[^\wÀ-ÿ -]","",v).strip()[:75]
-    filename="Olinto Manso Pereira - "+safe(payload.get("title","Vaga"))+" - "+safe(payload.get("company","Empresa"))+".docx"
+    filename=cv_download_filename(payload.get("title","Vaga"),payload.get("company","Empresa"))
     from urllib.parse import quote
     return StreamingResponse(io.BytesIO(data),media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       headers={"Content-Disposition":f"attachment; filename*=UTF-8''{quote(filename)}",

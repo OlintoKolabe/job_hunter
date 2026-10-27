@@ -110,7 +110,7 @@ class Gate12Scoring(unittest.TestCase):
         self.assertNotIn("Aderência local estimada", ui)
         self.assertNotIn("Nota inconclusiva", ui)
         self.assertNotIn("Avaliar esta vaga", ui)
-        self.assertIn("job.jd_available===true&&<button",ui)
+        self.assertIn("(job.jd_available===true||manualOutsideFilters)&&<button",ui)
 
 
 if __name__ == "__main__":

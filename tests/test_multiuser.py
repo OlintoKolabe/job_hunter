@@ -69,6 +69,31 @@ class Cursor:
 
 
 class TenantTests(unittest.TestCase):
+    def test_suspect_imported_employers_block_all_verified_cv_evidence(self):
+        valid={"role":"Product Manager","company":"Neocoder",
+               "dates":"2025-2026","verified":True,
+               "facts":["Implemented Scrum and Kanban processes across delivery teams."]}
+        invalid={"role":"Head de projetos e processos",
+                 "company":"PostHog, Codex, Claude Code e Lovable",
+                 "dates":"2025-2026","verified":True,
+                 "facts":["Managed multidisciplinary agency projects."]}
+        self.assertEqual(mu.experience_integrity_issues([valid,invalid]),[1])
+        with patch.object(mu,"enabled",True):
+            token=mu.current_profile.set({"experience":[valid,invalid]})
+            try:
+                self.assertEqual(mu.factual_experience(),[])
+            finally:
+                mu.current_profile.reset(token)
+
+    def test_cross_employer_employment_claim_blocks_reused_linkedin_bullet(self):
+        roles=[
+            {"role":"Founder","company":"Centauro.life","verified":True,
+             "facts":["Na Neocoder, atuo direcionando os produtos da LiberPay e seus roadmaps."]},
+            {"role":"Consultor de produtos","company":"Neocoder","verified":True,
+             "facts":["Estruturei o roadmap de produtos da plataforma LiberPay."]}
+        ]
+        self.assertEqual(mu.experience_integrity_issues(roles),[0])
+
     def test_independent_schemas_and_shared_catalog(self):
         a,b=Cursor(),Cursor()
         mu.provision_schema(a,11)

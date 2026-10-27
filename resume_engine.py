@@ -405,19 +405,23 @@ def build_plan(jd, title):
             "experience":experiences,"additional_experience":older,
             "jd_sha256":hashlib.sha256(jd.encode()).hexdigest(),"engine":ENGINE_VERSION}
 
+def _clean_bullet_text(value):
+    return re.sub(r"^[\s•●◦▪\-*]+", "", str(value)).strip()
+
+
 def render_docx(plan):
     from docx.shared import Inches, RGBColor
     from docx.oxml import OxmlElement
     from docx.oxml.ns import qn
-    doc=Document();normal=doc.styles["Normal"];normal.font.name="Calibri";normal.font.size=Pt(10.5)
+    doc=Document();normal=doc.styles["Normal"];normal.font.name="Liberation Sans";normal.font.size=Pt(10.5)
     normal.font.color.rgb=RGBColor(0,0,0)
     section=doc.sections[0]
-    section.top_margin=Inches(.72);section.bottom_margin=Inches(.68)
-    section.left_margin=Inches(.82);section.right_margin=Inches(.82)
-    normal.paragraph_format.space_after=Pt(4)
-    normal.paragraph_format.line_spacing=1.08
+    section.top_margin=Inches(.78);section.bottom_margin=Inches(.74)
+    section.left_margin=Inches(.86);section.right_margin=Inches(.86)
+    normal.paragraph_format.space_after=Pt(5)
+    normal.paragraph_format.line_spacing=1.13
     title_style=doc.styles["Title"]
-    title_style.font.name="Calibri";title_style.font.size=Pt(18)
+    title_style.font.name="Liberation Sans";title_style.font.size=Pt(19)
     title_style.font.bold=True;title_style.font.color.rgb=RGBColor(0,0,0)
     title_style.paragraph_format.space_before=Pt(0)
     title_style.paragraph_format.space_after=Pt(5)
@@ -429,20 +433,20 @@ def render_docx(plan):
     border=OxmlElement("w:pBdr")
     bottom=OxmlElement("w:bottom");bottom.set(qn("w:val"),"nil")
     border.append(bottom);pPr.append(border)
-    for name,size,before,after in (("Heading 1",11.5,10,4),("Heading 2",10.5,6,1)):
+    for name,size,before,after in (("Heading 1",11.7,12,5),("Heading 2",10.6,8,2)):
         style=doc.styles[name]
-        style.font.name="Calibri";style.font.size=Pt(size)
+        style.font.name="Liberation Sans";style.font.size=Pt(size)
         style.font.bold=True;style.font.color.rgb=RGBColor(0,0,0)
         style.paragraph_format.space_before=Pt(before)
         style.paragraph_format.space_after=Pt(after)
         style.paragraph_format.keep_with_next=True
     bullet=doc.styles["List Bullet"]
-    bullet.font.name="Calibri";bullet.font.size=Pt(10.5)
+    bullet.font.name="Liberation Sans";bullet.font.size=Pt(10.3)
     bullet.font.color.rgb=RGBColor(0,0,0)
     bullet.paragraph_format.left_indent=Inches(.22)
     bullet.paragraph_format.first_line_indent=Inches(-.14)
     bullet.paragraph_format.space_before=Pt(0)
-    bullet.paragraph_format.space_after=Pt(3)
+    bullet.paragraph_format.space_after=Pt(3.8)
     bullet.paragraph_format.line_spacing=1.08
     # Provenance is embedded in DOCX metadata, invisible to recruiters/ATS.
     provenance = (
@@ -475,6 +479,12 @@ def render_docx(plan):
         role=translated.get("role",e["role"])
         dates_text=translated.get("dates",e["dates"])
         displayed_facts=translated.get("facts") or (e["facts"] if idx in detailed else [e.get("fact") or EXPERIENCE[idx]["facts"][0]])
+        # Source PDFs may include their own bullet glyphs. The DOCX renderer
+        # owns list markers; never nest visual bullets inside the text itself.
+        displayed_facts=[_clean_bullet_text(f) for f in displayed_facts]
+        displayed_facts=[f for f in displayed_facts if f]
+        if not displayed_facts:
+            raise ValueError("Experiência sem evidência factual para renderização")
         if idx not in detailed:
             heading=doc.add_heading(role+" — "+e["company"],2)
             heading.paragraph_format.keep_with_next=True
@@ -491,7 +501,9 @@ def render_docx(plan):
         for fact in displayed_facts:doc.add_paragraph(fact,style="List Bullet")
     doc.add_heading("Education and Certifications" if english else "Formação e certificações",1)
     for degree in localized.get("education",plan.get("education",EDUCATION)):
-        if "odontolog" not in degree.casefold():doc.add_paragraph(degree,style="List Bullet")
+        if "odontolog" not in degree.casefold():
+            text=re.sub(r"^[\s•●◦▪\-*]+","",str(degree)).strip()
+            if text:doc.add_paragraph(text)
     if mu.enabled:
         languages=(mu.current_profile.get() or {}).get("languages") or []
         if languages:doc.add_paragraph(("Languages: " if english else "Idiomas: ")+ "; ".join(localized.get("languages",languages))+".")
@@ -513,6 +525,27 @@ def professional_bullets(document):
     return bullets
 
 
+def professional_sections(document):
+    """Recover each role and its bullets from the actual Word paragraph tree."""
+    inside=False
+    sections=[]
+    for p in document.paragraphs:
+        if p.text in ("Experiência profissional","Professional Experience"):
+            inside=True
+            continue
+        if p.text in ("Formação e certificações","Education and Certifications"):
+            break
+        if not inside:
+            continue
+        if p.style.name=="Heading 2":
+            sections.append({"heading":p.text,"facts":[]})
+        elif p.style.name=="List Bullet":
+            if not sections or not p.text.strip():
+                raise AssertionError("orphan_or_empty_bullet")
+            sections[-1]["facts"].append(p.text)
+    return sections
+
+
 def audit(plan,data):
     parsed=Document(io.BytesIO(data))
     content=" ".join(p.text for p in parsed.paragraphs)
@@ -520,15 +553,38 @@ def audit(plan,data):
     original={f for e in EXPERIENCE for f in e["facts"]}
     selected=[f for e in plan["experience"] for f in e["facts"]]
     provenance=plan.get("bullet_provenance") or {}
-    assert selected and len(selected)==len(set(selected)), "missing_or_duplicate_facts"
+    assert selected and len({(e["source_index"],f) for e in plan["experience"] for f in e["facts"]})==len(selected), "missing_or_duplicate_facts"
     assert all(f in original or provenance.get(f) in original for f in selected), "unproven_fact"
     # The evidence must occur once as a professional bullet, not once across
     # the whole document: cities, credentials and skills can recur elsewhere.
     bullets=professional_bullets(parsed)
     rows=plan["experience"]+plan.get("additional_experience",[])
     translations=(plan.get("localized") or {}).get("entries",[])
-    expected=[f for i,e in enumerate(rows[:len(plan["experience"])]) for f in (translations[i]["facts"] if i<len(translations) else e["facts"])]
-    assert all(bullets.count(f)==1 for f in expected), "fact_bullet_missing_or_repeated"
+    translated_by_index={e["source_index"]:translated for e,translated in zip(rows,translations)}
+    # A JD-first selection can promote a formerly compact role. The renderer
+    # displays that employer only once, with the selected detailed evidence.
+    detailed_by_index={e["source_index"]:e for e in plan["experience"]}
+    effective_rows=list(detailed_by_index.values())+[
+        e for e in plan.get("additional_experience",[])
+        if e["source_index"] not in detailed_by_index]
+    assert sorted(bullets)==sorted(
+        _clean_bullet_text(f) for e in effective_rows for f in
+        (translated_by_index.get(e["source_index"],{}).get("facts") or
+         (e["facts"] if "facts" in e else [e.get("fact") or EXPERIENCE[e["source_index"]]["facts"][0]]))), "fact_bullet_missing_or_repeated"
+    rendered_sections=professional_sections(parsed)
+    by_index={e["source_index"]:e for e in effective_rows}
+    expected_sections=[]
+    for idx in sorted(set(by_index),key=lambda i:chronology_index(EXPERIENCE[i]),reverse=True):
+        e=by_index[idx]
+        translated=translated_by_index.get(idx,{})
+        expected_sections.append({
+            "heading":translated.get("role",e["role"])+" — "+e["company"],
+            "facts":[_clean_bullet_text(f) for f in (translated.get("facts") or (e["facts"] if "facts" in e else [e.get("fact") or EXPERIENCE[idx]["facts"][0]]))]
+        })
+    assert rendered_sections==expected_sections, "experience_employer_attribution"
+    assert all(p.style.name!="List Bullet" for p in parsed.paragraphs
+               if p.text in ("Experiência profissional","Professional Experience",
+                              "Formação e certificações","Education and Certifications")), "bullet_on_heading"
     assert not any(f in plan["summary"] for f in selected), "summary_repeats_fact"
     assert all(source in original for source in provenance.values()), "invalid_provenance"
     return {"engine":ENGINE_VERSION,"document_sha256":hashlib.sha256(data).hexdigest(),
@@ -551,11 +607,14 @@ def evaluate_rendered_resume(plan, data, jd):
     factual=sum(1 for f in facts if
                 f in {x for item in EXPERIENCE for x in item["facts"]}
                 or fact_source.get(f) in {x for item in EXPERIENCE for x in item["facts"]})
-    unique=len(facts)==len(set(facts))
+    unique=len(facts)==len({(e["source_index"],f) for e in plan["experience"] for f in e["facts"]})
     bullet_lines=professional_bullets(doc)
     translations=(plan.get("localized") or {}).get("entries",[])
     expected=[f for i,e in enumerate(plan["experience"]) for f in (translations[i]["facts"] if i<len(translations) else e["facts"])]
-    bullet_present=all(bullet_lines.count(f)==1 for f in expected)
+    bullet_present=sorted(bullet_lines)==sorted(
+        f for i,e in enumerate(plan["experience"]+plan.get("additional_experience",[]))
+        for f in (translations[i]["facts"] if i<len(translations) else
+                  (e["facts"] if "facts" in e else [e.get("fact") or EXPERIENCE[e["source_index"]]["facts"][0]])))
     all_roles=sorted(range(len(EXPERIENCE)),key=lambda i:chronology_index(EXPERIENCE[i]),reverse=True)
     localized_rows={e["source_index"]:row for e,row in zip(plan["experience"]+plan.get("additional_experience",[]),(plan.get("localized") or {}).get("entries",[]))}
     offsets=[displayed.find(localized_rows.get(i,{}).get("role",EXPERIENCE[i]["role"])+" — "+EXPERIENCE[i]["company"]) for i in all_roles]

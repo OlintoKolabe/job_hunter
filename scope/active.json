@@ -1,63 +1,15 @@
 {
-  "id": "JOB-HUNTER-MERGE-APPROVED-SEARCH-LOGOUT-20261026",
+  "id": "JOB-HUNTER-CV-SAFE-INTEGRATION-20261027",
   "kind": "bugfix",
-  "status": "active",
-  "base_ref": "6e3868330c26e604702204b9a541850e193ef0ea",
-  "feature_ref": "fix/merge-approved-search-logout-20261026",
-  "allowed_files": [
-    "scope/active.json",
-    "Dockerfile",
-    "app.py",
-    "catalog_engine.py",
-    "collectors.py",
-    "search_filters.py",
-    "ai_resume_matcher.py",
-    "src/Opportunities.jsx",
-    "src/style.css",
-    "tests/test_opportunity_ui_contracts.py",
-    "tests/test_p0_search_canary.py",
-    "tests/test_search_role_scope.py",
-    "tests/test_search_source_fallbacks.py",
-    "tests/test_sidebar_logout_visibility.py"
-  ],
-  "allowed_paths": [
-    "scope/active.json",
-    "Dockerfile",
-    "app.py",
-    "catalog_engine.py",
-    "collectors.py",
-    "search_filters.py",
-    "ai_resume_matcher.py",
-    "src/Opportunities.jsx",
-    "src/style.css",
-    "tests/test_opportunity_ui_contracts.py",
-    "tests/test_p0_search_canary.py",
-    "tests/test_search_role_scope.py",
-    "tests/test_search_source_fallbacks.py",
-    "tests/test_sidebar_logout_visibility.py"
-  ],
-  "forbidden_paths": [
-    ".github/",
-    "vercel/"
-  ],
-  "objective": "Merge only father/Marcus-approved search canary fixes, keep CV generation unchanged, and pin the logout action inside the always-visible sidebar.",
-  "allowed_changes": [
-    "Transfer only homologated search collection, selection, paging, source matching and filter adjustments",
-    "Fix the engineering shortlist KeyError without changing resume generation methods, factual evidence or scoring rubric",
-    "Keep logout visible while long search results scroll",
-    "Run mandatory existing CV and search tests and React build",
-    "Sync operational Render branch without overwriting non-search changes"
-  ],
-  "forbidden_changes": [
-    "Alterations to resume_engine.py, resume_hybrid.py, job history, saved profiles, user credentials, database schema, costs",
-    "Changes to business logic of CV/ATS generation, notes/scoring formula or third-party source catalogue beyond approved search fixes",
-    "GitHub Actions, Vercel, new environments, unapproved migrations or replacement of existing multiuser database"
-  ],
-  "acceptance": [
-    "Approved father and Marcus search paths match homologated canary, son search remains for future canary work",
-    "Resume generation files unchanged; factual and DOCX regression tests pass",
-    "Logout remains visible on desktop/mobile while scrolling",
-    "Render operational deploy reports live with UI build and health OK; prior main rollback preserved"
-  ],
-  "deployment": "After confirming scope and test build, update main; synchronize only approved files into existing Render production branch and deploy; no merge of experimental CV engine."
+  "status": "approved-integration",
+  "base_ref": "f2a4e797434130634504c7560dd43703059a2713",
+  "feature_ref": "fix/disable-matchmaking-ai-20261026",
+  "allowed_files": ["scope/active.json", "src/Opportunities.jsx", "app.py", "ai_resume_matcher.py", "jd_enrichment.py", "ai_interpreter.py", "linkedin_pdf.py", "multiuser.py", "resume_engine.py", "resume_hybrid.py", "tests/test_linkedin_pdf.py", "tests/test_multiuser.py", "tests/test_resume_engine.py", "tests/test_ai_resume_matcher.py", "tests/test_p0_search_canary.py", "tests/test_opportunity_ui_contracts.py", "tests/test_gate12_scoring.py", "tests/test_block4_1.py"],
+  "allowed_paths": ["scope/active.json", "src/Opportunities.jsx", "app.py", "ai_resume_matcher.py", "jd_enrichment.py", "ai_interpreter.py", "linkedin_pdf.py", "multiuser.py", "resume_engine.py", "resume_hybrid.py", "tests/test_linkedin_pdf.py", "tests/test_multiuser.py", "tests/test_resume_engine.py", "tests/test_ai_resume_matcher.py", "tests/test_p0_search_canary.py", "tests/test_opportunity_ui_contracts.py", "tests/test_gate12_scoring.py", "tests/test_block4_1.py"],
+  "forbidden_paths": [".github/", "vercel/"],
+  "objective": "Integrate homologated CV quality and LinkedIn parsing and disable paid matchmaking, preserving operational search, profile isolation and logout.",
+  "allowed_changes": ["Disable matchmaking evaluation calls; keep AI CV generation", "Correct LinkedIn parsing and semantic factual CV generation across profiles", "Preserve Render search batching, filtering, pagination, error handling and logout"],
+  "forbidden_changes": ["Change search sources, filters, history or database schema", "Overwrite Marcus or Olinto Filho profile data", "Introduce mock jobs, invented work history, GitHub Actions or Vercel builds"],
+  "acceptance": ["No paid matchmaking evaluation calls", "Profile-specific CV data isolation", "LinkedIn roles and employers correctly parsed", "Correct JD language and factual attribution", "Correct DOCX title and bullet styling", "Full regression suite and frontend build pass"],
+  "deployment": "Only guarded approved scope after exact SHA, backups, tests, profile-scoped data correction and Render verification."
 }

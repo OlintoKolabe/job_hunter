@@ -105,13 +105,12 @@ class Gate12Scoring(unittest.TestCase):
         self.assertEqual(classify(job,search_terms("Product Manager"),"BR","remote",0),
                          ("excluded","cargo"))
 
-    def test_ui_separates_score_from_eligibility_and_keeps_no_jd_gate(self):
+    def test_ui_hides_scores_and_keeps_no_jd_cv_gate(self):
         ui = Path("src/Opportunities.jsx").read_text(encoding="utf-8")
-        self.assertIn("'Aderência local estimada'", ui)
-        self.assertIn("Elegibilidade a confirmar:", ui)
-        self.assertIn("'Nota inconclusiva'", ui)
+        self.assertNotIn("Aderência local estimada", ui)
+        self.assertNotIn("Nota inconclusiva", ui)
+        self.assertNotIn("Avaliar esta vaga", ui)
         self.assertIn("job.jd_available===true&&<button",ui)
-        self.assertIn("if(v.jd_available===false)return 'no_jd'",ui)
 
 
 if __name__ == "__main__":

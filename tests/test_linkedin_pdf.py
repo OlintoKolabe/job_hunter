@@ -59,6 +59,82 @@ Inglês
 
 
 class LinkedInPdfTests(unittest.TestCase):
+    def test_publications_and_awards_never_enter_certifications(self):
+        source = """Jane Example
+Contact
+jane@example.com
+Summary
+Product leader with operational experience.
+Experience
+Example Ventures
+Product Manager
+January 2022 - Present
+Led discovery and product delivery with real stakeholders.
+Education
+University of Example
+Bachelor of Business
+Certifications
+Professional Scrum Product Owner I
+Honors-Awards
+Best Startup Award
+Publications
+Book on Viral Marketing
+Languages
+English
+"""
+        profile=parse_profile_text(source)["profile"]
+        self.assertIn("Professional Scrum Product Owner I",profile["certifications"])
+        self.assertNotIn("Best Startup Award",profile["certifications"])
+        self.assertNotIn("Book on Viral Marketing",profile["certifications"])
+
+    def test_multi_position_company_tenure_and_wrapped_stack_never_become_employers(self):
+        source = """Candidate Example
+Contato
+candidate@example.test
+Resumo
+Gerente experiente de produto e projetos.
+Experiência
+Centauro.life
+Fundador
+abril de 2026 - Present (7 meses)
+Fundou plataforma de terapêutica digital com treinamento cognitivo.
+Neocoder
+1 ano 8 meses
+Consultor de produtos
+maio de 2025 - setembro de 2026 (1 ano 5 meses)
+Na Neocoder, direcionou produtos da LiberPay e roadmaps estratégicos.
+Stacks: Jira, Confluence, Figma,
+PostHog, Codex, Claude Code e Lovable
+Head de projetos e processos
+fevereiro de 2025 - agosto de 2026 (1 ano 7 meses)
+Padronizou processos e liderou iniciativas de PMO na agência.
+Top Saúde Clínicas Médicas
+CEO
+fevereiro de 2020 - fevereiro de 2025 (5 anos 1 mês)
+Estruturou processos comerciais e desenvolveu inteligência de negócios.
+Lagoa Parques e Hotéis
+5 anos 1 mês
+Diretor de desenvolvimento corporativo e de negócios
+janeiro de 2015 - janeiro de 2020 (5 anos 1 mês)
+Liderou projetos e implantou governança corporativa.
+Diretor de marketing
+janeiro de 2015 - janeiro de 2018 (3 anos 1 mês)
+Reestruturou a operação de marketing com métricas de crescimento.
+Formação acadêmica
+Universidade de São Paulo
+MBA em Marketing
+"""
+        items=parse_profile_text(source)["profile"]["experience"]
+        self.assertEqual(len(items),6)
+        self.assertEqual([x["company"] for x in items],
+                         ["Centauro.life","Neocoder","Neocoder",
+                          "Top Saúde Clínicas Médicas","Lagoa Parques e Hotéis",
+                          "Lagoa Parques e Hotéis"])
+        self.assertFalse(any("Neocoder" in fact for fact in items[0]["facts"]))
+        self.assertTrue(any("LiberPay" in fact for fact in items[1]["facts"]))
+        self.assertFalse(any("PostHog" in row["company"] for row in items))
+        self.assertTrue(all(not row["verified"] for row in items))
+
     def test_wrapped_linkedin_bullets_remain_complete(self):
         source = """Jane Example
 Contact

@@ -1,5 +1,5 @@
 {
-  "id": "JOB-HUNTER-DISABLE-PAID-MATCHMAKING-20261026",
+  "id": "JOB-HUNTER-UNIFIED-CV-QUALITY-20261027",
   "kind": "bugfix",
   "status": "canary",
   "base_ref": "db95fe1d0de48362481c5c1c4201573934bddc09",
@@ -11,11 +11,18 @@
     "ai_resume_matcher.py",
     "jd_enrichment.py",
     "ai_interpreter.py",
+    "linkedin_pdf.py",
+    "multiuser.py",
+    "resume_engine.py",
+    "resume_hybrid.py",
+    "tests/test_linkedin_pdf.py",
+    "tests/test_multiuser.py",
+    "tests/test_resume_engine.py",
+    "tests/test_ai_resume_matcher.py",
+    "tests/test_p0_search_canary.py",
     "tests/test_opportunity_ui_contracts.py",
     "tests/test_gate12_scoring.py",
-    "tests/test_block4_1.py",
-    "tests/test_ai_resume_matcher.py",
-    "tests/test_p0_search_canary.py"
+    "tests/test_block4_1.py"
   ],
   "allowed_paths": [
     "scope/active.json",
@@ -24,31 +31,46 @@
     "ai_resume_matcher.py",
     "jd_enrichment.py",
     "ai_interpreter.py",
+    "linkedin_pdf.py",
+    "multiuser.py",
+    "resume_engine.py",
+    "resume_hybrid.py",
+    "tests/test_linkedin_pdf.py",
+    "tests/test_multiuser.py",
+    "tests/test_resume_engine.py",
+    "tests/test_ai_resume_matcher.py",
+    "tests/test_p0_search_canary.py",
     "tests/test_opportunity_ui_contracts.py",
     "tests/test_gate12_scoring.py",
-    "tests/test_block4_1.py",
-    "tests/test_ai_resume_matcher.py",
-    "tests/test_p0_search_canary.py"
+    "tests/test_block4_1.py"
   ],
   "forbidden_paths": [
     ".github/",
     "vercel/"
   ],
-  "objective": "Remove paid matchmaking scores and controls while reserving OpenAI exclusively for DOCX CV generation, preserving search and multi-profile operations.",
+  "objective": "Preserve disabled paid matchmaking and repair the single shared CV engine: source attribution, JD-semantic evidence selection, profile isolation, language, formatting, and factual QA across all users.",
   "allowed_changes": [
-    "Remove ranking and scoring display, automatic and manual evaluation requests in Opportunities UI",
-    "Reject deprecated matchmaking endpoint and guard evaluation-only OpenAI provider paths",
-    "Adjust focused regression contracts and verify CV download unchanged"
+    "Preserve the already-homologated UI and API matchmaking disablement",
+    "Fix LinkedIn PDF experience block parsing and validate verified profile records",
+    "Keep per-user evidence, model requests, cache and DOCX rendering isolated",
+    "Use existing AI CV selection with evidence provenance and JD-language translation",
+    "Refine DOCX styles, ATS readability and structural provenance auditing",
+    "Add evidence-backed cross-profile, semantic and document regression contracts"
   ],
   "forbidden_changes": [
-    "Change CV creation contracts, DOCX engines, job search sources/filters, profiles, history or schema",
+    "Change job search sources/filters, history, profile ownership semantics or database schema",
+    "Automatically rewrite stored profiles or invent unverifiable work experience",
     "Main merge, production deploy, new services or paid AI validation without explicit approval",
     "GitHub Actions or Vercel build"
   ],
   "acceptance": [
     "Zero evaluation OpenAI network requests from UI or legacy backend paths",
-    "Three sections preserve disposition and CV buttons",
-    "Existing CV endpoint intact, frontend build and targeted tests pass"
+    "Every CV fact belongs to the correct employer and authenticated user",
+    "All LinkedIn-exported role boundaries survive parsing and suspicious records block verification",
+    "JD language determines complete resume language without fabricated achievements",
+    "No bullets on titles, no trailing empty bullets and DOCX renders professionally",
+    "Three user profiles, search/disposition controls and CV buttons survive regression tests",
+    "Backend unit suite, UI build and isolated canary tests pass"
   ],
   "deployment": "Canary branch only; no main merge or production deploy without explicit approval."
 }

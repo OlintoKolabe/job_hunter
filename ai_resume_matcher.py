@@ -67,6 +67,8 @@ def _ask(task, jd, title, company=""):
       " (not a paraphrase, translation or invented qualification). Include 3 to 8 actual job requirements"
       " when available. Evidence IDs must come only from the provided facts."
       " For cv return {selected_fact_ids:[string], summary:string, rewrites:[{id:string,text:string}]}. "
+      "Map the actual JD responsibilities and mandatory requirements to verified facts showing direct or genuinely transferable experience; do not select by repeated keywords or job title alone. "
+      "Keep every achievement with its original catalog employer and role; never mix employers or user profiles, or imply unproven mandatory skills. "
       "Rewrite selected facts into concise ATS bullets without inventing details; if uncertain, keep the original fact. Select at most 24 relevant fact IDs. Summary must use only verified professional context; "
       "do not invent dates, skills, credentials or measurable outcomes. "
       "Prefer an accurate, specific CV over keyword stuffing. "
@@ -217,6 +219,8 @@ def tailored_plan(jd,title,company=""):
     # Preserve the established JD-first AI selection (up to MAX_FACTS).
     # Multiuser's post-selection caps silently discarded verified evidence.
     selected={}
+    # Avoid repetitive bullets in a tailored document. Employer attribution is
+    # separately validated when rendering each selected role.
     seen_source=set()
     seen_text=set()
     for id_ in requested:
@@ -335,6 +339,7 @@ def localize_plan(plan,jd):
         accumulated[key]=int(accumulated.get(key,0))+int(usage.get(key,0))
     _last_billable_usage.set(accumulated)
     translated=json.loads(completion["choices"][0]["message"]["content"])
+    employers={str(row["company"]).strip() for row in EXPERIENCE if str(row["company"]).strip()}
     def valid_text(item,original):
         if not isinstance(item,str) or not item.strip() or len(item)>max(650,len(original)*2+60):
             raise ValueError("Tradução do CV incompleta")
@@ -342,6 +347,12 @@ def localize_plan(plan,jd):
         numbers=lambda v:sorted(re.findall(r"\\d+(?:[.,]\\d+)?",v))
         if numbers(item)!=numbers(original):
             raise ValueError("Tradução do CV alterou dados quantitativos")
+        # Employer references in a translated bullet must come from that same
+        # source bullet. These dynamic identifiers work for every account.
+        for employer in employers:
+            if (len(employer)>=4 and employer.casefold() in item.casefold()
+                and employer.casefold() not in original.casefold()):
+                raise ValueError("Tradução tentou transferir uma empresa para outra evidência")
         return " ".join(item.split())
     translated_entries=translated.get("entries")
     if not isinstance(translated_entries,list) or len(translated_entries)!=len(entries):

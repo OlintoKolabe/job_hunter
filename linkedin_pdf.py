@@ -21,11 +21,17 @@ SECTION_NAMES = {
     "skills": ("skills", "competencias", "aptidoes", "principais competencias", "top skills"),
     "certifications": ("licenses & certifications", "licenses and certifications", "licencas e certificados", "certifications", "certificacoes", "certificados"),
     "languages": ("languages", "idiomas"),
+    # LinkedIn exports append unrelated sections after certifications. They
+    # are not credentials and must not spill into the final CV's education.
+    "other": ("honors & awards", "honors-awards", "honors and awards",
+              "honras e premios", "honrarias e premios", "publications",
+              "publicacoes", "projects", "projetos", "volunteer experience",
+              "trabalho voluntario", "organizations", "organizacoes"),
 }
 HEADINGS = {name: key for key, names in SECTION_NAMES.items() for name in names}
-MONTH = r"(?:jan(?:uary|eiro)?|feb(?:ruary|vereiro)?|mar(?:ch|co)?|apr(?:il)?|abr(?:il)?|may|mai(?:o)?|jun(?:e|ho)?|jul(?:y|ho)?|aug(?:ust)?|ago(?:sto)?|sep(?:tember|tembro)?|oct(?:ober)?|out(?:ubro)?|nov(?:ember|embro)?|dec(?:ember|embro)?|dez(?:embro)?)"
-DATE_RANGE = re.compile(rf"(?i)\b(?:(?:{MONTH})\s+(?:de\s+)?\d{{4}}|\d{{4}})\s*[-–—]\s*(?:present|atual|o momento|current|hoje|(?:{MONTH})\s+(?:de\s+)?\d{{4}}|\d{{4}})\b")
-ROLE_CUES = re.compile(r"(?i)\b(manager|owner|director|head|lead|analyst|engineer|scientist|designer|developer|intern|specialist|consultant|coordinator|founder|executive|gerente|diretor|analista|engenheir[oa]|cientista|desenvolvedor|estagiari[oa]|coordenador|consultor|especialista|fundador|product|produto|marketing)\b")
+MONTH = r"(?:jan(?:uary|eiro)?|feb(?:ruary)?|fev(?:ereiro)?|mar(?:ch|co|ço)?|apr(?:il)?|abr(?:il)?|may|mai(?:o)?|jun(?:e|ho)?|jul(?:y|ho)?|aug(?:ust)?|ago(?:sto)?|sep(?:tember)?|set(?:embro)?|oct(?:ober)?|out(?:ubro)?|nov(?:ember|embro)?|dec(?:ember)?|dez(?:embro)?)"
+DATE_RANGE = re.compile(rf"(?i)^(?:(?:{MONTH})\s+(?:de\s+)?\d{{4}}|\d{{4}})\s*[-–—]\s*(?:present|atual|o momento|current|hoje|(?:{MONTH})\s+(?:de\s+)?\d{{4}}|\d{{4}})(?:\s*\([^)]*\))?$")
+ROLE_CUES = re.compile(r"(?i)\b(manager|owner|director|head|lead|analyst|engineer|scientist|designer|developer|intern|specialist|consultant|coordinator|founder|executive|ceo|cto|cmo|professor|gestor|gerente|diretor|analista|engenheir[oa]|cientista|desenvolvedor|estagiari[oa]|coordenador|consultor|especialista|fundador|product|produto|marketing)\b")
 EMAIL = re.compile(r"\b[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}\b", re.I)
 PHONE = re.compile(r"(?:\+\d{1,3}[\s-]?)?(?:\(?\d{2,3}\)?[\s-]?)?\d[\d\s().-]{7,}\d")
 LINKEDIN = re.compile(r"(?:https?://)?(?:www\.)?linkedin\.com/in/[\w%\-]+/?", re.I)
@@ -121,23 +127,75 @@ def clean_credentials(lines, name, skills):
 
 
 def experience_from_lines(lines):
-    records = []
-    warnings = []
-    dates = [i for i, line in enumerate(lines) if DATE_RANGE.search(line)]
-    for n, index in enumerate(dates):
-        # LinkedIn PDF export convention: company and role immediately precede
-        # a date range, followed by location and description.
-        first = lines[index - 2] if index >= 2 else ""
-        second = lines[index - 1] if index >= 1 else ""
-        if not first or not second or DATE_RANGE.search(first) or DATE_RANGE.search(second):
-            warnings.append("Há uma experiência cujo cargo ou empresa precisa ser conferido.")
+    """Parse roles using heading boundaries, not the two lines before a date.
+
+    LinkedIn writes a company once above several roles; descriptions frequently
+    end in a technology stack, and company-level tenure is a separate line.
+    None of those lines can safely be used as the next employer.
+    """
+    def is_duration(line):
+        return bool(re.fullmatch(
+            r"(?i)\d+\s+(?:anos?|years?|m[eê]s(?:es)?|months?)(?:(?:\s+e)?\s+\d+\s+(?:m[eê]s(?:es)?|months?))?", line))
+
+    def is_title(line):
+        return (len(line) <= 110 and bool(ROLE_CUES.search(line))
+                and not DATE_RANGE.fullmatch(line) and not line.endswith((".",":",";"))
+                and not normal(line).startswith(("stacks:", "skills:", "competencias:")))
+
+    def is_company(line):
+        key = normal(line)
+        return (2 <= len(line) <= 100 and not is_duration(line)
+                and not re.match(r"(?i)^(?:product manager|product owner|project manager|senior manager|head de|head of|diretor de|director of|gerente de|analista de|consultor de|consultant|estagi[aá]rio de|data scientist|software engineer|ceo$|cto$|cmo$)",line)
+                and not DATE_RANGE.fullmatch(line)
+                and not line.endswith((":",";"))
+                and (not line.endswith(".") or re.search(r"(?i)\b(?:inc|ltd|corp|s\.a)\.$",line))
+                and not re.search(r"(?i)^(stacks?|ferramentas?|technologies|tecnologias)\s*:",line)
+                and not re.search(r"(?i)\b(?:roadmaps?|scrum|kanban|posthog|codex|lovable|figma|jira|confluence|trello)\b",line)
+                and not re.search(r"(?i)\b(?:desenvolvi|lider|implemente|gest[aã]o|planej|alinh|cria[cç][aã]o|otimiz|maximiz|processos|atividades)\b",line)
+                and not re.search(r"[,;:]",line) and len(line.split()) <= 7 and key not in {"experiencia"})
+
+    dates = [i for i, line in enumerate(lines) if DATE_RANGE.fullmatch(line)]
+    headers = []
+    previous_company = None
+    previous_date = -1
+    for index in dates:
+        role_index = index - 1
+        role = lines[role_index] if role_index >= 0 else ""
+        if not is_title(role):
+            # Never guess the employer or silently certify a malformed role.
+            headers.append((index,index,None,None))
+            previous_date=index
             continue
-        if ROLE_CUES.search(first) and not ROLE_CUES.search(second):
-            role, company = first, second
-        else:
-            company, role = first, second
-        next_start = (dates[n + 1] - 2) if n + 1 < len(dates) else len(lines)
-        description = lines[index + 1:max(index + 1, next_start)]
+        company = None
+        company_start = role_index
+        # A new employer heading is immediately above the role, possibly
+        # separated by a company-level tenure line.
+        j=role_index-1
+        while j>previous_date and is_duration(lines[j]):
+            j-=1
+        if j>previous_date and is_company(lines[j]):
+            company=lines[j]
+            company_start=j
+        elif previous_company:
+            company=previous_company
+        headers.append((index,company_start,role,company))
+        if company:previous_company=company
+        previous_date=index
+
+    records, warnings = [], []
+    for n,(index,header_start,role,company) in enumerate(headers):
+        if not role or not company:
+            warnings.append("Cargo ou empresa não identificados com segurança; revise o PDF.")
+            continue
+        next_start=headers[n+1][1] if n+1<len(headers) else len(lines)
+        description = lines[index+1:max(index+1,next_start)]
+        # LinkedIn often prints the location before the first achievement.
+        if description and ("," in description[0] and
+            re.search(r"(?i)(?:brasil|brazil|distrito federal|s[aã]o paulo|goi[aá]s|minas gerais)",description[0])):
+            description=description[1:]
+        elif (description and len(description[0].split())<=2 and
+              not description[0].endswith((".",":",";"))):
+            description=description[1:]
         # LinkedIn places location immediately after the date. It is not a
         # professional accomplishment when followed by a marked bullet.
         if (len(description)>1 and not description[0].startswith("• ")
@@ -167,8 +225,6 @@ def experience_from_lines(lines):
         if current:
             facts.append(current)
         facts = [fact for fact in facts if len(fact) >= 18]
-        if not ROLE_CUES.search(role):
-            warnings.append("Confira cargo e empresa de uma experiência importada.")
         records.append({"role": role[:200], "company": company[:200],
                         "dates": lines[index][:200], "facts": unique(facts, 25, 500),
                         "verified": False})

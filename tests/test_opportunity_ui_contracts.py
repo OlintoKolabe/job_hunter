@@ -34,7 +34,7 @@ class OpportunityUIContracts(unittest.TestCase):
     def test_docx_download_fallback_uses_signed_in_profile_not_previous_owner(self):
         s=Path("src/Opportunities.jsx").read_text()
         self.assertIn("const accountName=String(profile?.name||'').trim()",s)
-        self.assertIn("const filename=found?decodeURIComponent(found[1]):(accountName+",s)
+        self.assertIn("const filename=found?decodeURIComponent(found[1]):([accountName,job.title||'Vaga',job.company||'Empresa']",s)
         self.assertNotIn("'Olinto Manso Pereira - '+(job.title",s)
         self.assertNotIn("Preparar com ChatGPT</button>",s)
 
@@ -51,7 +51,7 @@ class OpportunityUIContracts(unittest.TestCase):
 
     def test_indeed_on_demand_search_does_not_scan_catalog(self):
         s=Path("src/Opportunities.jsx").read_text()
-        self.assertIn("['himalayas','remotive','remoteok','indeed'].includes(source)",s)
+        self.assertIn("['himalayas','remotive','indeed'].includes(source)",s)
 
     def test_catalog_scan_does_not_start_paid_matchmaking(self):
         s=Path("src/Opportunities.jsx").read_text()

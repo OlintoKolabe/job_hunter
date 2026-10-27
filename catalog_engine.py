@@ -115,7 +115,7 @@ def extra_pull(source,slug):
             id_=j.get("id") or j.get("jobId")
             link=j.get("url") or (f"https://{slug}.bamboohr.com/careers/{id_}" if id_ else "")
             val=item(slug,title,link,j.get("location"),source,j.get("datePosted"))
-            if val and TITLE_RE.search(val["title"]):jobs.append(val)
+            if val:jobs.append(val)
         return jobs,"ok"
     if source=="quickin":
         # Official public career API; it needs no access token.

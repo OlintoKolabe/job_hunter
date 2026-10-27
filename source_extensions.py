@@ -173,7 +173,7 @@ class LinkedInCards(HTMLParser):
         super().__init__();self.cards=[];self.depth=0;self.card=None;self.field=None
     def handle_starttag(self,tag,attrs):
         a=dict(attrs);classes=a.get("class","")
-        if self.card is None and tag=="li" and ("base-card" in classes or "job-search-card" in classes):
+        if self.card is None and tag in ("li","div") and ("base-card" in classes or "job-search-card" in classes):
             self.card={"title":"","company":"","location":"","url":"","published":""};self.depth=1;return
         if self.card is None:return
         if tag not in ("img","br","hr","input","meta","link","source","wbr","area"):self.depth+=1

@@ -59,6 +59,37 @@ Inglês
 
 
 class LinkedInPdfTests(unittest.TestCase):
+    def test_academic_institution_degree_and_period_stay_together(self):
+        source = """Jane Example
+Contact
+jane@example.com
+Summary
+Experienced manager in product delivery.
+Experience
+Example Company
+Product Manager
+January 2022 - Present
+Led roadmap prioritization and customer discovery.
+Education
+Example University
+Master of Business Administration (MBA), Business Administration and
+Management, General · (2016 - 2018)
+Other University
+Graduate Certificate, Project Management · (2019 - 2020)
+Certifications
+Professional Scrum Product
+Owner I (PSPO I)
+Startup Recognition
+Languages
+English
+"""
+        profile=parse_profile_text(source)["profile"]
+        self.assertEqual(profile["education"],[
+            "Example University — Master of Business Administration (MBA), Business Administration and Management, General (2016 - 2018)",
+            "Other University — Graduate Certificate, Project Management (2019 - 2020)"])
+        self.assertEqual(profile["certifications"],[
+            "Professional Scrum Product Owner I (PSPO I)","Startup Recognition"])
+
     def test_publications_and_awards_never_enter_certifications(self):
         source = """Jane Example
 Contact
@@ -193,7 +224,9 @@ Brasil
         self.assertEqual(len(profile["experience"]), 1)
         self.assertEqual(profile["summary"],
                          "I turn raw data into strategic decisions — and manual processes into intelligent automation. & analytics.")
-        self.assertIn("Engenharia de Computação", profile["education"])
+        self.assertTrue(any("Engenharia de Computação" in item and
+                            "Pontifícia Universidade Católica de Goiás" in item
+                            for item in profile["education"]))
         for contamination in ("Python", "SQL", "Databricks", "Data Scientist & Data Engineer",
                               "Marcus Pablo Rezende Teixeira Manso Pereira", "Senior Associate @PwC"):
             self.assertNotIn(contamination, profile["education"])

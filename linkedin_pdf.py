@@ -98,6 +98,45 @@ def clean_summary(lines):
     return " ".join(html.unescape(" ".join(lines)).replace("\\", " ").split())[:1500]
 
 
+def education_blocks(lines):
+    """Keep a LinkedIn institution, qualification and period together.
+
+    A dated academic item ends at the printed (YYYY - YYYY), not at a PDF
+    line break. Undated/unrecognized fragments stay separate for user review.
+    """
+    result, pending = [], []
+    end_date = re.compile(r"(?:\s*[·•]\s*)?\(\d{4}\s*[-–]\s*(?:\d{4}|Present|Atual)\)\s*$",re.I)
+    for line in lines:
+        pending.append(line)
+        if end_date.search(line):
+            if len(pending)>=2 and len(pending)<=4:
+                institution=pending[0]
+                credential=" ".join(pending[1:]).replace(" · "," ")
+                result.append(institution+" — "+credential)
+            else:
+                result.extend(pending)
+            pending=[]
+        elif len(pending)>=4:
+            # A malformed block must not swallow the next institution.
+            result.extend(pending)
+            pending=[]
+    result.extend(pending)
+    return result
+
+
+def certification_blocks(lines):
+    """Join visually wrapped certification names with parenthesized acronyms."""
+    result=[]
+    for line in lines:
+        if (result and len(result[-1])<=55 and "(" not in result[-1]
+            and re.search(r"\([A-Za-z0-9 .+\-/]{2,25}\)\s*$",line)
+            and not re.search(r"\b(?:university|universidade|institute|instituto)\b",result[-1],re.I)):
+            result[-1] += " " + line
+        else:
+            result.append(line)
+    return result
+
+
 def clean_credentials(lines, name, skills):
     """Reject LinkedIn sidebar spillover, never infer an academic credential."""
     name_key = normal(name)
@@ -255,8 +294,8 @@ def parse_profile_text(text):
         "certifications": simple_list(groups["certifications"]),
         "languages": simple_list(groups["languages"]),
     }
-    result["education"], rejected = clean_credentials(groups["education"], name, result["skills"])
-    result["certifications"], rejected_certs = clean_credentials(groups["certifications"], name, result["skills"])
+    result["education"], rejected = clean_credentials(education_blocks(groups["education"]), name, result["skills"])
+    result["certifications"], rejected_certs = clean_credentials(certification_blocks(groups["certifications"]), name, result["skills"])
     if rejected or rejected_certs:
         warnings.append("Fragmentos do cabeçalho ou competências foram excluídos das credenciais; confira a formação antes de confirmar.")
     employers = {normal(row["company"]) for row in experience}

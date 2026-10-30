@@ -166,7 +166,7 @@ def detect_work_mode(job,evidence=None):
     evidence=evidence or {"work_evidence":[]}
     def normalize(value):
         return re.sub(r"\s+"," ",fold(value).replace("_"," ").replace("-"," ")).strip()
-    remote=("remote","remoto","remota","home office","homeoffice","work from home","teletrabalho","telecommute","100% remoto","100% remote")
+    remote=("remote","remoto","remota","home office","homeoffice","home based","work from home","work remotely","fully remote","remote first","100% remoto","100% remote","full remote","teletrabalho","telecommute","telecommuting","remotely","trabalho remoto","trabalho a distancia","trabalho em casa","trabalho de casa","work anywhere","work from anywhere","wfh","distributed team")
     hybrid=("hybrid","hibrido","hibrida","hibrid","partial remote","parcialmente remoto","semipresencial")
     onsite=("on site","onsite","presencial","in office","office based","no escritorio")
     def found(text,patterns):
@@ -207,7 +207,7 @@ def detect_work_mode(job,evidence=None):
     return None
 
 
-BR_CITIES=("sao paulo","rio de janeiro","belo horizonte","curitiba","porto alegre","brasilia","goiania","recife","fortaleza","salvador","campinas","florianopolis","uberlandia","belem","manaus","vitoria","ribeirao preto")
+BR_CITIES=("sao paulo","rio de janeiro","belo horizonte","curitiba","porto alegre","brasilia","goiania","recife","fortaleza","salvador","campinas","florianopolis","uberlandia","belem","manaus","vitoria","ribeirao preto","santos","sao jose dos campos","sorocaba","joinville","blumenau","londrina","maringa","niteroi","duque de caxias","caxias do sul","sao jose do rio preto","juiz de fora","campo grande","cuiaba","governador valadares","teresina","natal","joao pessoa","maceio","aracaju","palmas","porto velho","rio branco","boa vista","macapa","caldas novas")
 LATAM_MARKERS=("latam","latin america","america latina","latinoamerica","south america","america do sul")
 GLOBAL_MARKERS=("worldwide","anywhere in the world","global remote","remote worldwide")
 FOREIGN_ONLY_MARKERS=("remote us","remote usa","remote - us","remote - usa","us remote","usa remote","remote, us","us-based","us based","usa based","united states only","us only","usa only","u.s. only","europe only","canada only","must be based in the us","must reside in the us")
@@ -243,14 +243,14 @@ def geo_verdict(job,country,evidence=None):
         if country in ("BR","LATAM"):return "excluded"
     if country=="BR" and any(contains_phrase(loc+" "+jd_text,p) for p in BRAZIL_EXCLUSIONS):
         return "excluded"
-    has_br_location=any(contains_phrase(loc,p) for p in ("brazil","brasil","br")) or any(contains_phrase(loc,p) for p in BR_CITIES)
+    has_br_location=any(contains_phrase(loc,p) for p in ("brazil","brasil","br","bra")) or any(contains_phrase(loc,p) for p in BR_CITIES)
     has_latam_location=any(contains_phrase(loc,p) for p in LATAM_MARKERS)
     if country in ("BR","LATAM") and not any(contains_phrase(loc,p) for p in GLOBAL_MARKERS):
         if not (has_br_location or has_latam_location) and any(contains_phrase(loc,p) for p in OTHER_FOREIGN_COUNTRIES+FOREIGN_CITY_ONLY):
             return "excluded"
     # A bare "US"/"USA" is an explicit US job location, not unknown Brazil eligibility.
     us_only=any(contains_phrase(loc,p) for p in ("us","usa","united states","u.s.","united states of america"))
-    br=any(contains_phrase(loc,p) for p in ("brazil","brasil","br")) or any(contains_phrase(loc,p) for p in BR_CITIES) or "brazil" in jd_geo
+    br=any(contains_phrase(loc,p) for p in ("brazil","brasil","br","bra")) or any(contains_phrase(loc,p) for p in BR_CITIES) or "brazil" in jd_geo
     regional=any(contains_phrase(loc,p) for p in LATAM_MARKERS)
     global_eligible=any(contains_phrase(loc,p) for p in GLOBAL_MARKERS)
     # Worldwide without explicit Brazil/LATAM evidence is not verified for BR.

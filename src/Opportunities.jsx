@@ -7,7 +7,7 @@ function DecisionActions({job,pending,cvPending,cvError,onDecision,onGenerateCv}
  return <div><div style={{display:'flex',justifyContent:'flex-end',gap:8}}>
   <button type="button" disabled={pending} onClick={()=>onDecision(job,'Candidatado')} style={{...shared,background:'#16803c',border:'1px solid #16803c'}}>Candidatado</button>
   <button type="button" disabled={pending} onClick={()=>onDecision(job,'Descartado')} style={{...shared,background:'#b91c1c',border:'1px solid #b91c1c'}}>Descartado</button>
-  {job.jd_available===true&&<button type="button" disabled={cvPending} onClick={()=>onGenerateCv(job)} style={{...shared,background:'#2563eb',border:'1px solid #2563eb'}}>{cvPending?'Gerando DOCX com IA…':'Gerar currículo ATS'}</button>}
+  {<button type="button" disabled={cvPending} onClick={()=>onGenerateCv(job)} style={{...shared,background:'#2563eb',border:'1px solid #2563eb'}}>{cvPending?'Gerando DOCX com IA…':'Gerar currículo ATS'}</button>}
  </div>{cvError&&<small role="alert" style={{display:'block',color:'#b91c1c',whiteSpace:'normal',maxWidth:330,marginTop:5}}>{cvError}</small>}</div>;
 }
 export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},profile=null}){
@@ -267,7 +267,7 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},pro
        method:'POST',credentials:'same-origin',
        headers:{'Content-Type':'application/json'},
        signal:AbortSignal.timeout(65000),
-       body:JSON.stringify({url:job.url,title:job.title,company:job.company||'',description:job.description||'',confirmed:job.confirmed===true,needs_verification:job.needs_verification||[]})});
+       body:JSON.stringify({url:job.url,title:job.title,company:job.company||'',description:job.description||'',confirmed:job.confirmed===true,needs_verification:job.needs_verification||[],manual_outside_filters:true})});
      if(!response.ok){
        const error=await response.json().catch(()=>({}));
        throw Error(error.detail||('Erro HTTP '+response.status));

@@ -1053,6 +1053,7 @@ class ResumeAIRequest(BaseModel):
     description: str = ""
     confirmed: bool = False
     needs_verification: list[str] = []
+    manual_outside_filters: bool = False
 
 @app.post("/api/resume/ai-download")
 def ai_resume_download(payload: ResumeAIRequest, request: Request):
@@ -1061,7 +1062,7 @@ def ai_resume_download(payload: ResumeAIRequest, request: Request):
     if mu.enabled:
         if not mu.factual_experience():
             raise HTTPException(422,"Cadastre experiências verificadas em Meu Perfil")
-        if not payload.confirmed or payload.needs_verification:
+        if (not payload.confirmed or payload.needs_verification) and not payload.manual_outside_filters:
             raise HTTPException(422,"Confirme a elegibilidade da vaga antes de gerar currículo")
     from ai_resume_matcher import (AIUnavailable, tailored_plan, original_evidence_plan, estimate_cost,
                                    reset_billable_usage, billable_usage)

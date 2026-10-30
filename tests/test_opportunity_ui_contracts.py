@@ -60,7 +60,8 @@ class OpportunityUIContracts(unittest.TestCase):
 
     def test_missing_jd_hides_cv_and_manual_scoring_and_has_clear_state(self):
         s=Path('src/Opportunities.jsx').read_text()
-        self.assertIn("job.jd_available===true&&<button",s)
+        self.assertNotIn("job.jd_available===true&&<button",s)
+        self.assertIn("manual_outside_filters:true",s)
         self.assertIn("v.jd_available===true&&<button",s)
         self.assertIn("if(v.jd_available===false)return 'no_jd'",s)
         self.assertIn("'JD indisponível'",s)

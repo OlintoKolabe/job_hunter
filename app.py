@@ -1226,6 +1226,9 @@ def status(request: Request):
     except Exception:
         return {"database":"unavailable","mode":"phase1","history":"not_imported"}
 
+from history_read_api import register_history_read_api
+register_history_read_api(app, require_auth, serializer, DATABASE, auth_record, mu)
+
 if DIST.is_dir():
     app.mount("/assets",StaticFiles(directory=DIST/"assets"),name="assets")
 

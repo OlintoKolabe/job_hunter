@@ -183,6 +183,13 @@ def check_password(value, record):
     return bool(PASSWORD) and secrets.compare_digest(value, PASSWORD)
 
 def require_auth(request: Request):
+    integration_scopes = {
+        "/api/integrations/jobs/search": "jobs:search",
+        "/api/integrations/jobs/disposition": "jobs:disposition",
+    }
+    needed_scope = integration_scopes.get(request.url.path)
+    if needed_scope:
+        return app.state.integration_auth(request, needed_scope)
     if not serializer or not DATABASE:
         raise HTTPException(503, "Acesso indisponível")
     if mu.enabled:
@@ -1227,7 +1234,8 @@ def status(request: Request):
         return {"database":"unavailable","mode":"phase1","history":"not_imported"}
 
 from history_read_api import register_history_read_api
-register_history_read_api(app, require_auth, serializer, DATABASE, auth_record, mu)
+register_history_read_api(app, require_auth, serializer, DATABASE, auth_record, mu,
+                          search_jobs=search_jobs, mark_job_disposition=mark_job_disposition)
 
 if DIST.is_dir():
     app.mount("/assets",StaticFiles(directory=DIST/"assets"),name="assets")

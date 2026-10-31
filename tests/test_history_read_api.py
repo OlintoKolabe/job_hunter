@@ -1,6 +1,6 @@
-"""Contract tests for the independent, read-only history API."""
+"""Contract tests for scoped Caçador integrations."""
 import unittest
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 from itsdangerous import URLSafeTimedSerializer
 from history_read_api import register_history_read_api
@@ -55,7 +55,14 @@ def make_client():
     def auth(_):
         mu.set_context(mu.get_user("db", 7))
         return 7
-    register_history_read_api(app, auth, serializer, "db", lambda: None, mu)
+    def fake_search(request: Request):
+        app.state.integration_auth(request, "jobs:search")
+        return {"items": [{"url": "https://jobs.example/4", "title": "PM"}]}
+    def fake_disposition(request: Request):
+        app.state.integration_auth(request, "jobs:disposition")
+        return {"saved": True, "state": "Candidatado"}
+    register_history_read_api(app, auth, serializer, "db", lambda: None, mu,
+                              search_jobs=fake_search, mark_job_disposition=fake_disposition)
     return TestClient(app), mu
 
 
@@ -103,3 +110,36 @@ class HistoryReadApiTests(unittest.TestCase):
             client.get("/api/integrations/history", headers={"Authorization": "Bearer " + wrong}).status_code,
             401,
         )
+
+    def test_applicator_token_searches_and_updates_using_scoped_bearer(self):
+        client, _ = make_client()
+        issued = client.post("/api/integrations/applicator-token")
+        self.assertEqual(issued.status_code, 200)
+        self.assertEqual(issued.json()["scopes"],
+                         ["history:read", "jobs:search", "jobs:disposition"])
+        bearer = {"Authorization": "Bearer " + issued.json()["token"]}
+        self.assertEqual(client.get("/api/integrations/history", headers=bearer).status_code, 200)
+        found = client.post("/api/integrations/jobs/search", headers=bearer)
+        self.assertEqual(found.status_code, 200)
+        self.assertEqual(found.json()["items"][0]["title"], "PM")
+        marked = client.post("/api/integrations/jobs/disposition", headers=bearer)
+        self.assertEqual(marked.status_code, 200)
+        self.assertTrue(marked.json()["saved"])
+
+    def test_previous_history_read_token_cannot_search_or_mark(self):
+        client, _ = make_client()
+        token = client.post("/api/integrations/history-token").json()["token"]
+        bearer = {"Authorization": "Bearer " + token}
+        self.assertEqual(client.post("/api/integrations/jobs/search", headers=bearer).status_code, 401)
+        self.assertEqual(client.post("/api/integrations/jobs/disposition", headers=bearer).status_code, 401)
+
+    def test_applicator_rejects_foreign_profile_and_unauthenticated_calls(self):
+        client, _ = make_client()
+        self.assertEqual(client.post("/api/integrations/jobs/search").status_code, 401)
+        self.assertEqual(client.post("/api/integrations/jobs/disposition").status_code, 401)
+        foreign = URLSafeTimedSerializer("test-key").dumps(
+            {"scopes":["history:read", "jobs:search", "jobs:disposition"],
+             "identity":"8", "version":4}, salt="job-hunter-history-read-v1"
+        )
+        self.assertEqual(client.post("/api/integrations/jobs/search",
+            headers={"Authorization":"Bearer " + foreign}).status_code, 401)

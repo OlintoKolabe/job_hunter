@@ -1,5 +1,5 @@
 """Contract tests for the independent, read-only history API."""
-from contextlib import contextmanager
+import unittest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from itsdangerous import URLSafeTimedSerializer
@@ -59,46 +59,47 @@ def make_client():
     return TestClient(app), mu
 
 
-def test_history_requires_bearer_even_when_browser_is_logged_in():
-    client, _ = make_client()
-    response = client.get("/api/integrations/history")
-    assert response.status_code == 401
-    assert response.headers["www-authenticate"] == "Bearer"
+class HistoryReadApiTests(unittest.TestCase):
+    def test_history_requires_bearer_even_when_browser_is_logged_in(self):
+        client, _ = make_client()
+        response = client.get("/api/integrations/history")
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.headers["www-authenticate"], "Bearer")
 
+    def test_issued_token_reads_live_history_and_maps_states(self):
+        client, mu = make_client()
+        issuance = client.post("/api/integrations/history-token")
+        self.assertEqual(issuance.status_code, 200)
+        self.assertEqual(issuance.headers["cache-control"], "no-store")
+        token = issuance.json()["token"]
+        response = client.get("/api/integrations/history", headers={"Authorization": "Bearer " + token})
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["profile"], "7")
+        self.assertEqual([item["state"] for item in data["items"]], ["applied", "discarded"])
+        self.assertEqual(response.headers["cache-control"], "no-store")
+        self.assertEqual(mu.context, 7)
 
-def test_issued_token_reads_live_history_and_maps_states():
-    client, mu = make_client()
-    issuance = client.post("/api/integrations/history-token")
-    assert issuance.status_code == 200
-    assert issuance.headers["cache-control"] == "no-store"
-    token = issuance.json()["token"]
-    response = client.get("/api/integrations/history", headers={"Authorization": "Bearer " + token})
-    assert response.status_code == 200
-    data = response.json()
-    assert data["profile"] == "7"
-    assert [item["state"] for item in data["items"]] == ["applied", "discarded"]
-    assert response.headers["cache-control"] == "no-store"
-    assert mu.context == 7
+    def test_cross_profile_token_is_rejected(self):
+        client, _ = make_client()
+        foreign = URLSafeTimedSerializer("test-key").dumps(
+            {"scope":"history:read", "identity":"8", "version":4},
+            salt="job-hunter-history-read-v1",
+        )
+        response = client.get("/api/integrations/history", headers={"Authorization": "Bearer " + foreign})
+        self.assertEqual(response.status_code, 401)
 
-
-def test_cross_profile_token_is_rejected():
-    client, _ = make_client()
-    foreign = URLSafeTimedSerializer("test-key").dumps(
-        {"scope":"history:read", "identity":"8", "version":4},
-        salt="job-hunter-history-read-v1",
-    )
-    response = client.get("/api/integrations/history", headers={"Authorization": "Bearer " + foreign})
-    assert response.status_code == 401
-
-
-def test_wrong_scope_and_bad_pagination_are_rejected():
-    client, _ = make_client()
-    token = client.post("/api/integrations/history-token").json()["token"]
-    headers = {"Authorization": "Bearer " + token}
-    assert client.get("/api/integrations/history?limit=501", headers=headers).status_code == 400
-    assert client.get("/api/integrations/history?state=unknown", headers=headers).status_code == 400
-    wrong = URLSafeTimedSerializer("test-key").dumps(
-        {"scope":"history:write", "identity":"7", "version":4},
-        salt="job-hunter-history-read-v1",
-    )
-    assert client.get("/api/integrations/history", headers={"Authorization": "Bearer " + wrong}).status_code == 401
+    def test_wrong_scope_and_bad_pagination_are_rejected(self):
+        client, _ = make_client()
+        token = client.post("/api/integrations/history-token").json()["token"]
+        headers = {"Authorization": "Bearer " + token}
+        self.assertEqual(client.get("/api/integrations/history?limit=501", headers=headers).status_code, 400)
+        self.assertEqual(client.get("/api/integrations/history?state=unknown", headers=headers).status_code, 400)
+        wrong = URLSafeTimedSerializer("test-key").dumps(
+            {"scope":"history:write", "identity":"7", "version":4},
+            salt="job-hunter-history-read-v1",
+        )
+        self.assertEqual(
+            client.get("/api/integrations/history", headers={"Authorization": "Bearer " + wrong}).status_code,
+            401,
+        )

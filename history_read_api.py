@@ -15,7 +15,7 @@ TOKEN_SALT = "job-hunter-history-read-v1"
 TOKEN_MAX_AGE = 30 * 24 * 60 * 60
 
 
-def register_history_read_api(app, require_auth, serializer, database, auth_record, mu):
+def register_history_read_api(app, require_auth, serializer, database, auth_record, mu,\n                              search_jobs=None, mark_job_disposition=None):
     def bearer_error():
         raise HTTPException(
             status_code=401,
@@ -51,7 +51,26 @@ def register_history_read_api(app, require_auth, serializer, database, auth_reco
             headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
         )
 
-    def require_history_bearer(request: Request):
+    @app.post("/api/integrations/applicator-token")
+    def issue_applicator_token(request: Request):
+        """Grant the signed-in profile search and explicit disposition rights."""
+        uid = require_auth(request)
+        if not serializer or not database:
+            raise HTTPException(503, "Integração indisponível")
+        identity = str(uid) if mu.enabled else "owner"
+        version, _ = account_version(uid)
+        scopes = ["history:read", "jobs:search", "jobs:disposition"]
+        ticket = serializer.dumps(
+            {"scopes": scopes, "identity": identity, "version": version},
+            salt=TOKEN_SALT,
+        )
+        return JSONResponse(
+            {"token": ticket, "token_type": "Bearer", "scopes": scopes,
+             "expires_in_seconds": TOKEN_MAX_AGE},
+            headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
+        )
+
+    def require_history_bearer(request: Request, required_scope="history:read"):
         if not serializer or not database:
             raise HTTPException(503, "Integração indisponível")
         authorization = request.headers.get("authorization", "")
@@ -85,6 +104,14 @@ def register_history_read_api(app, require_auth, serializer, database, auth_reco
         ):
             bearer_error()
         return identity
+
+    app.state.integration_auth = require_history_bearer
+    if search_jobs is not None:
+        app.add_api_route("/api/integrations/jobs/search", search_jobs,
+                          methods=["POST"], name="applicator_search_jobs")
+    if mark_job_disposition is not None:
+        app.add_api_route("/api/integrations/jobs/disposition", mark_job_disposition,
+                          methods=["POST"], name="applicator_mark_disposition")
 
     @app.get("/api/integrations/history")
     def read_history(request: Request, limit: int = 250, before_id: int = 0,

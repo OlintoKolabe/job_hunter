@@ -84,7 +84,12 @@ def register_history_read_api(app, require_auth, serializer, database, auth_reco
             )
         except (BadSignature, SignatureExpired, ValueError, TypeError):
             bearer_error()
-        if not isinstance(payload, dict) or payload.get("scope") != "history:read":
+        if not isinstance(payload, dict):
+            bearer_error()
+        scopes = payload.get("scopes")
+        if not isinstance(scopes, list):
+            scopes = [payload.get("scope")]
+        if required_scope not in scopes:
             bearer_error()
         identity = payload.get("identity")
         if mu.enabled:

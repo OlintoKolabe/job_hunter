@@ -15,7 +15,8 @@ TOKEN_SALT = "job-hunter-history-read-v1"
 TOKEN_MAX_AGE = 30 * 24 * 60 * 60
 
 
-def register_history_read_api(app, require_auth, serializer, database, auth_record, mu,\n                              search_jobs=None, mark_job_disposition=None):
+def register_history_read_api(app, require_auth, serializer, database, auth_record, mu,
+                              search_jobs=None, mark_job_disposition=None):
     def bearer_error():
         raise HTTPException(
             status_code=401,

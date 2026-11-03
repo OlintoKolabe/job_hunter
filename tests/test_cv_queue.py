@@ -31,6 +31,20 @@ class CvQueueTests(unittest.TestCase):
         self.assertIn("owner_id=%s AND id=%s", query)
         self.assertEqual(args[0], 7)
 
+    def test_deletion_is_owner_scoped_and_never_removes_running_job(self):
+        conn = MagicMock()
+        conn.__enter__.return_value = conn
+        cursor = conn.cursor.return_value.__enter__.return_value
+        cursor.fetchone.return_value = ("deleted-id",)
+        with patch.object(cv_queue, "_db", return_value=conn):
+            result = cv_queue.delete_job("unused", object(), 42,
+                                         "12345678-1234-1234-1234-123456789012")
+        self.assertEqual(result, "deleted")
+        sql, args = cursor.execute.call_args.args
+        self.assertIn("owner_id=%s AND id=%s", sql)
+        self.assertIn("status IN ('queued','ready','failed')", sql)
+        self.assertEqual(args[0], 42)
+
     def test_worker_starts_in_real_asgi_lifespan(self):
         from pathlib import Path
         source = Path("app.py").read_text()

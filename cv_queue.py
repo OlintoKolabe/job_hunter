@@ -13,7 +13,6 @@ from psycopg.types.json import Jsonb
 
 LOG = logging.getLogger("jh.cv_queue")
 LOCK_KEY = 2026110301
-POLL_SECONDS = 3
 _STALE_AFTER = "30 minutes"
 _started = False
 _guard = threading.Lock()
@@ -157,32 +156,46 @@ def _process(job, db_url, mu, generator):
         LOG.warning("CV queue failed id=%s kind=%s", job_id, type(exc).__name__)
 
 
+_wakeup = threading.Event()
+
+
+def wake():
+    """Notify the sole queue consumer that new durable work exists."""
+    _wakeup.set()
+
+
+def _drain(db_url, mu, generator):
+    ensure_schema(db_url, mu)
+    with _db(db_url, mu) as lock_conn:
+        lock_conn.autocommit = True
+        with lock_conn.cursor() as lock_cur:
+            lock_cur.execute("SELECT pg_try_advisory_lock(%s)", (LOCK_KEY,))
+            if not lock_cur.fetchone()[0]:
+                return
+            try:
+                while True:
+                    with _db(db_url, mu) as conn:
+                        with conn.cursor() as cur:
+                            job = _claim(cur)
+                    if job is None:
+                        return
+                    print("JH_CV_QUEUE_CLAIM id="+job[0],flush=True)
+                    _process(job, db_url, mu, generator)
+            finally:
+                lock_cur.execute("SELECT pg_advisory_unlock(%s)", (LOCK_KEY,))
+
+
 def _loop(db_url, mu, generator):
+    print("JH_CV_QUEUE_WORKER_STARTED",flush=True)
     while True:
+        _wakeup.wait(timeout=30)
+        _wakeup.clear()
         try:
-            ensure_schema(db_url, mu)
-            with _db(db_url, mu) as lock_conn:
-                lock_conn.autocommit = True
-                with lock_conn.cursor() as lock_cur:
-                    lock_cur.execute("SELECT pg_try_advisory_lock(%s)", (LOCK_KEY,))
-                    acquired = lock_cur.fetchone()[0]
-                    if not acquired:
-                        time.sleep(POLL_SECONDS)
-                        continue
-                    try:
-                        while True:
-                            with _db(db_url, mu) as conn:
-                                with conn.cursor() as cur:
-                                    job = _claim(cur)
-                            if job:
-                                _process(job, db_url, mu, generator)
-                            else:
-                                time.sleep(POLL_SECONDS)
-                    finally:
-                        lock_cur.execute("SELECT pg_advisory_unlock(%s)", (LOCK_KEY,))
-        except Exception:
+            _drain(db_url, mu, generator)
+        except Exception as exc:
+            print("JH_CV_QUEUE_WORKER_ERROR kind="+type(exc).__name__,flush=True)
             LOG.exception("CV queue worker temporarily unavailable")
-            time.sleep(10)
+            time.sleep(5)
 
 
 def start(db_url, mu, generator):
@@ -191,8 +204,10 @@ def start(db_url, mu, generator):
         return
     with _guard:
         if _started:
+            wake()
             return
         thread = threading.Thread(target=_loop, args=(db_url, mu, generator),
                                   daemon=True, name="cv-queue-worker")
         thread.start()
         _started = True
+    wake()

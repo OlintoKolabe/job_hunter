@@ -180,6 +180,16 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},pro
    finally{setDecisionNow(prev=>prev.filter(x=>x!==job.url))}
  }
  const [queueJobs,setQueueJobs]=useState([]);
+ const enqueuedHereRef=useRef(new Set());
+ const autoAttemptedRef=useRef(new Set());
+ useEffect(()=>{
+   queueJobs.forEach(job=>{
+     if(job.status==='ready'&&enqueuedHereRef.current.has(job.id)&&!autoAttemptedRef.current.has(job.id)){
+       autoAttemptedRef.current.add(job.id);
+       void downloadQueuedCv(job);
+     }
+   });
+ },[queueJobs]);
  useEffect(()=>{
    let active=true;
    const refresh=async()=>{
@@ -225,6 +235,7 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},pro
      });
      const data=await response.json().catch(()=>({}));
      if(!response.ok)throw Error(data.detail||('HTTP '+response.status));
+     if(data.id)enqueuedHereRef.current.add(data.id);
      setMessage('Currículo adicionado à fila. Pode solicitar outros enquanto este é preparado.');
      await refreshQueue();
    }catch(e){

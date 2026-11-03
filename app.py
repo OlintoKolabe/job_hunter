@@ -74,6 +74,8 @@ def prepare_verified_cv(url:str, fact_ids:list[str], title:str="",company:str=""
 @asynccontextmanager
 async def cv_lifespan(app):
     maybe_start(DATABASE)
+    from cv_queue import start
+    start(DATABASE,mu,_queued_generate)
     async with cv_mcp.session_manager.run():
         yield
 
@@ -1228,11 +1230,6 @@ def ai_resume_download(payload: ResumeAIRequest, request: Request):
 def _queued_generate(payload, uid):
     return _ai_resume_document_for_user(ResumeAIRequest(**payload),uid)
 
-
-@app.on_event("startup")
-def start_cv_queue_worker():
-    from cv_queue import start
-    start(DATABASE,mu,_queued_generate)
 
 
 @app.get("/api/gpt-action/download")

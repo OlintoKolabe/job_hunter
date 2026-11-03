@@ -1077,10 +1077,8 @@ def cv_download_filename(title,company):
                      part(title,"Vaga",120),part(company,"Empresa",120)))+".docx"
 
 
-@app.post("/api/resume/ai-download")
-def ai_resume_download(payload: ResumeAIRequest, request: Request):
-    """One-click AI resume download; never silently use the deterministic old CV."""
-    authenticated_uid=require_auth(request)
+def _ai_resume_document_for_user(payload: ResumeAIRequest, authenticated_uid):
+    """Generate an audited DOCX in a queue worker or a legacy direct request."""
     if mu.enabled:
         bad=mu.experience_integrity_issues((mu.current_profile.get() or {}).get("experience",[]))
         if bad:
@@ -1172,11 +1170,68 @@ def ai_resume_download(payload: ResumeAIRequest, request: Request):
             with conn.cursor() as cur:
                 settle(cur,usage_id,cost,success)
     name=cv_download_filename(title,company)
+    return document, name
+
+
+@app.post("/api/resume/queue", status_code=202)
+def enqueue_resume(payload: ResumeAIRequest, request: Request):
+    authenticated_uid=require_auth(request)
+    if not payload.url.startswith("https://") or not payload.title.strip():
+        raise HTTPException(400,"Vaga inválida")
+    from cv_queue import ensure_schema, enqueue
+    ensure_schema(DATABASE,mu)
+    job_id=enqueue(DATABASE,mu,authenticated_uid if mu.enabled else 0,payload.model_dump())
+    return {"id":job_id,"status":"queued"}
+
+
+@app.get("/api/resume/queue")
+def resume_queue_status(request: Request):
+    authenticated_uid=require_auth(request)
+    from cv_queue import ensure_schema, list_jobs
+    ensure_schema(DATABASE,mu)
+    return {"jobs":list_jobs(DATABASE,mu,authenticated_uid if mu.enabled else 0)}
+
+
+@app.get("/api/resume/queue/{job_id}/download")
+def resume_queue_download(job_id: str, request: Request):
+    authenticated_uid=require_auth(request)
+    from uuid import UUID
+    try:
+        UUID(job_id)
+    except ValueError:
+        raise HTTPException(400,"Identificador inválido")
+    from cv_queue import get_document
+    row=get_document(DATABASE,mu,authenticated_uid if mu.enabled else 0,job_id)
+    if not row:
+        raise HTTPException(404,"Currículo não encontrado nesta conta")
+    if row[0]!="ready" or row[2] is None:
+        raise HTTPException(409,"Currículo ainda não disponível")
+    from urllib.parse import quote
+    return StreamingResponse(io.BytesIO(bytes(row[2])),
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition":f"attachment; filename*=UTF-8''{quote(row[1])}",
+                 "Cache-Control":"no-store"})
+
+
+@app.post("/api/resume/ai-download")
+def ai_resume_download(payload: ResumeAIRequest, request: Request):
+    authenticated_uid=require_auth(request)
+    document,name=_ai_resume_document_for_user(payload,authenticated_uid)
     from urllib.parse import quote
     return StreamingResponse(io.BytesIO(document),
-       media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-       headers={"Content-Disposition":f"attachment; filename*=UTF-8''{quote(name)}",
-                "Cache-Control":"no-store","X-CV-Mode":"ai_resume_matcher_evidence_v1"})
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition":f"attachment; filename*=UTF-8''{quote(name)}",
+                 "Cache-Control":"no-store","X-CV-Mode":"ai_resume_matcher_evidence_v1"})
+
+
+def _queued_generate(payload, uid):
+    return _ai_resume_document_for_user(ResumeAIRequest(**payload),uid)
+
+
+@app.on_event("startup")
+def start_cv_queue_worker():
+    from cv_queue import start
+    start(DATABASE,mu,_queued_generate)
 
 
 @app.get("/api/gpt-action/download")

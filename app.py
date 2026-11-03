@@ -1178,9 +1178,10 @@ def enqueue_resume(payload: ResumeAIRequest, request: Request):
     authenticated_uid=require_auth(request)
     if not payload.url.startswith("https://") or not payload.title.strip():
         raise HTTPException(400,"Vaga inválida")
-    from cv_queue import ensure_schema, enqueue
+    from cv_queue import ensure_schema, enqueue, wake
     ensure_schema(DATABASE,mu)
     job_id=enqueue(DATABASE,mu,authenticated_uid if mu.enabled else 0,payload.model_dump())
+    wake()
     return {"id":job_id,"status":"queued"}
 
 

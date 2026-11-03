@@ -11,13 +11,23 @@ class OpportunityUIContracts(unittest.TestCase):
         self.assertIn('const combined=new Map();(currentMatches?results:[]).filter(v=>!v.needs_verification?.length)',s)
     def test_shared_action_buttons_in_all_three_sections(self):
         s=Path("src/Opportunities.jsx").read_text()
-        self.assertEqual(s.count("<DecisionActions job={v} pending={decisionNow.includes(v.url)} onDecision={markDecision} onGenerateCv={generateCv} cvPending={cvNow.includes(v.url)} cvError={cvErrors[v.url]}/>"),2)
-        self.assertEqual(s.count("<DecisionActions job={v} pending={decisionNow.includes(v.url)} onDecision={markDecision} onGenerateCv={generateCv} cvPending={cvNow.includes(v.url)} cvError={cvErrors[v.url]} manualOutsideFilters={true}/>"),1)
+        self.assertEqual(s.count("<DecisionActions job={v} pending={decisionNow.includes(v.url)} onDecision={markDecision} onGenerateCv={generateCv} cvPending={cvNow.includes(v.url)} cvDraft={cvDrafts[v.url]} onCancelCv={cancelCvDraft} cvError={cvErrors[v.url]}/>"),2)
+        self.assertEqual(s.count("<DecisionActions job={v} pending={decisionNow.includes(v.url)} onDecision={markDecision} onGenerateCv={generateCv} cvPending={cvNow.includes(v.url)} cvDraft={cvDrafts[v.url]} onCancelCv={cancelCvDraft} cvError={cvErrors[v.url]} manualOutsideFilters={true}/>"),1)
         self.assertIn('role="alert"',s)
         self.assertIn("onClick={()=>onGenerateCv(job,manualOutsideFilters)}",s)
         self.assertIn("background:'#2563eb'",s)
         self.assertEqual(s.count("onClick={()=>markDecision(v,'Candidatado')}"),0)
         self.assertEqual(s.count("onClick={()=>markDecision(v,'Descartado')}"),0)
+
+    def test_cv_has_cancellable_prequeue_delay_and_source_queue(self):
+        s=Path("src/Opportunities.jsx").read_text()
+        self.assertIn("const started=Date.now(),duration=5000;",s)
+        self.assertIn("clearInterval(timer);cvDraftTimersRef.current.delete(url)",s)
+        self.assertIn("void submitCv(job,manualOutsideFilters)",s)
+        self.assertIn('onClick={()=>onCancelCv(job.url)}',s)
+        self.assertIn("Fontes · Fila de currículos ATS",s)
+        self.assertIn("Apagar do banco",s)
+        self.assertIn("window.confirm(",s)
 
     def test_cv_uses_existing_button_and_persistent_queue(self):
         s=Path("src/Opportunities.jsx").read_text()

@@ -25,7 +25,9 @@ class OpportunityUIContracts(unittest.TestCase):
         self.assertIn("clearInterval(timer);cvDraftTimersRef.current.delete(url)",s)
         self.assertIn("void submitCv(job,manualOutsideFilters)",s)
         self.assertIn('onClick={()=>onCancelCv(job.url)}',s)
-        self.assertIn("Fontes · Fila de currículos ATS",s)
+        self.assertIn("Fontes consultadas nesta busca · Fila ATS",s)
+        self.assertIn('<section aria-label="Fila de currículos ATS"',s)
+        self.assertNotIn('aria-label="Fontes e fila de currículos ATS"',s)
         self.assertIn("Apagar do banco",s)
         self.assertIn("window.confirm(",s)
 

@@ -95,8 +95,16 @@ def _claim(cur):
     # Reclaim after a process died. One advisory-lock holder runs at a time.
     cur.execute("""
         UPDATE public.jh_cv_queue
+        SET status='failed', error='Processamento interrompido; solicite novamente',
+            finished_at=now()
+        WHERE status='running' AND attempts >= 2
+          AND started_at < now() - interval '30 minutes'
+    """)
+    cur.execute("""
+        UPDATE public.jh_cv_queue
         SET status='queued', started_at=NULL
-        WHERE status='running' AND started_at < now() - interval '30 minutes'
+        WHERE status='running' AND attempts < 2
+          AND started_at < now() - interval '30 minutes'
     """)
     cur.execute("""
         UPDATE public.jh_cv_queue SET status='running',

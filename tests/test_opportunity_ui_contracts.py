@@ -28,6 +28,7 @@ class OpportunityUIContracts(unittest.TestCase):
         self.assertIn("Fontes consultadas nesta busca · Fila ATS",s)
         self.assertIn('<section aria-label="Fila de currículos ATS"',s)
         self.assertNotIn('aria-label="Fontes e fila de currículos ATS"',s)
+        self.assertLess(s.index('Fontes consultadas nesta busca · Fila ATS'),s.index('{currentMatches&&(results.length'))
         self.assertIn("Apagar do banco",s)
         self.assertIn("window.confirm(",s)
 

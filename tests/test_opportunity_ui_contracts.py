@@ -59,9 +59,9 @@ class OpportunityUIContracts(unittest.TestCase):
         self.assertNotIn("/api/jd/enrich",s)
         self.assertNotIn("rankEntireCollection",s)
 
-    def test_missing_jd_hides_cv_and_all_score_controls_are_removed(self):
+    def test_cv_button_is_available_even_without_cached_jd_and_scores_are_removed(self):
         s=Path('src/Opportunities.jsx').read_text()
-        self.assertIn("(job.jd_available===true||manualOutsideFilters)&&<button",s)
+        self.assertIn("{<button",s)
         self.assertNotIn('Avaliar esta vaga',s)
         self.assertNotIn('Nota / evidências',s)
         self.assertNotIn('scoreDisplay',s)
@@ -81,5 +81,14 @@ class OpportunityUIContracts(unittest.TestCase):
         self.assertIn('await scanWorker();',s)
         self.assertIn('fetch(\'/api/resume/ai-download\'',s)
         self.assertNotIn('await earlyRanking;',s)
+
+    def test_manual_cv_does_not_depend_on_search_filter_confirmation(self):
+        backend=Path("app.py").read_text()
+        frontend=Path("src/Opportunities.jsx").read_text()
+        self.assertNotIn("Confirme a elegibilidade da vaga antes de gerar currículo",backend)
+        self.assertNotIn("if (not payload.confirmed or payload.needs_verification) and not payload.manual_outside_filters:",backend)
+        self.assertIn("if not valid_listing_jd(jd):",backend)
+        self.assertIn("fallback_public_jd",backend)
+        self.assertIn('{<button type="button" disabled={cvPending}',frontend)
 
 if __name__=="__main__":unittest.main()

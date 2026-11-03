@@ -179,40 +179,57 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},pro
    }catch(e){setError('Não foi possível marcar “'+job.title+'” como '+state+': '+(e.name==='TimeoutError'?'servidor demorou a responder; confira o Histórico antes de tentar novamente.':e.message))}
    finally{setDecisionNow(prev=>prev.filter(x=>x!==job.url))}
  }
- async function generateCv(job,manualOutsideFilters=false){
-   // AI-only one-click flow: never silently substitute the old deterministic engine.
-   if(cvNow.includes(job.url))return;
-   setError('');setCvErrors(v=>({...v,[job.url]:''}));setCvNow(v=>[...v,job.url]);setMessage('IA analisando a vaga e preparando currículo ATS…');
+ const [queueJobs,setQueueJobs]=useState([]);
+ useEffect(()=>{
+   let active=true;
+   const refresh=async()=>{
+     try{
+       const response=await fetch('/api/resume/queue',{credentials:'same-origin',cache:'no-store'});
+       if(!response.ok)return;
+       const data=await response.json();
+       if(active)setQueueJobs(data.jobs||[]);
+     }catch(_){}
+   };
+   refresh();
+   const timer=setInterval(refresh,4000);
+   return ()=>{active=false;clearInterval(timer)};
+ },[]);
+ async function refreshQueue(){
    try{
-     const response=await fetch('/api/resume/ai-download',{
-       method:'POST',credentials:'same-origin',
-       headers:{'Content-Type':'application/json'},
-       signal:AbortSignal.timeout(65000),
-       body:JSON.stringify({url:job.url,title:job.title,company:job.company||'',description:job.description||'',confirmed:job.confirmed===true,needs_verification:job.needs_verification||[],manual_outside_filters:manualOutsideFilters})});
-     if(!response.ok){
-       const error=await response.json().catch(()=>({}));
-       throw Error(error.detail||('Erro HTTP '+response.status));
-     }
-     if(!(response.headers.get('content-type')||'').includes('wordprocessingml')){
-       throw Error('O servidor não devolveu um DOCX');
-     }
-     const content=await response.blob();
-     const disposition=response.headers.get('Content-Disposition')||'';
-     const found=disposition.match(/filename\*=UTF-8''([^;]+)/i);
-     const accountName=String(profile?.name||'').trim();
-     if(!found&&!accountName)throw Error('Não foi possível identificar o nome da conta para o currículo');
-     const filename=found?decodeURIComponent(found[1]):([accountName,job.title||'Vaga',job.company||'Empresa'].map(v=>String(v).replace(/[\\/:*?"<>|]/g,' ').replace(/\s+/g,' ').trim()||'Indefinido').join('_')+'.docx');
-     const blobUrl=URL.createObjectURL(content);
-     const anchor=document.createElement('a');
-     anchor.href=blobUrl;anchor.download=filename;document.body.appendChild(anchor);
-     anchor.click();anchor.remove();
-     setTimeout(()=>URL.revokeObjectURL(blobUrl),30000);
-     setMessage('Currículo personalizado por IA, auditado e disponível para download.');
+     const response=await fetch('/api/resume/queue',{credentials:'same-origin',cache:'no-store'});
+     if(response.ok){const data=await response.json();setQueueJobs(data.jobs||[])}
+   }catch(_){}
+ }
+ async function downloadQueuedCv(job){
+   setCvErrors(v=>({...v,[job.id]:''}));
+   try{
+     const response=await fetch('/api/resume/queue/'+encodeURIComponent(job.id)+'/download',{credentials:'same-origin'});
+     if(!response.ok){const detail=await response.json().catch(()=>({}));throw Error(detail.detail||('HTTP '+response.status))}
+     const blob=await response.blob();
+     const url=URL.createObjectURL(blob);
+     const a=document.createElement('a');
+     a.href=url;a.download=job.filename||'curriculo.docx';
+     document.body.appendChild(a);a.click();a.remove();
+     setTimeout(()=>URL.revokeObjectURL(url),30000);
+   }catch(e){setCvErrors(v=>({...v,[job.id]:'Download indisponível: '+e.message}))}
+ }
+ async function generateCv(job,manualOutsideFilters=false){
+   if(cvNow.includes(job.url))return;
+   setError('');setCvNow(v=>[...v,job.url]);
+   try{
+     const response=await fetch('/api/resume/queue',{
+       method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},
+       body:JSON.stringify({url:job.url,title:job.title,company:job.company||'',
+         description:job.description||'',confirmed:job.confirmed===true,
+         needs_verification:job.needs_verification||[],manual_outside_filters:manualOutsideFilters})
+     });
+     const data=await response.json().catch(()=>({}));
+     if(!response.ok)throw Error(data.detail||('HTTP '+response.status));
+     setMessage('Currículo adicionado à fila. Pode solicitar outros enquanto este é preparado.');
+     await refreshQueue();
    }catch(e){
-     setMessage('');
-     setError('Currículo não gerado: '+e.message);
-     setCvErrors(v=>({...v,[job.url]:'Currículo não gerado: '+e.message}));
-   }finally{setCvNow(v=>v.filter(x=>x!==job.url));}
+     setCvErrors(v=>({...v,[job.url]:'Não foi possível adicionar à fila: '+e.message}));
+   }finally{setCvNow(v=>v.filter(x=>x!==job.url))}
  }
 
  const currentMatches=searchedQuery!==''&&searchedQuery===query();
@@ -264,6 +281,19 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},pro
   <button className="import-btn" disabled={busy||!roles.trim()} onClick={search}>{busy?'Pesquisando vagas e verificando quadros…':'Buscar oportunidades'}</button>
   {message&&<p className="notice" role="status">{message}{checked>0?' · Quadros verificados agora: '+checked:''}</p>}
   {error&&<p className="notice" role="alert">{error}</p>}
+  {queueJobs.length>0&&<div className="notice" aria-label="Fila de currículos ATS">
+    <strong>Fila de currículos ATS ({queueJobs.filter(j=>j.status==='queued'||j.status==='running').length} pendentes)</strong>
+    <div style={{display:'grid',gap:8,marginTop:8}}>
+      {queueJobs.map(j=><div key={j.id} style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+        <span>{j.title||'Vaga'} — {j.company||'Empresa'}</span>
+        <small>{({queued:'Na fila',running:'Gerando…',ready:'Pronto',failed:'Falhou'})[j.status]||j.status}</small>
+        {j.status==='ready'&&<button type="button" onClick={()=>downloadQueuedCv(j)}>Baixar DOCX</button>}
+        {j.status==='failed'&&<small role="alert">{j.error}</small>}
+        {cvErrors[j.id]&&<small role="alert">{cvErrors[j.id]}</small>}
+      </div>)}
+    </div>
+  </div>}
+
   {!currentMatches&&searchedQuery&&<p className="notice">Os filtros mudaram após a última pesquisa. Clique em Buscar oportunidades para atualizar os resultados.</p>}
   {currentMatches&&(results.length>0||reviews.length>0||completed)&&<><div className="history-stats"><span>{onlyNew?"Vagas novas nesta busca":"Oportunidades encontradas"}: <b>{ordered.length}</b></span><span>Confirmadas: <b>{results.length}</b></span><span>Precisam de confirmação: <b>{visibleReviews.filter(v=>!results.some(r=>r.url===v.url)).length}</b></span><span>Anúncios analisados: <b>{rawScanned}</b></span><span>Quadros consultados: <b>{checked}</b></span>{mode!=='all'&&<span>Modalidade a confirmar: <b>{unknownModeCount}</b></span>}{country!=='GLOBAL'&&<span>País a confirmar: <b>{unknownCountryCount}</b></span>}</div>
   {ordered.length===0?<p>{onlyNew?"Nenhuma vaga inédita nesta pesquisa. Desmarque o filtro para conferir os demais resultados e abra Fontes para verificar os quadros consultados.":"Nenhuma vaga correspondente foi identificada nos quadros consultados. Abra Fontes e Auditoria dos filtros para ver falhas e exclusões."}</p>:

@@ -19,24 +19,25 @@ class OpportunityUIContracts(unittest.TestCase):
         self.assertEqual(s.count("onClick={()=>markDecision(v,'Candidatado')}"),0)
         self.assertEqual(s.count("onClick={()=>markDecision(v,'Descartado')}"),0)
 
-    def test_cv_is_existing_button_only_and_downloads_using_ai(self):
+    def test_cv_uses_existing_button_and_persistent_queue(self):
         s=Path("src/Opportunities.jsx").read_text()
         self.assertIn("'Gerar currículo ATS'",s)
         self.assertEqual(s.count("onClick={()=>generateCv(v)}"),0)
         self.assertNotIn("v.ranking?.score!=null&&<button",s)
-        self.assertIn("AI-only one-click flow",s)
-        self.assertIn("fetch('/api/resume/ai-download'",s)
-        self.assertIn("anchor.download=filename",s)
+        self.assertIn("fetch('/api/resume/queue'",s)
+        self.assertIn("downloadQueuedCv(job)",s)
+        self.assertIn("a.download=job.filename||'curriculo.docx'",s)
         self.assertNotIn("window.open('https://chatgpt.com",s)
         self.assertNotIn("/api/resume/generate",s)
         self.assertNotIn("/api/resume/gpt-start",s)
 
-    def test_docx_download_fallback_uses_signed_in_profile_not_previous_owner(self):
-        s=Path("src/Opportunities.jsx").read_text()
-        self.assertIn("const accountName=String(profile?.name||'').trim()",s)
-        self.assertIn("const filename=found?decodeURIComponent(found[1]):([accountName,job.title||'Vaga',job.company||'Empresa']",s)
-        self.assertNotIn("'Olinto Manso Pereira - '+(job.title",s)
-        self.assertNotIn("Preparar com ChatGPT</button>",s)
+    def test_docx_name_stays_owned_by_authenticated_server_profile(self):
+        s=Path("app.py").read_text()
+        self.assertIn('profile=(mu.current_profile.get() or {}) if mu.enabled else {}',s)
+        self.assertIn('name=cv_download_filename(title,company)',s)
+        self.assertIn('def resume_queue_download(job_id: str, request: Request)',s)
+        self.assertIn('authenticated_uid=require_auth(request)',s)
+        self.assertNotIn("Preparar com ChatGPT</button>",Path("src/Opportunities.jsx").read_text())
 
     def test_confirmed_and_geographically_relevant_jobs_precede_uncertain_results(self):
         s=Path("src/Opportunities.jsx").read_text()
@@ -79,7 +80,7 @@ class OpportunityUIContracts(unittest.TestCase):
         s=Path('src/Opportunities.jsx').read_text()
         self.assertIn('const scanWorker=async()=>',s)
         self.assertIn('await scanWorker();',s)
-        self.assertIn('fetch(\'/api/resume/ai-download\'',s)
+        self.assertIn('fetch(\'/api/resume/queue\'',s)
         self.assertNotIn('await earlyRanking;',s)
 
 if __name__=="__main__":unittest.main()

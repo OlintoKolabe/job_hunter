@@ -18,9 +18,8 @@ JD=("Senior Product Manager required to lead discovery, product roadmaps, stakeh
     "on measurable outcomes and continuous product delivery.")
 
 class AIResumeMatcherTests(unittest.TestCase):
-    def test_manual_outside_filters_overrides_eligibility_only(self):
+    def test_cv_generation_does_not_require_search_eligibility(self):
         import app
-        from fastapi import HTTPException
 
         base={"url":"https://example.com/jobs/123", "title":"Product Manager",
               "description":"A valid description "*25, "confirmed":False,
@@ -30,12 +29,12 @@ class AIResumeMatcherTests(unittest.TestCase):
              patch.object(app.mu,"experience_integrity_issues",return_value=[]), \
              patch.object(app.mu,"factual_experience",return_value=[{"verified":True}]), \
              patch.object(app,"_cv_source",side_effect=RuntimeError("jd_lookup_reached")):
-            with self.assertRaises(HTTPException) as blocked:
-                app.ai_resume_download(app.ResumeAIRequest(**base),request=None)
-            self.assertEqual(blocked.exception.status_code,422)
-
-            with self.assertRaisesRegex(RuntimeError,"jd_lookup_reached"):
-                app.ai_resume_download(app.ResumeAIRequest(**base,manual_outside_filters=True),request=None)
+            for manual in (False, True):
+                with self.subTest(manual_outside_filters=manual):
+                    with self.assertRaisesRegex(RuntimeError,"jd_lookup_reached"):
+                        app.ai_resume_download(
+                            app.ResumeAIRequest(**base,manual_outside_filters=manual),
+                            request=None)
 
     def setUp(self):
         # Selection-contract tests do not hit the separate translation API.

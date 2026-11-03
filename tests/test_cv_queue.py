@@ -31,6 +31,13 @@ class CvQueueTests(unittest.TestCase):
         self.assertIn("owner_id=%s AND id=%s", query)
         self.assertEqual(args[0], 7)
 
+    def test_worker_starts_in_real_asgi_lifespan(self):
+        from pathlib import Path
+        source = Path("app.py").read_text()
+        lifespan = source.split("async def cv_lifespan(app):",1)[1].split("app.router.lifespan_context",1)[0]
+        self.assertIn("start(DATABASE,mu,_queued_generate)", lifespan)
+        self.assertNotIn('@app.on_event("startup")\ndef start_cv_queue_worker', source)
+
     def test_claim_serializes_single_oldest_job(self):
         cursor = MagicMock()
         cursor.fetchone.return_value = ("job", 7, {}, 1)

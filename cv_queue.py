@@ -90,6 +90,25 @@ def get_document(db_url, mu, owner, job_id):
             return cur.fetchone()
 
 
+def delete_job(db_url, mu, owner, job_id):
+    """Permanently remove only non-running jobs owned by this account."""
+    with _db(db_url, mu) as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                DELETE FROM public.jh_cv_queue
+                WHERE owner_id=%s AND id=%s
+                  AND status IN ('queued','ready','failed')
+                RETURNING id
+            """, (owner, job_id))
+            if cur.fetchone():
+                return "deleted"
+            cur.execute("""
+                SELECT status FROM public.jh_cv_queue
+                WHERE owner_id=%s AND id=%s
+            """, (owner, job_id))
+            return "running" if cur.fetchone() else "missing"
+
+
 def _claim(cur):
     # Reclaim after a process died. One advisory-lock holder runs at a time.
     cur.execute("""

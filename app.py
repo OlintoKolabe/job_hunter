@@ -1195,6 +1195,23 @@ def resume_queue_status(request: Request):
     return {"jobs":list_jobs(DATABASE,mu,authenticated_uid if mu.enabled else 0)}
 
 
+@app.delete("/api/resume/queue/{job_id}")
+def resume_queue_delete(job_id: str, request: Request):
+    authenticated_uid=require_auth(request)
+    from uuid import UUID
+    try:
+        UUID(job_id)
+    except ValueError:
+        raise HTTPException(400,"Identificador inválido")
+    from cv_queue import delete_job
+    result=delete_job(DATABASE,mu,authenticated_uid if mu.enabled else 0,job_id)
+    if result=="missing":
+        raise HTTPException(404,"Currículo não encontrado nesta conta")
+    if result=="running":
+        raise HTTPException(409,"Currículo em geração não pode ser excluído")
+    return {"deleted":True}
+
+
 @app.get("/api/resume/queue/{job_id}/download")
 def resume_queue_download(job_id: str, request: Request):
     authenticated_uid=require_auth(request)

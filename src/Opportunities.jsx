@@ -2,13 +2,17 @@ import React,{useState,useEffect,useRef} from 'react';
 const defaultRoles='Product Manager, Product Owner, Project Manager, Gerente de Projetos, Product Marketing, Marketing, Growth, Business Analyst, Analista de Negócios, PMO';
 const initialCountries=[{value:'LATAM',label:'América Latina'},{value:'BR',label:'Brasil'}];
 const boundedRoles=items=>items.reduce((selected,item)=>{const candidate=[...selected,item].join(', ');return candidate.length<=5000?[...selected,item]:selected},[]).join(', ');
-function DecisionActions({job,pending,cvPending,cvError,onDecision,onGenerateCv,manualOutsideFilters=false}){
+function DecisionActions({job,pending,cvPending,cvDraft,cvError,onDecision,onGenerateCv,onCancelCv,manualOutsideFilters=false}){
  const shared={borderRadius:7,padding:'7px 10px',fontWeight:700,cursor:pending?'wait':'pointer',color:'#fff'};
  return <div><div style={{display:'flex',justifyContent:'flex-end',gap:8}}>
   <button type="button" disabled={pending} onClick={()=>onDecision(job,'Candidatado')} style={{...shared,background:'#16803c',border:'1px solid #16803c'}}>Candidatado</button>
   <button type="button" disabled={pending} onClick={()=>onDecision(job,'Descartado')} style={{...shared,background:'#b91c1c',border:'1px solid #b91c1c'}}>Descartado</button>
-  {(job.jd_available===true||manualOutsideFilters)&&<button type="button" disabled={cvPending} onClick={()=>onGenerateCv(job,manualOutsideFilters)} style={{...shared,background:'#2563eb',border:'1px solid #2563eb'}}>{cvPending?'Gerando DOCX com IA…':'Gerar currículo ATS'}</button>}
- </div>{cvError&&<small role="alert" style={{display:'block',color:'#b91c1c',whiteSpace:'normal',maxWidth:330,marginTop:5}}>{cvError}</small>}</div>;
+  {(job.jd_available===true||manualOutsideFilters)&&<button type="button" disabled={cvPending||!!cvDraft} onClick={()=>onGenerateCv(job,manualOutsideFilters)} style={{...shared,background:'#2563eb',border:'1px solid #2563eb'}}>{cvPending?'Adicionando…':cvDraft?'Preparando…':'Gerar currículo ATS'}</button>}
+ </div>{cvDraft&&<div style={{display:'flex',alignItems:'center',gap:8,marginTop:6}}>
+  <progress aria-label="Tempo para cancelar currículo" value={cvDraft.progress} max="100" style={{width:150}}/>
+  <small>{Math.max(0,Math.ceil((100-cvDraft.progress)/20))} s para enviar</small>
+  <button type="button" onClick={()=>onCancelCv(job.url)}>Cancelar</button>
+ </div>}{cvError&&<small role="alert" style={{display:'block',color:'#b91c1c',whiteSpace:'normal',maxWidth:330,marginTop:5}}>{cvError}</small>}</div>;
 }
 export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},profile=null}){
  const catalog=profile?.roles||[];
@@ -158,6 +162,15 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},pro
   finally{if(activeSearchRef.current===controller){activeSearchRef.current=null;setBusy(false)}}
  }
  const [cvNow,setCvNow]=useState([]);
+ const [cvDrafts,setCvDrafts]=useState({});
+ const cvDraftTimersRef=useRef(new Map());
+ useEffect(()=>()=>{cvDraftTimersRef.current.forEach(timer=>clearInterval(timer));cvDraftTimersRef.current.clear()},[]);
+ useEffect(()=>{
+   cvDraftTimersRef.current.forEach(timer=>clearInterval(timer));
+   cvDraftTimersRef.current.clear();
+   setCvDrafts({});
+ },[profileIdentity]);
+
  const [decisionNow,setDecisionNow]=useState([]),[hiddenDecisions,setHiddenDecisions]=useState([]);
  async function markDecision(job,state){
    if(decisionNow.includes(job.url))return;
@@ -223,7 +236,42 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},pro
      setTimeout(()=>URL.revokeObjectURL(url),30000);
    }catch(e){setCvErrors(v=>({...v,[job.id]:'Download indisponível: '+e.message}))}
  }
- async function generateCv(job,manualOutsideFilters=false){
+ const [deletingCvIds,setDeletingCvIds]=useState([]);
+ async function deleteQueuedCv(job){
+   if(!window.confirm('Apagar permanentemente este currículo e o registro da fila? Essa ação não pode ser desfeita.'))return;
+   setDeletingCvIds(v=>[...v,job.id]);
+   try{
+     const response=await fetch('/api/resume/queue/'+encodeURIComponent(job.id),{method:'DELETE',credentials:'same-origin'});
+     if(!response.ok){const data=await response.json().catch(()=>({}));throw Error(data.detail||('HTTP '+response.status))}
+     setQueueJobs(v=>v.filter(j=>j.id!==job.id));
+     enqueuedHereRef.current.delete(job.id);autoAttemptedRef.current.delete(job.id);
+     setMessage('Currículo apagado do banco permanentemente.');
+   }catch(e){setCvErrors(v=>({...v,[job.id]:'Não foi possível apagar: '+e.message}))}
+   finally{setDeletingCvIds(v=>v.filter(id=>id!==job.id))}
+ }
+ function cancelCvDraft(url){
+   const timer=cvDraftTimersRef.current.get(url);
+   if(timer!==undefined){
+     clearInterval(timer);cvDraftTimersRef.current.delete(url);
+     setCvDrafts(v=>{const next={...v};delete next[url];return next});
+   }
+ }
+ function generateCv(job,manualOutsideFilters=false){
+   if(cvNow.includes(job.url)||cvDraftTimersRef.current.has(job.url))return;
+   const started=Date.now(),duration=5000;
+   setCvDrafts(v=>({...v,[job.url]:{progress:0}}));
+   const timer=setInterval(()=>{
+     if(!cvDraftTimersRef.current.has(job.url))return;
+     const progress=Math.min(100,Math.floor((Date.now()-started)*100/duration));
+     if(progress>=100){
+       clearInterval(timer);cvDraftTimersRef.current.delete(job.url);
+       setCvDrafts(v=>{const next={...v};delete next[job.url];return next});
+       void submitCv(job,manualOutsideFilters);
+     }else setCvDrafts(v=>({...v,[job.url]:{progress}}));
+   },100);
+   cvDraftTimersRef.current.set(job.url,timer);
+ }
+ async function submitCv(job,manualOutsideFilters=false){
    if(cvNow.includes(job.url))return;
    setError('');setCvNow(v=>[...v,job.url]);
    try{
@@ -288,30 +336,34 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},pro
    <label className="jh-field"><span>Modalidade</span><select value={mode} onChange={e=>setMode(e.target.value)}><option value="remote">Remoto / Home office</option><option value="hybrid">Híbrido</option><option value="onsite">Presencial</option><option value="all">Todas as modalidades</option></select></label>
    <label style={{display:"inline-flex",alignItems:"center",gap:8,fontWeight:700,cursor:"pointer",gridColumn:"1 / -1"}}><input type="checkbox" checked={onlyNew} onChange={e=>setOnlyNew(e.target.checked)}/> Somente vagas novas <small style={{fontWeight:400,opacity:.8}}>(primeira descoberta)</small></label>
   </div>
-  {busy&&<div role="status" className="notice"><p>Busca em andamento: {checked} quadros consultados</p><progress value={checked} max={Math.max(checked+4,1)} style={{width:"100%"}} /></div>}
-  <button className="import-btn" disabled={busy||!roles.trim()} onClick={search}>{busy?'Pesquisando vagas e verificando quadros…':'Buscar oportunidades'}</button>
-  {message&&<p className="notice" role="status">{message}{checked>0?' · Quadros verificados agora: '+checked:''}</p>}
-  {error&&<p className="notice" role="alert">{error}</p>}
-  {queueJobs.length>0&&<div className="notice" aria-label="Fila de currículos ATS">
-    <strong>Fila de currículos ATS ({queueJobs.filter(j=>j.status==='queued'||j.status==='running').length} pendentes)</strong>
+  <details className="catalog-diagnostics" aria-label="Fontes e fila de currículos ATS">
+    <summary>Fontes · Fila de currículos ATS ({queueJobs.filter(j=>j.status==='queued'||j.status==='running').length} pendentes)</summary>
+    <p>Os currículos prontos ficam disponíveis aqui. Apagar remove definitivamente o DOCX e seu registro do banco.</p>
     <div style={{display:'grid',gap:8,marginTop:8}}>
+      {queueJobs.length===0&&<p>Nenhum currículo registrado.</p>}
       {queueJobs.map(j=><div key={j.id} style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
         <span>{j.title||'Vaga'} — {j.company||'Empresa'}</span>
         <small>{({queued:'Na fila',running:'Gerando…',ready:'Pronto',failed:'Falhou'})[j.status]||j.status}</small>
         {j.status==='ready'&&<button type="button" onClick={()=>downloadQueuedCv(j)}>Baixar DOCX</button>}
+        {j.status!=='running'&&<button type="button" disabled={deletingCvIds.includes(j.id)} onClick={()=>deleteQueuedCv(j)}>{deletingCvIds.includes(j.id)?'Apagando…':'Apagar do banco'}</button>}
         {j.status==='failed'&&<small role="alert">{j.error}</small>}
         {cvErrors[j.id]&&<small role="alert">{cvErrors[j.id]}</small>}
       </div>)}
     </div>
-  </div>}
+  </details>
+  {busy&&<div role="status" className="notice"><p>Busca em andamento: {checked} quadros consultados</p><progress value={checked} max={Math.max(checked+4,1)} style={{width:"100%"}} /></div>}
+  <button className="import-btn" disabled={busy||!roles.trim()} onClick={search}>{busy?'Pesquisando vagas e verificando quadros…':'Buscar oportunidades'}</button>
+  {message&&<p className="notice" role="status">{message}{checked>0?' · Quadros verificados agora: '+checked:''}</p>}
+  {error&&<p className="notice" role="alert">{error}</p>}
+
 
   {!currentMatches&&searchedQuery&&<p className="notice">Os filtros mudaram após a última pesquisa. Clique em Buscar oportunidades para atualizar os resultados.</p>}
   {currentMatches&&(results.length>0||reviews.length>0||completed)&&<><div className="history-stats"><span>{onlyNew?"Vagas novas nesta busca":"Oportunidades encontradas"}: <b>{ordered.length}</b></span><span>Confirmadas: <b>{results.length}</b></span><span>Precisam de confirmação: <b>{visibleReviews.filter(v=>!results.some(r=>r.url===v.url)).length}</b></span><span>Anúncios analisados: <b>{rawScanned}</b></span><span>Quadros consultados: <b>{checked}</b></span>{mode!=='all'&&<span>Modalidade a confirmar: <b>{unknownModeCount}</b></span>}{country!=='GLOBAL'&&<span>País a confirmar: <b>{unknownCountryCount}</b></span>}</div>
   {ordered.length===0?<p>{onlyNew?"Nenhuma vaga inédita nesta pesquisa. Desmarque o filtro para conferir os demais resultados e abra Fontes para verificar os quadros consultados.":"Nenhuma vaga correspondente foi identificada nos quadros consultados. Abra Fontes e Auditoria dos filtros para ver falhas e exclusões."}</p>:
   <><p>Somente vagas confirmadas para o país, modalidade e período selecionados. Vagas sem comprovação ficam separadas em "Vagas não confirmadas pelos filtros", inclusive anúncios sem data verificável.</p>
-  <div className="table-wrap"><table><thead><tr><th>Cargo e situação</th><th>Empresa</th><th>Local informado</th><th>Data</th><th>Modalidade detectada</th><th>Fonte</th><th style={{textAlign:'right'}}>Ações</th></tr></thead><tbody>{ordered.slice(0,visibleCount).map(v=><tr key={v.url}><td><a href={v.url} target="_blank" rel="noopener noreferrer">{v.title}</a>{v.is_new&&<span title="Vaga descoberta pela primeira vez pelo Caçador" style={{display:'inline-flex',verticalAlign:'middle',marginLeft:8,background:'#ffedd5',color:'#9a3412',border:'1px solid #fdba74',borderRadius:999,padding:'2px 8px',fontWeight:800,fontSize:11}}>Novo!</span>}<small style={{display:'block',fontWeight:600,marginTop:4}}> {v.confirmed?'Confirmada':'A confirmar: '+(v.needs_verification||[]).join(', ')}</small>{v.jd_evidence?.family_evidence?.length>0&&<small style={{display:'block',opacity:.75}}>JD: {v.jd_evidence.family_evidence.flatMap(e=>e.evidence).slice(0,2).join(' / ')}</small>}</td><td>{v.company||'Não informada'}{v.already_known&&<small style={{display:'block',opacity:.65}}>Já conhecida</small>}</td><td>{v.location||'Não informada'}</td><td>{v.published?String(v.published).slice(0,10):'—'}</td><td>{({remote:'Remoto',hybrid:'Híbrido',onsite:'Presencial'})[v.detected_mode]||'Não identificada'}</td><td>{v.source||'—'}{v.board_slug&&<small style={{display:'block',opacity:.76}}>Quadro: {v.board_slug}</small>}</td><td style={{textAlign:'right',whiteSpace:'nowrap'}}><DecisionActions job={v} pending={decisionNow.includes(v.url)} onDecision={markDecision} onGenerateCv={generateCv} cvPending={cvNow.includes(v.url)} cvError={cvErrors[v.url]}/></td></tr>)}</tbody></table></div>{ordered.length>visibleCount&&<button type="button" className="import-btn" onClick={()=>setVisibleCount(v=>v+10)}>Mostrar mais 10 resultados ({Math.min(visibleCount,ordered.length)} de {ordered.length})</button>}</>}
-  {reviewDiagnostics.length>0&&<details className="catalog-diagnostics"><summary>Vagas não confirmadas pelos filtros ({reviewDiagnostics.length})</summary><p>Essas vagas não foram incluídas entre as elegíveis. País, modalidade ou data precisam ser comprovados.</p><div className="table-wrap"><table><thead><tr><th>Vaga</th><th>Fonte</th><th>Motivo</th><th>Ações</th></tr></thead><tbody>{reviewDiagnostics.map(v=><tr key={v.url}><td><a href={v.url} target="_blank" rel="noopener noreferrer">{v.title}</a></td><td>{v.source||'—'}</td><td>{(v.needs_verification||[]).join(', ')}</td><td><DecisionActions job={v} pending={decisionNow.includes(v.url)} onDecision={markDecision} onGenerateCv={generateCv} cvPending={cvNow.includes(v.url)} cvError={cvErrors[v.url]}/></td></tr>)}</tbody></table></div></details>}
-  {excluded.length>0&&<details className="catalog-diagnostics"><summary>Fora dos filtros — decidir manualmente ({excluded.length} nesta amostra)</summary><p>Esses anúncios não passaram nos critérios selecionados. Não são considerados elegíveis. Você pode solicitar um currículo ATS manualmente; a geração ainda exige uma descrição válida da vaga. Mostramos até 25 por lote e 300 nesta busca, sem repetir vagas já decididas.</p><div className="table-wrap"><table><thead><tr><th>Vaga</th><th>Empresa</th><th>Fonte</th><th>Motivo da exclusão</th><th>Ações</th></tr></thead><tbody>{excluded.filter(v=>!hiddenDecisions.includes(v.url)).sort((a,b)=>geoPriority(a)-geoPriority(b)).map(v=><tr key={v.url}><td><a href={v.url} target="_blank" rel="noopener noreferrer">{v.title}</a></td><td>{v.company||'Não informada'}</td><td>{v.source||'—'}</td><td>{({cargo:'Cargo',pais:'País',modalidade:'Modalidade',data:'Data',espanhol_obrigatorio:'Espanhol obrigatório'})[v.excluded_reason]||v.excluded_reason}</td><td><DecisionActions job={v} pending={decisionNow.includes(v.url)} onDecision={markDecision} onGenerateCv={generateCv} cvPending={cvNow.includes(v.url)} cvError={cvErrors[v.url]} manualOutsideFilters={true}/></td></tr>)}</tbody></table></div></details>}
+  <div className="table-wrap"><table><thead><tr><th>Cargo e situação</th><th>Empresa</th><th>Local informado</th><th>Data</th><th>Modalidade detectada</th><th>Fonte</th><th style={{textAlign:'right'}}>Ações</th></tr></thead><tbody>{ordered.slice(0,visibleCount).map(v=><tr key={v.url}><td><a href={v.url} target="_blank" rel="noopener noreferrer">{v.title}</a>{v.is_new&&<span title="Vaga descoberta pela primeira vez pelo Caçador" style={{display:'inline-flex',verticalAlign:'middle',marginLeft:8,background:'#ffedd5',color:'#9a3412',border:'1px solid #fdba74',borderRadius:999,padding:'2px 8px',fontWeight:800,fontSize:11}}>Novo!</span>}<small style={{display:'block',fontWeight:600,marginTop:4}}> {v.confirmed?'Confirmada':'A confirmar: '+(v.needs_verification||[]).join(', ')}</small>{v.jd_evidence?.family_evidence?.length>0&&<small style={{display:'block',opacity:.75}}>JD: {v.jd_evidence.family_evidence.flatMap(e=>e.evidence).slice(0,2).join(' / ')}</small>}</td><td>{v.company||'Não informada'}{v.already_known&&<small style={{display:'block',opacity:.65}}>Já conhecida</small>}</td><td>{v.location||'Não informada'}</td><td>{v.published?String(v.published).slice(0,10):'—'}</td><td>{({remote:'Remoto',hybrid:'Híbrido',onsite:'Presencial'})[v.detected_mode]||'Não identificada'}</td><td>{v.source||'—'}{v.board_slug&&<small style={{display:'block',opacity:.76}}>Quadro: {v.board_slug}</small>}</td><td style={{textAlign:'right',whiteSpace:'nowrap'}}><DecisionActions job={v} pending={decisionNow.includes(v.url)} onDecision={markDecision} onGenerateCv={generateCv} cvPending={cvNow.includes(v.url)} cvDraft={cvDrafts[v.url]} onCancelCv={cancelCvDraft} cvError={cvErrors[v.url]}/></td></tr>)}</tbody></table></div>{ordered.length>visibleCount&&<button type="button" className="import-btn" onClick={()=>setVisibleCount(v=>v+10)}>Mostrar mais 10 resultados ({Math.min(visibleCount,ordered.length)} de {ordered.length})</button>}</>}
+  {reviewDiagnostics.length>0&&<details className="catalog-diagnostics"><summary>Vagas não confirmadas pelos filtros ({reviewDiagnostics.length})</summary><p>Essas vagas não foram incluídas entre as elegíveis. País, modalidade ou data precisam ser comprovados.</p><div className="table-wrap"><table><thead><tr><th>Vaga</th><th>Fonte</th><th>Motivo</th><th>Ações</th></tr></thead><tbody>{reviewDiagnostics.map(v=><tr key={v.url}><td><a href={v.url} target="_blank" rel="noopener noreferrer">{v.title}</a></td><td>{v.source||'—'}</td><td>{(v.needs_verification||[]).join(', ')}</td><td><DecisionActions job={v} pending={decisionNow.includes(v.url)} onDecision={markDecision} onGenerateCv={generateCv} cvPending={cvNow.includes(v.url)} cvDraft={cvDrafts[v.url]} onCancelCv={cancelCvDraft} cvError={cvErrors[v.url]}/></td></tr>)}</tbody></table></div></details>}
+  {excluded.length>0&&<details className="catalog-diagnostics"><summary>Fora dos filtros — decidir manualmente ({excluded.length} nesta amostra)</summary><p>Esses anúncios não passaram nos critérios selecionados. Não são considerados elegíveis. Você pode solicitar um currículo ATS manualmente; a geração ainda exige uma descrição válida da vaga. Mostramos até 25 por lote e 300 nesta busca, sem repetir vagas já decididas.</p><div className="table-wrap"><table><thead><tr><th>Vaga</th><th>Empresa</th><th>Fonte</th><th>Motivo da exclusão</th><th>Ações</th></tr></thead><tbody>{excluded.filter(v=>!hiddenDecisions.includes(v.url)).sort((a,b)=>geoPriority(a)-geoPriority(b)).map(v=><tr key={v.url}><td><a href={v.url} target="_blank" rel="noopener noreferrer">{v.title}</a></td><td>{v.company||'Não informada'}</td><td>{v.source||'—'}</td><td>{({cargo:'Cargo',pais:'País',modalidade:'Modalidade',data:'Data',espanhol_obrigatorio:'Espanhol obrigatório'})[v.excluded_reason]||v.excluded_reason}</td><td><DecisionActions job={v} pending={decisionNow.includes(v.url)} onDecision={markDecision} onGenerateCv={generateCv} cvPending={cvNow.includes(v.url)} cvDraft={cvDrafts[v.url]} onCancelCv={cancelCvDraft} cvError={cvErrors[v.url]} manualOutsideFilters={true}/></td></tr>)}</tbody></table></div></details>}
   <details className="catalog-diagnostics"><summary>Fontes consultadas nesta busca</summary><p>JDs válidos e ausentes: somente vagas elegíveis ou em revisão, Não representam todos os anúncios brutos.</p><div className="table-wrap"><table><thead><tr><th>Fonte</th><th>Consultas</th><th>Anúncios brutos</th><th>JDs válidos</th><th>JDs ausentes</th><th>Pendências</th></tr></thead><tbody>{Object.entries(sourceStats).sort((a,b)=>b[1].recebidas-a[1].recebidas).map(([source,v])=><tr key={source}><td>{source}</td><td>{v.consultas}</td><td>{v.recebidas}</td><td>{v.jdValidos||0}</td><td>{v.jdAusentes||0}</td><td>{v.erros}</td></tr>)}</tbody></table></div></details>
   <details className="catalog-diagnostics"><summary>Auditoria dos filtros</summary><p>Total bruto analisado: {rawScanned}. As exclusões são contadas por motivo, antes da deduplicação com o histórico.</p>{Object.entries(filterStats).map(([reason,n])=><p key={reason}>{reason}: <b>{n}</b></p>)}</details>
   <details className="catalog-diagnostics"><summary>Integridade dos dados por fonte</summary>

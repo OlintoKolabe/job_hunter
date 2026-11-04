@@ -14,6 +14,7 @@ class _PublicHTML(HTMLParser):
     def __init__(self):
         super().__init__()
         self.urls = []
+        self.job_titles = {}
         self.parts = []
         self.title = ""
         self.heading = ""
@@ -26,6 +27,8 @@ class _PublicHTML(HTMLParser):
             self._skip += 1
         if tag == "a" and attrs.get("href"):
             self.urls.append(attrs["href"])
+            if attrs.get("data-job-title"):
+                self.job_titles[attrs["href"]] = attrs["data-job-title"]
         if tag == "meta" and attrs.get("property") in ("og:title", "og:description"):
             if attrs.get("property") == "og:title":
                 self.title = attrs.get("content", "")[:300]
@@ -47,13 +50,14 @@ class _PublicHTML(HTMLParser):
             self.heading = part
 
 
-def collect_board(slug, read, *, max_pages=2, max_details=16):
+def collect_board(slug, read, *, max_pages=10, max_details=20):
     """Bounded collection of explicitly configured public employer pages."""
     if not re.fullmatch(r"[a-z0-9][a-z0-9-]{1,62}", slug):
         raise ValueError("invalid Careers Page employer slug")
     base = f"https://{slug}.careers-page.com/"
     links = []
     seen = set()
+    relevant_links = []
     for number in range(1, max_pages + 1):
         raw, _ = read(base + (f"?page={number}" if number > 1 else ""), size=1500000)
         board = _PublicHTML()
@@ -66,11 +70,19 @@ def collect_board(slug, read, *, max_pages=2, max_details=16):
                     and address not in seen):
                 seen.add(address)
                 links.append(address)
+                # The public card publishes a reliable title; use it to avoid
+                # spending all detail requests on unrelated first-page jobs.
+                title = board.job_titles.get(href)
+                if title and TITLE_RE.search(title):
+                    relevant_links.append(address)
         if not any("?page=" in href for href in board.urls):
             break
     jobs = []
     failures = 0
-    for address in links[:max_details]:
+    # Prefer cards with matching published titles across all pages. Legacy
+    # boards without card metadata retain the original bounded fallback.
+    candidates = relevant_links if relevant_links else links
+    for address in candidates[:max_details]:
         try:
             raw, _ = read(address, size=1500000)
             page = _PublicHTML()
@@ -88,7 +100,7 @@ def collect_board(slug, read, *, max_pages=2, max_details=16):
                 jobs.append(value)
         except (OSError, ValueError):
             failures += 1
-    if links and failures == min(len(links), max_details):
+    if candidates and failures == min(len(candidates), max_details):
         raise ValueError("Careers Page detail retrieval failed")
     if not links and not ("open positions" in " ".join(board.parts).lower()):
         raise ValueError("Careers Page board format unrecognized")

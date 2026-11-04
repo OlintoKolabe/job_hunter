@@ -16,6 +16,19 @@ DETAIL = b'''<meta property="og:title" content="Product Manager | Test Employer"
 
 
 class CareersPageTests(unittest.TestCase):
+    def test_relevant_jobs_on_later_pages_are_not_starved(self):
+        calls=[]
+        def read(url, size=0):
+            calls.append(url)
+            if "?page=" in url:
+                return (b'<a href="/jobs/target" data-job-title="Product Manager">Role</a>',200)
+            if url.endswith("/"):
+                return (b'<h2>30 Open Positions</h2><a href="/jobs/irrelevant" data-job-title="Accountant">Other</a><a href="?page=2">Next</a>',200)
+            return DETAIL,200
+        jobs,state=collect_board("customertimes",read,max_pages=2,max_details=1)
+        self.assertEqual(len(jobs),1)
+        self.assertEqual(jobs[0]["url"],"https://customertimes.careers-page.com/jobs/target")
+        self.assertFalse(any("/jobs/irrelevant" in url for url in calls))
     def test_source_is_available(self):
         self.assertIn(("careers_page", "customertimes"), source_tasks())
 

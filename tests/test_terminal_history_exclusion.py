@@ -1,6 +1,7 @@
 """Protect terminal candidature/discard decisions from reappearing in searches."""
 import unittest
-from app import terminal_url_key,terminal_url_bases,exclude_history_matches,pair_key
+import inspect
+from app import terminal_url_key,terminal_url_bases,exclude_history_matches,pair_key,catalog_scan
 
 class TerminalDecisionTests(unittest.TestCase):
     def test_tracking_params_do_not_make_old_candidate_new(self):
@@ -31,5 +32,18 @@ class TerminalDecisionTests(unittest.TestCase):
     def test_url_bases(self):
         jobs=[{"url":"https://example.org/job/1?utm_source=x"},{"url":"https://example.org/job/1?utm_source=y"}]
         self.assertEqual(terminal_url_bases(jobs),["example.org/job/1"])
+
+    def test_catalog_looks_up_history_for_out_of_filter_decisions(self):
+        source=inspect.getsource(catalog_scan)
+        self.assertIn("terminal_url_bases(items+review+rejected)",source)
+        rejected={"url":"https://jobs.quickin.io/acme/jobs/42?utm_source=mail",
+                  "company":"Acme","title":"Product Owner"}
+        # Not present in eligible/review: the terminal decision must still
+        # remove this row from the manual out-of-filters decisions panel.
+        bases=terminal_url_bases([rejected])
+        self.assertEqual(bases,["jobs.quickin.io/acme/jobs/42"])
+        visible,pending,count=exclude_history_matches([], [rejected],
+            {terminal_url_key(rejected["url"])},set())
+        self.assertEqual((visible,pending,count),([],[],1))
 
 if __name__=="__main__":unittest.main()

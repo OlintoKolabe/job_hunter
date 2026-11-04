@@ -801,7 +801,9 @@ def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False
                     state=EXCLUDED.state,received=EXCLUDED.received,error=EXCLUDED.error,checked_at=now()""",
                     (entry["source"],entry["slug"],entry["state"],entry["received"],entry.get("error","")))
             if urls:
-                cur.execute("SELECT normalized_url FROM jh_history WHERE split_part(normalized_url,'?',1)=ANY(%s) AND lower(estado) IN ('candidatado','descartado','descartada')",(terminal_url_bases(items+review),))
+                # Include the out-of-filter sample: those rows expose the same
+                # Candidatado/Descartado actions and must obey terminal history.
+                cur.execute("SELECT normalized_url FROM jh_history WHERE split_part(normalized_url,'?',1)=ANY(%s) AND lower(estado) IN ('candidatado','descartado','descartada')",(terminal_url_bases(items+review+rejected),))
                 known_urls={terminal_url_key(r[0]) for r in cur.fetchall()}
             if pairs:
                 cur.execute("SELECT pair_key FROM jh_history WHERE pair_key=ANY(%s) AND lower(estado) IN ('candidatado','descartado','descartada')",(pairs,))

@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import urllib.parse
 import urllib.request
+import urllib.error
 from datetime import datetime, timezone
 from html import unescape
 import re
@@ -25,6 +26,44 @@ BOARDS={
  "inHire": ("amcom","zallpy","radix","brq","trinca","vinta"),
  "Lever": ("jobgether",),
 }
+
+class JobgetherHTTPError(ValueError):
+    """Public API failure: safe structured diagnostics, never credentials or cookies."""
+    def __init__(self, status, content_type, code, field, excerpt):
+        self.status=status
+        self.content_type=content_type
+        self.code=code
+        self.field=field
+        self.excerpt=excerpt
+        super().__init__(f"HTTP {status}: {code or 'upstream_error'}"
+                         + (f" (field: {field})" if field else ""))
+
+
+def jobgether_location_slug(value):
+    """Jobgether v1 expects lowercase location slugs, not display labels."""
+    return re.sub(r"[\s_]+", "-", str(value or "").strip().casefold())
+
+
+def fetch_jobgether(url):
+    try:
+        return fetch_json(url)
+    except urllib.error.HTTPError as error:
+        content_type=str(error.headers.get("Content-Type", "")).split(";",1)[0].lower()
+        # The vendor uses RFC 9457 problem+json. Never log the raw response
+        # or reflect arbitrary remote fields into API diagnostics.
+        body=error.read(1024)
+        problem={}
+        if content_type in ("application/problem+json","application/json"):
+            try:problem=json.loads(body)
+            except (ValueError,UnicodeDecodeError):pass
+        if not isinstance(problem,dict):problem={}
+        code=str(problem.get("code") or "")[:60]
+        field=str(problem.get("field") or "")[:60]
+        detail=str(problem.get("detail") or "")[:180]
+        # Only trusted machine-readable diagnostics; never credentials/PII.
+        if field!="locations":
+            detail=""  # Keyword errors could echo free-text personal data.
+        raise JobgetherHTTPError(error.code,content_type,code,field,detail) from None
 # This is only a cheap prefilter for public HTML/JS fallbacks. Final role,
 # seniority, geography and remote eligibility remain in search_filters.
 TITLE_RE=re.compile(
@@ -127,16 +166,16 @@ def pull(source,slug,location='brazil'):
     jobs=[]
     if source=="Jobgether":
         params={"keyword":slug,"sort":"date","limit":25}
-        if location:params["locations"]=location
+        if location:params["locations"]=jobgether_location_slug(location)
         url="https://jobgether.com/api/v1/jobs?"+urllib.parse.urlencode(params)
-        payload=fetch_json(url)
+        payload=fetch_jobgether(url)
         for j in as_list(payload):
             if not isinstance(j,dict):continue
             c=j.get("companyName") or j.get("company") or j.get("employer") or ""
             if isinstance(c,dict):c=c.get("name","")
             value=item(c,j.get("title") or j.get("jobTitle") or j.get("position"),
                 j.get("url") or j.get("jobUrl") or j.get("applyUrl") or j.get("hostedUrl"),
-                j.get("location") or j.get("country"),source,j.get("publishedAt") or j.get("createdAt"),j.get("description") or j.get("jobDescription") or j.get("content") or "")
+                j.get("location") or j.get("country"),source,j.get("postedAt") or j.get("publishedAt") or j.get("createdAt"),j.get("description") or j.get("jobDescription") or j.get("content") or "")
             if value:jobs.append(preserve_eligibility_fields(value,j))
     elif source=="Workable":
         params={"query":slug,"limit":20}
@@ -244,6 +283,11 @@ def collect(terms=None,country="BR",only_source="all",skip_boards=()):
                     key=job["url"].lower().rstrip("/")
                     if key not in found:found[key]=job
             except Exception as exc:
-                details.append({"source":source,"term":slug,"status":"error","received":0,"detail":str(exc)[:150]})
+                detail={"source":source,"term":slug,"status":"error","received":0,"detail":str(exc)[:150]}
+                if isinstance(exc,JobgetherHTTPError):
+                    detail.update({"http_status":exc.status,"content_type":exc.content_type,
+                                   "error_code":exc.code,"error_field":exc.field,
+                                   "error_excerpt":exc.excerpt})
+                details.append(detail)
     details.sort(key=lambda d:(d["source"],d["term"]))
     return list(found.values()),details

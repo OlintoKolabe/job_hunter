@@ -8,6 +8,7 @@ from xml.etree import ElementTree
 from collectors import pull, TITLE_RE, item, preserve_eligibility_fields
 from source_extensions import extra as expanded_pull
 from scrapling_fallback import js_fallback
+from careers_page import collect_board
 
 SEED=json.loads((Path(__file__).parent/"catalog_seed.json").read_text())
 HEADERS={"User-Agent":"Mozilla/5.0 (compatible; JobHunter/0.3)","Accept":"application/json,text/html,application/xml"}
@@ -19,6 +20,8 @@ def read(url,headers=None,size=750000):
         return body,res.status
 def source_tasks():
     tasks=[(s,slug) for s,slugs in SEED.items() for slug in slugs]
+    # Verified public employer boards; extend this inventory after validation.
+    tasks.extend(("careers_page", slug) for slug in ("customertimes", "latynlabs"))
     tasks.append(("geekhunter","public"))
     tasks.extend(("nerdin",term) for term in ("product manager","product owner", "project manager", "business analyst", "marketing", "growth", "pmo"))
     return [(source,slug) for source,slug in tasks if slug.casefold() not in ("kraken","kraken.com","payward")]
@@ -216,6 +219,10 @@ def extra_pull(source,slug):
 
 def run_task(source,slug,allow_js=True):
     try:
+        if source=="careers_page":
+            jobs,state=collect_board(slug,read)
+            return {"source":source,"slug":slug,"state":"validado" if jobs else ("sem_vagas" if state=="ok" else "pendente"),
+                    "received":len(jobs),"target":len(jobs)},jobs
         if source in ("ashby","greenhouse","inhire","lever"):
             detail,jobs=pull(source.capitalize() if source!="inhire" else "inHire",slug)
             return {"source":source,"slug":slug,"state":"validado" if detail["received"] else "sem_vagas",

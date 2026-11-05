@@ -1,5 +1,6 @@
 import unittest
 from unittest.mock import patch
+from urllib.error import HTTPError
 
 from careers_page import collect_board
 from catalog_engine import run_task, source_tasks
@@ -16,6 +17,36 @@ DETAIL = b'''<meta property="og:title" content="Product Manager | Test Employer"
 
 
 class CareersPageTests(unittest.TestCase):
+    def test_429_is_failure_not_zero_and_stops_requests(self):
+        calls=[]
+        def read(url, size=0):
+            calls.append(url)
+            raise HTTPError(url,429,"Too Many Requests",{},None)
+        jobs,state=collect_board("customertimes",read)
+        self.assertEqual((jobs,state),([],"rate_limited"))
+        self.assertEqual(len(calls),1)
+
+    def test_no_matching_titles_is_valid_empty(self):
+        calls=[]
+        def read(url,size=0):
+            calls.append(url)
+            return b'<h2>1 Open Positions</h2><a href="/jobs/abc" data-job-title="Accountant">Accountant</a>',200
+        jobs,state=collect_board("latynlabs",read)
+        self.assertEqual((jobs,state),([],"ok"))
+        self.assertEqual(len(calls),1)
+
+    def test_429_after_index_preserves_partial_success_status(self):
+        def read(url,size=0):
+            if "?page=" in url:
+                raise HTTPError(url,429,"Too Many Requests",{},None)
+            return b'<h2>20 Open Positions</h2><a href="/jobs/pm" data-job-title="Product Manager">Role</a><a href="?page=2">Next</a>',200
+        jobs,state=collect_board("customertimes",read)
+        self.assertEqual(state,"rate_limited")
+        self.assertEqual(len(jobs),1)
+        self.assertEqual(jobs[0]["title"],"Product Manager")
+        self.assertFalse(jobs[0]["published"])
+        self.assertFalse(jobs[0]["location"])
+
     def test_relevant_jobs_on_later_pages_are_not_starved(self):
         calls=[]
         def read(url, size=0):
@@ -59,6 +90,19 @@ class CareersPageTests(unittest.TestCase):
             status, jobs = run_task("careers_page", "customertimes")
         self.assertEqual(status["state"], "pendente")
         self.assertEqual(jobs, [])
+
+    def test_empty_board_status_is_not_pending(self):
+        with patch("catalog_engine.collect_board",return_value=([],"ok")):
+            status,jobs=run_task("careers_page","latynlabs")
+        self.assertEqual(status["state"],"sem_vagas")
+        self.assertEqual(jobs,[])
+
+    def test_rate_limited_board_remains_pending(self):
+        with patch("catalog_engine.collect_board",return_value=([],"rate_limited")):
+            status,jobs=run_task("careers_page","customertimes")
+        self.assertEqual(status["state"],"pendente")
+        self.assertEqual(status["error"],"429")
+        self.assertEqual(jobs,[])
 
     def test_rejects_untrusted_slug(self):
         with self.assertRaises(ValueError):

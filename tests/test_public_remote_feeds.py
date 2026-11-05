@@ -68,5 +68,11 @@ class PublicFeedTests(unittest.TestCase):
             jobs=fetch("tavily","Product Manager")
         self.assertEqual(jobs[0]["published"],"")
         self.assertEqual(jobs[0]["location"],"")
+    def test_catalog_adapter_returns_independent_source_attribution(self):
+        from catalog_engine import run_task
+        with patch("catalog_engine.fetch_public_remote",return_value=[{"url":"https://remotejobs.org/remote-jobs/example","source":"remotejobs_org"}]):
+            status,jobs=run_task("remotejobs_org","Product Manager",allow_js=False)
+        self.assertEqual(status["state"],"validado")
+        self.assertEqual(jobs[0]["source"],"remotejobs_org")
 
 if __name__=="__main__":unittest.main()

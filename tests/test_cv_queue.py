@@ -54,12 +54,22 @@ class CvQueueTests(unittest.TestCase):
 
     def test_claim_serializes_single_oldest_job(self):
         cursor = MagicMock()
-        cursor.fetchone.return_value = ("job", 7, {}, 1)
+        cursor.fetchone.return_value = ("job", 7, {}, 1, 12.3)
         row = cv_queue._claim(cursor)
         self.assertEqual(row[0], "job")
         sql = cursor.execute.call_args.args[0]
         self.assertIn("FOR UPDATE SKIP LOCKED LIMIT 1", sql)
         self.assertIn("ORDER BY created_at", sql)
+        self.assertIn("started_at-created_at", sql)
+
+    def test_queue_poll_does_not_repeat_schema_ddl(self):
+        from pathlib import Path
+        source = Path("app.py").read_text()
+        status_handler = source.split('def resume_queue_status(', 1)[1].split('@app.delete(', 1)[0]
+        self.assertNotIn('ensure_schema(', status_handler)
+        self.assertIn('started_at', Path('cv_queue.py').read_text())
+        self.assertIn('_wakeup.wait(timeout=5)', Path('cv_queue.py').read_text())
+        self.assertIn('ensure_schema(db_url, mu)', Path('cv_queue.py').read_text())
 
 
 if __name__ == "__main__":

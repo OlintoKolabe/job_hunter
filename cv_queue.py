@@ -67,7 +67,7 @@ def list_jobs(db_url, mu, owner):
         with conn.cursor() as cur:
             cur.execute("""
                 SELECT id::text, status, payload->>'title', payload->>'company',
-                       filename, error, created_at, finished_at
+                       filename, error, created_at, finished_at, started_at
                 FROM public.jh_cv_queue WHERE owner_id=%s
                 ORDER BY created_at DESC LIMIT 100
             """, (owner,))
@@ -75,7 +75,8 @@ def list_jobs(db_url, mu, owner):
     return [
         {"id":r[0], "status":r[1], "title":r[2], "company":r[3],
          "filename":r[4], "error":r[5],
-         "created_at":r[6].isoformat(), "finished_at":r[7].isoformat() if r[7] else None}
+         "created_at":r[6].isoformat(), "finished_at":r[7].isoformat() if r[7] else None,
+         "started_at":r[8].isoformat() if r[8] else None}
         for r in rows
     ]
 
@@ -131,13 +132,15 @@ def _claim(cur):
             SELECT id FROM public.jh_cv_queue WHERE status='queued'
             ORDER BY created_at, id FOR UPDATE SKIP LOCKED LIMIT 1
         )
-        RETURNING id::text,owner_id,payload,attempts
+        RETURNING id::text,owner_id,payload,attempts,
+                  EXTRACT(EPOCH FROM (started_at-created_at))
     """)
     return cur.fetchone()
 
 
 def _process(job, db_url, mu, generator):
-    job_id, owner, payload, attempts = job
+    job_id, owner, payload, attempts = job[:4]
+    started = time.monotonic()
     try:
         if mu.enabled:
             user = mu.get_user(db_url, owner)
@@ -161,6 +164,8 @@ def _process(job, db_url, mu, generator):
                     WHERE id=%s
                 """, (document, filename, job_id))
         LOG.info("CV queue completed id=%s", job_id)
+        print("JH_CV_QUEUE_TIMING id=%s queue_s=%.1f generation_s=%.1f result=ready" %
+              (job_id, float(job[4] or 0), time.monotonic()-started), flush=True)
     except Exception as exc:
         # Keep only an actionable, short status; never log the CV or JD.
         detail = getattr(exc, "detail", None)
@@ -173,6 +178,8 @@ def _process(job, db_url, mu, generator):
                     WHERE id=%s
                 """, (message[:240], job_id))
         LOG.warning("CV queue failed id=%s kind=%s", job_id, type(exc).__name__)
+        print("JH_CV_QUEUE_TIMING id=%s queue_s=%.1f generation_s=%.1f result=failed" %
+              (job_id, float(job[4] or 0), time.monotonic()-started), flush=True)
 
 
 _wakeup = threading.Event()
@@ -184,7 +191,6 @@ def wake():
 
 
 def _drain(db_url, mu, generator):
-    ensure_schema(db_url, mu)
     with _db(db_url, mu) as lock_conn:
         lock_conn.autocommit = True
         with lock_conn.cursor() as lock_cur:
@@ -206,10 +212,15 @@ def _drain(db_url, mu, generator):
 
 def _loop(db_url, mu, generator):
     print("JH_CV_QUEUE_WORKER_STARTED",flush=True)
+    schema_ready = False
     while True:
-        _wakeup.wait(timeout=30)
+        # A short fallback poll covers wakeups from another process or a restart.
+        _wakeup.wait(timeout=5)
         _wakeup.clear()
         try:
+            if not schema_ready:
+                ensure_schema(db_url, mu)
+                schema_ready = True
             _drain(db_url, mu, generator)
         except Exception as exc:
             print("JH_CV_QUEUE_WORKER_ERROR kind="+type(exc).__name__,flush=True)

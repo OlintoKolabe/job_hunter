@@ -218,6 +218,7 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},pro
    finally{setDecisionNow(prev=>prev.filter(x=>x!==job.url))}
  }
  const [queueJobs,setQueueJobs]=useState([]);
+ const queueAge=(timestamp)=>{const elapsed=Math.max(0,Math.floor((Date.now()-Date.parse(timestamp||''))/1000));return Number.isFinite(elapsed)?(elapsed>=60?Math.floor(elapsed/60)+'min '+elapsed%60+'s':elapsed+'s'):''};
  const enqueuedHereRef=useRef(new Set());
  const autoAttemptedRef=useRef(new Set());
  useEffect(()=>{
@@ -368,7 +369,7 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},pro
       {queueJobs.length===0&&<p>Nenhum currículo registrado.</p>}
       {queueJobs.map(j=><div key={j.id} style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
         <span>{j.title||'Vaga'} — {j.company||'Empresa'}</span>
-        <small>{({queued:'Na fila',running:'Gerando…',ready:'Pronto',failed:'Falhou'})[j.status]||j.status}</small>
+        <small>{({queued:'Na fila',running:'Gerando…',ready:'Pronto',failed:'Falhou'})[j.status]||j.status}{j.status==='queued'&&j.created_at?' · aguardando '+queueAge(j.created_at):''}{j.status==='running'&&j.started_at?' · processando há '+queueAge(j.started_at):''}</small>
         {j.status==='ready'&&<button type="button" onClick={()=>downloadQueuedCv(j)}>Baixar DOCX</button>}
         {j.status!=='running'&&<button type="button" disabled={deletingCvIds.includes(j.id)} onClick={()=>deleteQueuedCv(j)}>{deletingCvIds.includes(j.id)?'Apagando…':'Apagar do banco'}</button>}
         {j.status==='failed'&&<small role="alert">{j.error}</small>}

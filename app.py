@@ -1212,8 +1212,7 @@ def enqueue_resume(payload: ResumeAIRequest, request: Request):
 @app.get("/api/resume/queue")
 def resume_queue_status(request: Request):
     authenticated_uid=require_auth(request)
-    from cv_queue import ensure_schema, list_jobs
-    ensure_schema(DATABASE,mu)
+    from cv_queue import list_jobs
     return {"jobs":list_jobs(DATABASE,mu,authenticated_uid if mu.enabled else 0)}
 
 

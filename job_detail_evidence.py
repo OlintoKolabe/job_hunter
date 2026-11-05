@@ -92,12 +92,22 @@ def recover(job):
         logging.info("JH_DETAIL_UNAVAILABLE source=%s reason=%s",job.get("source"),type(exc).__name__)
         return job
 
-def enrich(jobs,limit=4):
-    """Enrich a few incomplete jobs in parallel; never block an entire batch."""
-    targets=[i for i,job in enumerate(jobs) if job.get("source","").lower() in SOURCES
-             and (not job.get("published") or not job.get("location") or
-                  not job.get("remote") and not any(job.get(k) for k in
-                      ("workplaceType","workArrangement","remoteType","workMode","workplace")))][:limit]
+def enrich(jobs,limit=4,roles=None):
+    """Recover evidence for the most relevant incomplete listings first.
+
+    Never spend a limited detail-fetch slot on an unrelated title while a
+    requested role from the same batch still lacks publication/mode evidence.
+    """
+    from search_filters import role_match, search_terms
+    terms=search_terms(roles) if roles else []
+    candidates=[i for i,job in enumerate(jobs) if job.get("source","").lower() in SOURCES
+                and (not job.get("published") or not job.get("location") or
+                     not job.get("remote") and not any(job.get(k) for k in
+                         ("workplaceType","workArrangement","remoteType","workMode","workplace")))]
+    candidates.sort(key=lambda i:(not role_match(jobs[i].get("title") or "",terms) if terms else False,
+                                  bool(jobs[i].get("published")),
+                                  bool(jobs[i].get("description"))))
+    targets=candidates[:limit]
     if not targets:return jobs
     result=list(jobs)
     with ThreadPoolExecutor(max_workers=min(len(targets),4)) as pool:

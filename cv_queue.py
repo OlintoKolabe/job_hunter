@@ -1,7 +1,7 @@
 """Durable, single-consumer ATS resume queue backed by the existing PostgreSQL.
 
 The browser only enqueues and polls. Each job is stored with its owner and
-processed outside the request; a database advisory lock serializes workers.
+processed outside the request; two advisory-lock lanes bound AI concurrency.
 """
 import logging
 import threading
@@ -16,6 +16,8 @@ LOCK_KEY = 2026110301
 _STALE_AFTER = "30 minutes"
 _started = False
 _guard = threading.Lock()
+_schema_guard = threading.Lock()
+_schema_ready = False
 
 
 def _db(db_url, mu):
@@ -190,11 +192,12 @@ def wake():
     _wakeup.set()
 
 
-def _drain(db_url, mu, generator):
+def _drain(db_url, mu, generator, lane=0):
     with _db(db_url, mu) as lock_conn:
         lock_conn.autocommit = True
         with lock_conn.cursor() as lock_cur:
-            lock_cur.execute("SELECT pg_try_advisory_lock(%s)", (LOCK_KEY,))
+            lock_key=LOCK_KEY+lane
+            lock_cur.execute("SELECT pg_try_advisory_lock(%s)", (lock_key,))
             if not lock_cur.fetchone()[0]:
                 return
             try:
@@ -207,21 +210,23 @@ def _drain(db_url, mu, generator):
                     print("JH_CV_QUEUE_CLAIM id="+job[0],flush=True)
                     _process(job, db_url, mu, generator)
             finally:
-                lock_cur.execute("SELECT pg_advisory_unlock(%s)", (LOCK_KEY,))
+                lock_cur.execute("SELECT pg_advisory_unlock(%s)", (lock_key,))
 
 
-def _loop(db_url, mu, generator):
-    print("JH_CV_QUEUE_WORKER_STARTED",flush=True)
-    schema_ready = False
+def _loop(db_url, mu, generator, lane=0):
+    global _schema_ready
+    print("JH_CV_QUEUE_WORKER_STARTED lane=%d" % lane,flush=True)
     while True:
         # A short fallback poll covers wakeups from another process or a restart.
         _wakeup.wait(timeout=5)
         _wakeup.clear()
         try:
-            if not schema_ready:
-                ensure_schema(db_url, mu)
-                schema_ready = True
-            _drain(db_url, mu, generator)
+            if not _schema_ready:
+                with _schema_guard:
+                    if not _schema_ready:
+                        ensure_schema(db_url, mu)
+                        _schema_ready = True
+            _drain(db_url, mu, generator, lane)
         except Exception as exc:
             print("JH_CV_QUEUE_WORKER_ERROR kind="+type(exc).__name__,flush=True)
             LOG.exception("CV queue worker temporarily unavailable")
@@ -236,8 +241,9 @@ def start(db_url, mu, generator):
         if _started:
             wake()
             return
-        thread = threading.Thread(target=_loop, args=(db_url, mu, generator),
-                                  daemon=True, name="cv-queue-worker")
-        thread.start()
+        for lane in range(2):
+            thread = threading.Thread(target=_loop, args=(db_url, mu, generator, lane),
+                                      daemon=True, name="cv-queue-worker-%d" % lane)
+            thread.start()
         _started = True
     wake()

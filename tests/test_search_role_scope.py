@@ -1,4 +1,3 @@
-"""Evidence-led regression tests for the isolated October 26 follow-up."""
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
@@ -57,11 +56,12 @@ class SelectedRoleAndSourceRegressionTests(unittest.TestCase):
         self.assertEqual(set(ordered[:3]),{("ashby","nonwarm"),("lever","nonwarm"),("inhire","nonwarm")})
         self.assertEqual({source for source,_ in ordered[-2:]},{"kaszek","quickin"})
 
-    def test_general_ui_scan_is_bounded_and_reports_partial_results(self):
+    def test_general_ui_scan_continues_without_a_global_deadline(self):
         source=Path(__file__).resolve().parent.parent.joinpath("src","Opportunities.jsx").read_text()
-        self.assertIn("const scanDeadline=Date.now()+120000",source)
-        self.assertIn("if(Date.now()>scanDeadline)",source)
-        self.assertIn("busca interrompida por limite de tempo",source)
+        self.assertNotIn("scanDeadline",source)
+        self.assertIn("while(isCurrent())",source)
+        self.assertIn("Cancelar busca",source)
+        self.assertIn("Cinco lotes consecutivos indisponíveis",source)
 
 
 if __name__=="__main__":

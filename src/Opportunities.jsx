@@ -7,7 +7,7 @@ function DecisionActions({job,pending,cvPending,cvDraft,cvError,onDecision,onGen
  return <div><div style={{display:'flex',justifyContent:'flex-end',gap:8}}>
   <button type="button" disabled={pending} onClick={()=>onDecision(job,'Candidatado')} style={{...shared,background:'#16803c',border:'1px solid #16803c'}}>Candidatado</button>
   <button type="button" disabled={pending} onClick={()=>onDecision(job,'Descartado')} style={{...shared,background:'#b91c1c',border:'1px solid #b91c1c'}}>Descartado</button>
-  {(job.jd_available===true||manualOutsideFilters)&&<button type="button" disabled={cvPending||!!cvDraft} onClick={()=>onGenerateCv(job,manualOutsideFilters)} style={{...shared,background:'#2563eb',border:'1px solid #2563eb'}}>{cvPending?'Adicionando…':cvDraft?'Preparando…':'Gerar currículo ATS'}</button>}
+  <button type="button" disabled={cvPending||!!cvDraft} onClick={()=>onGenerateCv(job,manualOutsideFilters)} style={{...shared,background:'#2563eb',border:'1px solid #2563eb'}}>{cvPending?'Adicionando…':cvDraft?'Preparando…':'Gerar currículo ATS'}</button>
  </div>{cvDraft&&<div style={{display:'flex',alignItems:'center',gap:8,marginTop:6}}>
   <progress aria-label="Tempo para cancelar currículo" value={cvDraft.progress} max="100" style={{width:150}}/>
   <small>{Math.max(0,Math.ceil((100-cvDraft.progress)/20))} s para enviar</small>

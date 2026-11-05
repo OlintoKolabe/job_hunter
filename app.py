@@ -23,6 +23,7 @@ import psycopg
 from psycopg.types.json import Jsonb
 import multiuser as mu
 from public_remote_feeds import fetch as fetch_public_remote
+from job_detail_evidence import enrich as enrich_job_detail_evidence
 from indeed_provider import search as indeed_search, enabled as indeed_enabled
 from collectors import collect,source_field_coverage,BOARDS
 from search_filters import analyze_filters,apply_filters,search_terms,discovery_queries,requested_families,DEFAULT_ROLES,COUNTRIES
@@ -500,6 +501,7 @@ def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:
         items,sources=collect(discovery_queries(roles),country,source) if source in ("jobgether","workable") else ([],[])
     raw_count=len(items)
     items,eligibility_fetch=enrich_inhire_before_filter(items,roles)
+    items=enrich_job_detail_evidence(items)
     raw_jobs=list(items)
     field_coverage=source_field_coverage(raw_jobs)
     filter_quality=source_filter_quality(raw_jobs,roles,country,mode,days)
@@ -777,6 +779,7 @@ def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False
     unique=unique_jobs_by_url(found)
     raw_count=len(unique)
     prepared,eligibility_fetch=enrich_inhire_before_filter(list(unique.values()),roles)
+    prepared=enrich_job_detail_evidence(prepared)
     raw_jobs=list(prepared)
     field_coverage=source_field_coverage(raw_jobs)
     filter_quality=source_filter_quality(raw_jobs,roles,country,mode,days)

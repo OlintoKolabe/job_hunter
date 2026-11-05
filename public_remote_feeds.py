@@ -9,7 +9,7 @@ import urllib.parse
 import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
-from collectors import fetch_json,item
+from collectors import fetch_json,item,location_text,preserve_eligibility_fields
 
 def _date(value):
     if isinstance(value,(int,float)):
@@ -133,16 +133,23 @@ def fetch(source,roles="",country="BR"):
                     # Country, modality and publication date must remain unknown.
                     title=entry.get("title")
                     company=""
-                location=entry.get("location") or ""
-                if isinstance(location,dict):location=location.get("name") or location.get("text") or ""
+                location=entry.get("location") or entry.get("locations") or ""
                 v=item(company,title,link,location,source,
                        "" if source=="tavily" else _date(entry.get("posted_at") or entry.get("postedAt") or entry.get("published_at") or entry.get("published") or entry.get("date")),
                        entry.get("description") or entry.get("content") or entry.get("snippet") or "")
                 if v and v["url"] not in seen:
                     seen.add(v["url"])
+                    # The listing itself is evidence. Preserve the provider's
+                    # explicit fields, never invent a country from "remote".
+                    if isinstance(location,dict):preserve_eligibility_fields(v,location)
+                    preserve_eligibility_fields(v,entry)
                     if source=="remotejobs_org":
                         normalized=entry.get("location_normalization")
-                        if isinstance(normalized,dict) and normalized.get("work_arrangement")=="remote":v["remote"]=True
+                        if isinstance(normalized,dict):
+                            if normalized.get("work_arrangement")=="remote":v["remote"]=True
+                            preserve_eligibility_fields(v,normalized)
+                            normalized_location=location_text(normalized.get("location") or normalized.get("countries"))
+                            if normalized_location and not v["location"]:v["location"]=normalized_location[:200]
                     jobs.append(v)
     elif source=="remotive":
         data=fetch_json("https://remotive.com/api/remote-jobs?limit=200")

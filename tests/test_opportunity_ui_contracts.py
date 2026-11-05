@@ -79,9 +79,10 @@ class OpportunityUIContracts(unittest.TestCase):
         self.assertNotIn("/api/jd/enrich",s)
         self.assertNotIn("rankEntireCollection",s)
 
-    def test_missing_jd_hides_cv_and_all_score_controls_are_removed(self):
+    def test_missing_jd_does_not_hide_cv_and_all_score_controls_are_removed(self):
         s=Path('src/Opportunities.jsx').read_text()
-        self.assertIn("(job.jd_available===true||manualOutsideFilters)&&<button",s)
+        self.assertNotIn("(job.jd_available===true||manualOutsideFilters)&&<button",s)
+        self.assertIn('<button type="button" disabled={cvPending||!!cvDraft} onClick={()=>onGenerateCv(job,manualOutsideFilters)}',s)
         self.assertNotIn('Avaliar esta vaga',s)
         self.assertNotIn('Nota / evidências',s)
         self.assertNotIn('scoreDisplay',s)

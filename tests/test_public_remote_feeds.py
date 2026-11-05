@@ -1,10 +1,12 @@
 import unittest
 from unittest.mock import patch
-from public_remote_feeds import fetch,_CACHE
+from public_remote_feeds import fetch,_CACHE,_SOURCE_PAUSED_UNTIL
+import urllib.error
 
 class PublicFeedTests(unittest.TestCase):
     def setUp(self):
         _CACHE.clear()
+        _SOURCE_PAUSED_UNTIL.clear()
     def test_himalayas_requires_attributed_apply_url(self):
         payload={"jobs":[{"companyName":"Acme","title":"Product Manager","applicationLink":"https://himalayas.app/companies/acme/jobs/pm","locationRestrictions":[{"alpha2":"BR","name":"Brazil"}],"pubDate":1780000000000}]}
         with patch("public_remote_feeds.fetch_json",return_value=payload) as get:
@@ -74,5 +76,21 @@ class PublicFeedTests(unittest.TestCase):
             status,jobs=run_task("remotejobs_org","Product Manager",allow_js=False)
         self.assertEqual(status["state"],"validado")
         self.assertEqual(jobs[0]["source"],"remotejobs_org")
+    def test_leveljobs_503_pauses_only_that_source(self):
+        error=urllib.error.HTTPError("https://jobsbylevel.com/api/v1/jobs",503,"unavailable",{},None)
+        with patch("public_remote_feeds.fetch_json",side_effect=error) as api:
+            with self.assertRaises(ValueError):fetch("leveljobs","Product Manager")
+            first_calls=api.call_count
+            with self.assertRaisesRegex(ValueError,"temporariamente indisponível"):
+                fetch("leveljobs","Product Manager")
+        self.assertEqual(api.call_count,first_calls)
+        with patch("public_remote_feeds.fetch_json",return_value={"data":[{"title":"Product Owner","url":"https://remotejobs.org/remote-jobs/owner"}]}):
+            self.assertEqual(len(fetch("remotejobs_org","Product Owner")),1)
+    def test_catalog_jobgether_independent_adapter(self):
+        from catalog_engine import run_task
+        with patch("catalog_engine.collect",return_value=([{"source":"jobgether","url":"https://example.org/jobs/1"}],[{"status":"ok"}])) as api:
+            status,jobs=run_task("jobgether","Product Manager",False)
+        self.assertEqual(status["state"],"validado")
+        self.assertEqual(api.call_args.args,( ["Product Manager"],"BR","jobgether"))
 
 if __name__=="__main__":unittest.main()

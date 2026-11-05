@@ -9,6 +9,7 @@ from collectors import pull, TITLE_RE, item, preserve_eligibility_fields
 from source_extensions import extra as expanded_pull
 from scrapling_fallback import js_fallback
 from careers_page import collect_board
+from public_remote_feeds import fetch as fetch_public_remote
 
 SEED=json.loads((Path(__file__).parent/"catalog_seed.json").read_text())
 HEADERS={"User-Agent":"Mozilla/5.0 (compatible; JobHunter/0.3)","Accept":"application/json,text/html,application/xml"}
@@ -222,6 +223,10 @@ def extra_pull(source,slug):
 
 def run_task(source,slug,allow_js=True):
     try:
+        if source in ("leveljobs","remotejobs_org","himalayas","tavily"):
+            jobs=fetch_public_remote(source,slug)
+            return {"source":source,"slug":slug,"state":"validado" if jobs else "sem_vagas",
+                    "received":len(jobs),"target":len(jobs)},jobs
         if source=="careers_page":
             jobs,state=collect_board(slug,read)
             status = ("pendente" if state!="ok" else ("validado" if jobs else "sem_vagas"))

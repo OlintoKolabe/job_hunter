@@ -472,7 +472,7 @@ def resolved_search_filters(request,roles,country,mode,days):
 def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:str="remote",days:int=30,sort:str="newest",source:str="all"):
     require_auth(request)
     roles,country,mode,days=resolved_search_filters(request,roles,country,mode,days)
-    allowed_sources={"all","inhire","quickin","gupy","greenhouse","ashby","lever","bamboohr","dynamite","linkedin_guest","jobgether","workable","himalayas","remotive","indeed","geekhunter","nerdin","recruitee","careers_page"}
+    allowed_sources={"all","inhire","quickin","gupy","greenhouse","ashby","lever","bamboohr","dynamite","linkedin_guest","jobgether","workable","himalayas","remotive","leveljobs","remotejobs_org","tavily","indeed","geekhunter","nerdin","recruitee","careers_page"}
     if source not in allowed_sources:raise HTTPException(400,"Fonte não reconhecida")
     if source=="indeed":
         if not indeed_enabled():raise HTTPException(503,"Indeed indisponível")
@@ -484,7 +484,7 @@ def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:
         except Exception as exc:
             raise HTTPException(502,"Indeed indisponível: "+type(exc).__name__) from exc
         sources=[{"source":"indeed","state":"validado","received":len(items)}]
-    elif source in ("himalayas","remotive"):
+    elif source in ("himalayas","remotive","leveljobs","remotejobs_org","tavily"):
         try:
             items=fetch_public_remote(source,roles,country)
         except Exception as exc:
@@ -493,10 +493,10 @@ def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:
     elif source=="all":
         # Restore stable Brazil-oriented boards in the first response (a73a8e0).
         # Catalog skips these only after a successful first response.
-        with ThreadPoolExecutor(max_workers=4) as pool:
+        with ThreadPoolExecutor(max_workers=6) as pool:
             keyword_job=pool.submit(collect,discovery_queries(roles),country,"all")
             feeds={feed:pool.submit(fetch_public_remote,feed,roles,country)
-                   for feed in ("himalayas","remotive")}
+                   for feed in ("himalayas","remotive","leveljobs","remotejobs_org","tavily")}
             items,sources=keyword_job.result()
             for feed,future in feeds.items():
                 try:
@@ -560,7 +560,8 @@ def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:
 SOURCE_CADENCE_DAYS={"inhire":3,"quickin":3,"dynamite":3,"greenhouse":7,"greenhouse_eu":30,"careers_page":7,
  "ashby":7,"lever":7,"gupy":7,"linkedin_guest":7,"teamtailor":14,"recruitee":30,
  "smartrecruiters":30,"kaszek":7,"jobbol":7,"workable_account":7,"personio":30,"bamboohr":30,
- "zoho":30,"trakstar":30,"compleo":30,"solides":30,"geekhunter":3,"nerdin":3}
+ "zoho":30,"trakstar":30,"compleo":30,"solides":30,"geekhunter":3,"nerdin":3,
+ "leveljobs":1,"remotejobs_org":1,"himalayas":1,"tavily":1}
 
 def source_freshness(source, checked_at):
     from datetime import datetime,timezone,timedelta
@@ -599,6 +600,12 @@ def ordered_catalog_tasks(tasks):
 
 def active_source_tasks(roles=DEFAULT_ROLES):
     tasks=set(source_tasks())
+    # One task per selected role; the public-feed cache also serves starter search.
+    for term in discovery_queries(roles,limit=4):
+        if term:
+            for feed in ("leveljobs","remotejobs_org","himalayas"):
+                tasks.add((feed,term))
+            if os.getenv("TAVILY_API_KEY","").strip():tasks.add(("tavily",term))
     # Search the complete default role family on keyword-based LinkedIn guest.
     # Do not expand Gupy here: its current public endpoint returns HTTP 404.
     linkedin_terms=("product manager","product owner","project manager",
@@ -690,7 +697,7 @@ async def catalog_import(request: Request):
 @app.get("/api/search-filters")
 def available_filters(request: Request):
     require_auth(request)
-    return {"roles":DEFAULT_ROLES,"countries":[{"value":k,"label":v} for k,v in COUNTRIES],"sources":[{"value":"all","label":"Todas as fontes"},{"value":"inhire","label":"inHire"},{"value":"quickin","label":"Quickin"},{"value":"gupy","label":"Gupy"},{"value":"greenhouse","label":"Greenhouse"},{"value":"ashby","label":"Ashby"},{"value":"lever","label":"Lever"},{"value":"bamboohr","label":"BambooHR"},{"value":"recruitee","label":"Recruitee"},{"value":"dynamite","label":"Dynamite Jobs"},{"value":"linkedin_guest","label":"LinkedIn"},{"value":"jobgether","label":"Jobgether"},{"value":"careers_page","label":"Careers Page (Manatal)"},{"value":"workable","label":"Workable"},{"value":"himalayas","label":"Himalayas (remoto)"},{"value":"remotive","label":"Remotive (remoto)"},{"value":"geekhunter","label":"GeekHunter"},{"value":"nerdin","label":"Nerdin"}]+([{"value":"indeed","label":"Indeed"}] if indeed_enabled() else [])}
+    return {"roles":DEFAULT_ROLES,"countries":[{"value":k,"label":v} for k,v in COUNTRIES],"sources":[{"value":"all","label":"Todas as fontes"},{"value":"inhire","label":"inHire"},{"value":"quickin","label":"Quickin"},{"value":"gupy","label":"Gupy"},{"value":"greenhouse","label":"Greenhouse"},{"value":"ashby","label":"Ashby"},{"value":"lever","label":"Lever"},{"value":"bamboohr","label":"BambooHR"},{"value":"recruitee","label":"Recruitee"},{"value":"dynamite","label":"Dynamite Jobs"},{"value":"linkedin_guest","label":"LinkedIn"},{"value":"jobgether","label":"Jobgether"},{"value":"careers_page","label":"Careers Page (Manatal)"},{"value":"workable","label":"Workable"},{"value":"himalayas","label":"Himalayas (remoto)"},{"value":"leveljobs","label":"Level Jobs"},{"value":"remotejobs_org","label":"RemoteJobs.org"},{"value":"tavily","label":"Tavily (opcional)"},{"value":"remotive","label":"Remotive (remoto)"},{"value":"geekhunter","label":"GeekHunter"},{"value":"nerdin","label":"Nerdin"}]+([{"value":"indeed","label":"Indeed"}] if indeed_enabled() else [])}
 
 @app.get("/api/catalog")
 def catalog(request: Request):
@@ -737,7 +744,7 @@ def unique_jobs_by_url(found):
 def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False,skip_starter:str="",roles:str=DEFAULT_ROLES,country:str="BR",mode:str="remote",days:int=30,sort:str="newest",source:str="all"):
     require_auth(request)
     roles,country,mode,days=resolved_search_filters(request,roles,country,mode,days)
-    if source not in {"all","inhire","quickin","gupy","greenhouse","ashby","lever","bamboohr","dynamite","linkedin_guest","jobgether","workable","himalayas","remotive","geekhunter","nerdin","recruitee","careers_page"}:raise HTTPException(400,"Fonte não reconhecida")
+    if source not in {"all","inhire","quickin","gupy","greenhouse","ashby","lever","bamboohr","dynamite","linkedin_guest","jobgether","workable","himalayas","remotive","leveljobs","remotejobs_org","tavily","geekhunter","nerdin","recruitee","careers_page"}:raise HTTPException(400,"Fonte não reconhecida")
     tasks=active_source_tasks(roles)
     if source!="all":
         tasks=[(src,slug) for src,slug in tasks if src==source or (source=="greenhouse" and src=="greenhouse_eu")]

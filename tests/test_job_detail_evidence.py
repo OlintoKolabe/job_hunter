@@ -23,5 +23,13 @@ class JobDetailEvidenceTests(unittest.TestCase):
             result=enrich(jobs,limit=3)
         self.assertEqual(fn.call_count,3)
         self.assertEqual(sum(j.get("source_detail_status")=="recovered" for j in result),3)
+    def test_detail_budget_prioritizes_requested_titles(self):
+        jobs=[{"source":"jobgether","url":f"https://jobgether.com/{i}",
+               "title":"Sales Representative" if i<4 else "Product Manager"} for i in range(6)]
+        with patch("job_detail_evidence.recover",side_effect=lambda job:{**job,"source_detail_status":"recovered"}) as fn:
+            result=enrich(jobs,limit=2,roles="Product Manager")
+        self.assertEqual(fn.call_count,2)
+        self.assertEqual([j["title"] for j in result if j.get("source_detail_status")=="recovered"],
+                         ["Product Manager","Product Manager"])
 
 if __name__=="__main__":unittest.main()

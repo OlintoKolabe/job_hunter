@@ -70,6 +70,12 @@ class CvQueueTests(unittest.TestCase):
         self.assertIn('started_at', Path('cv_queue.py').read_text())
         self.assertIn('_wakeup.wait(timeout=5)', Path('cv_queue.py').read_text())
         self.assertIn('ensure_schema(db_url, mu)', Path('cv_queue.py').read_text())
+    def test_two_workers_use_distinct_advisory_locks(self):
+        from pathlib import Path
+        source=Path('cv_queue.py').read_text()
+        self.assertIn('for lane in range(2):',source)
+        self.assertIn('lock_key=LOCK_KEY+lane',source)
+        self.assertIn('FOR UPDATE SKIP LOCKED LIMIT 1',source)
 
 
 if __name__ == "__main__":

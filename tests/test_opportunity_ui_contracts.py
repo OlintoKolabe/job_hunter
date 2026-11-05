@@ -51,7 +51,13 @@ class OpportunityUIContracts(unittest.TestCase):
 
     def test_indeed_on_demand_search_does_not_scan_catalog(self):
         s=Path("src/Opportunities.jsx").read_text()
-        self.assertIn("['himalayas','remotive','indeed'].includes(source)",s)
+        self.assertIn("['himalayas','remotive','indeed','leveljobs','remotejobs_org','tavily'].includes(source)",s)
+
+    def test_all_source_search_starts_with_catalog_batches(self):
+        s=Path("src/Opportunities.jsx").read_text()
+        self.assertIn("if(source==='all'){",s)
+        self.assertIn("const scanBatchSize=source==='all'?8:12;",s)
+        self.assertIn("await scanWorker();",s)
 
     def test_catalog_scan_does_not_start_paid_matchmaking(self):
         s=Path("src/Opportunities.jsx").read_text()

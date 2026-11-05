@@ -71,12 +71,11 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},pro
     return d;
    };
    let d;let initialSucceeded=true;
-   try{d=await requestJson('/api/search-jobs?'+qs,source==='all'?45000:90000)}
-   catch(err){if(!isCurrent()||source!=='all'||(err.name!=='TimeoutError'&&!(err instanceof TypeError)))throw err;
+   if(source==='all'){
     initialSucceeded=false;
-    setMessage('Consulta inicial demorou; continuando no catálogo, inclusive nas fontes iniciais ainda não confirmadas.');
     d={items:[],details:[],total:0,raw_count:0};
-   }
+    setMessage('Priorizando vagas compatíveis; verificando fontes em lotes menores…');
+   }else d=await requestJson('/api/search-jobs?'+qs,90000);
    if(!isCurrent())return;
    accumulateSourceFields(d);
 
@@ -84,13 +83,13 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},pro
    setResults(visibleUndecided([...all.values()]));setCounts({new:all.size,total:count});
    // Indeed is an on-demand provider, not a catalog board. A catalog scan
    // with source=indeed always returns 400 and can flood the UI with retries.
-   if(['himalayas','remotive','indeed'].includes(source)){
+   if(['himalayas','remotive','indeed','leveljobs','remotejobs_org','tavily'].includes(source)){
      if(!isCurrent())return;
      setCompleted(true);
      setMessage('Consulta à fonte '+source+' concluída; vagas apresentadas após filtros e exclusões do Histórico.');
      return;
    }
-   const scanBatchSize=12;
+   const scanBatchSize=source==='all'?8:12;
    // The free Render service must not promise an endless full catalog crawl.
    // Keep verified matches and name unfinished coverage explicitly.
    const scanDeadline=Date.now()+120000;

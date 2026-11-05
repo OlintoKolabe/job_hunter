@@ -4,6 +4,7 @@ No application endpoint is contacted. An empty board is different from a
 failed or unparseable response, and the caller's normal filters remain final.
 """
 import re
+import json
 import threading
 import time
 import urllib.error
@@ -56,6 +57,52 @@ class _PublicHTML(HTMLParser):
         self.parts.append(part)
         if self._heading_depth and not self.heading:
             self.heading = part
+
+
+def _verified_job_metadata(raw):
+    """Use Scrapling on already-fetched HTML; no extra HTTP/browser calls.
+
+    Only public JobPosting JSON-LD is trusted for dates and remote/location
+    metadata. Missing information must remain missing for the normal filters.
+    """
+    try:
+        from scrapling import Selector
+    except ImportError:
+        return {}
+    page = Selector(raw)
+    for script in page.css('script[type="application/ld+json"]'):
+        try:
+            data = json.loads(str(script.text or ""))
+        except (TypeError, ValueError):
+            continue
+        objects = data if isinstance(data, list) else [data]
+        for obj in objects:
+            if isinstance(obj, dict) and isinstance(obj.get("@graph"), list):
+                objects.extend(obj["@graph"])
+        for obj in objects:
+            if not isinstance(obj, dict):
+                continue
+            kinds = obj.get("@type", [])
+            if not isinstance(kinds, list):
+                kinds = [kinds]
+            if "JobPosting" not in kinds:
+                continue
+            posted = obj.get("datePosted", "")
+            location = obj.get("jobLocation", {})
+            if isinstance(location, list):
+                location = location[0] if location else {}
+            address = location.get("address", {}) if isinstance(location, dict) else {}
+            if not isinstance(address, dict):
+                address = {}
+            country = address.get("addressCountry", "")
+            city = address.get("addressLocality", "")
+            if isinstance(country, dict):
+                country = country.get("name", "")
+            remote = str(obj.get("jobLocationType") or "").upper() == "TELECOMMUTE"
+            return {"published": posted if isinstance(posted, str) else "",
+                    "location": ", ".join(str(v) for v in (city, country) if isinstance(v, str) and v),
+                    "remote": remote}
+    return {}
 
 
 def collect_board(slug, read, *, max_pages=6, max_details=8):
@@ -122,8 +169,13 @@ def collect_board(slug, read, *, max_pages=6, max_details=8):
             prefix = content[:800]
             location_match = re.search(r"\b(?:Remote|Remoto|Hybrid|On-site|Brazil|Brasil|Argentina|Colombia|Portugal)\b", prefix, re.I)
             location = location_match.group() if location_match else ""
-            value = item(slug, title, address, location, "careers_page", "", content[:18000])
+            metadata = _verified_job_metadata(raw)
+            location = metadata.get("location") or location
+            value = item(slug, title, address, location, "careers_page", metadata.get("published", ""), content[:18000])
             if value:
+                if metadata.get("remote"):
+                    value["remote"] = True
+                    value["workplaceType"] = "Remote"
                 jobs.append(value)
         except urllib.error.HTTPError as exc:
             if exc.code == 429:

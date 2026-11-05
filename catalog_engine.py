@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from html.parser import HTMLParser
 from xml.etree import ElementTree
-from collectors import pull, collect, TITLE_RE, item, preserve_eligibility_fields
+from collectors import pull, collect, TITLE_RE, item, preserve_eligibility_fields, source_field_coverage
 from source_extensions import extra as expanded_pull
 from scrapling_fallback import js_fallback
 from careers_page import collect_board
@@ -276,4 +276,8 @@ def scan(tasks,workers=6,allow_js=True):
             out.append(d)
             jobs.extend({**job,"board_slug":slug,"board_source":source} for job in j)
     logging.info("JH_CATALOG_BATCH tasks=%d jobs=%d seconds=%.2f",len(tasks),len(jobs),time.monotonic()-started)
+    for source,counts in source_field_coverage(jobs).items():
+        logging.info("JH_SOURCE_COVERAGE source=%s total=%d dated=%d located=%d mode_explicit=%d described=%d",
+                     source,counts["total"],counts["dated"],counts["located"],
+                     counts["mode_explicit"],counts["described"])
     return out,jobs

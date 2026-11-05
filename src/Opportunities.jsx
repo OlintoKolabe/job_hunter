@@ -21,7 +21,7 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},pro
  const profileIdentity=JSON.stringify([profile?.id||profile?.user_id||profile?.email||profile?.name||'',profile?.roles||[],profile?.country||'BR',profile?.mode||'remote',profile?.days??0]);
  const cancelActiveSearch=()=>{const running=activeSearchRef.current;if(running){running.abort();activeSearchRef.current=null;setBusy(false);}};
  const visibleUndecided=jobs=>jobs.filter(j=>!decidedUrlsRef.current.has(j.url));
- const [onlyNew,setOnlyNew]=useState(false),[searchedQuery,setSearchedQuery]=useState(''),[source,setSource]=useState('all'),[sources,setSources]=useState([{value:'all',label:'Todas as fontes'},{value:'inhire',label:'inHire'},{value:'quickin',label:'Quickin'},{value:'gupy',label:'Gupy'}]),[roles,setRoles]=useState(profile?boundedRoles(catalog):defaultRoles),[days,setDays]=useState(String(profile?.days??0)),[country,setCountry]=useState(profile?.country||'BR'),[countries,setCountries]=useState(initialCountries),[mode,setMode]=useState(profile?.mode||'remote'),[sort,setSort]=useState('newest');
+ const [onlyNew,setOnlyNew]=useState(false),[searchedQuery,setSearchedQuery]=useState(''),[source,setSource]=useState('all'),[sources,setSources]=useState([{value:'all',label:'Todas as fontes'},{value:'inhire',label:'inHire'},{value:'quickin',label:'Quickin'},{value:'gupy',label:'Gupy'}]),[roles,setRoles]=useState(profile?boundedRoles(catalog):defaultRoles),[days,setDays]=useState(String(profile?.days??0)),[country,setCountry]=useState(profile?.country||'BR'),[countries,setCountries]=useState(initialCountries),[mode,setMode]=useState(profile?.mode||'remote'),[sort,setSort]=useState('newest'),[totalBoards,setTotalBoards]=useState(null);
  const [sourceStats,setSourceStats]=useState({}),[reviews,setReviews]=useState([]),[excluded,setExcluded]=useState([]),[filterStats,setFilterStats]=useState({}),[rawScanned,setRawScanned]=useState(0),[busy,setBusy]=useState(false),[results,setResults]=useState([]),[message,setMessage]=useState(''),[error,setError]=useState(''),[cvErrors,setCvErrors]=useState({}),[checked,setChecked]=useState(0),[counts,setCounts]=useState({new:0,total:0}),[completed,setCompleted]=useState(false),[visibleCount,setVisibleCount]=useState(10);
  const [flowTrace,setFlowTrace]=useState({raw:0,classified_confirmed:0,classified_review:0,history_excluded:0,display_confirmed:0,display_review:0});
  const [eligibilityTrace,setEligibilityTrace]=useState({eligible_for_detail:0,attempted:0,complete:0,failed:0,absent:0,deferred:0});
@@ -62,7 +62,7 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},pro
   const searchSignal=ms=>AbortSignal.any([controller.signal,AbortSignal.timeout(ms)]);
   setSourceFieldStats({});setSourceQuality({});
   setFlowTrace({raw:0,classified_confirmed:0,classified_review:0,history_excluded:0,display_confirmed:0,display_review:0});setEligibilityTrace({eligible_for_detail:0,attempted:0,complete:0,failed:0,absent:0,deferred:0});
-  setVisibleCount(10);setBusy(true);setSearchedQuery(query());setError('');setResults([]);setReviews([]);setExcluded([]);setSourceStats({});setFilterStats({});setRawScanned(0);setChecked(0);setCompleted(false);setMessage('Consultando '+(sources.find(x=>x.value===source)?.label||source)+'…');
+  setVisibleCount(10);setBusy(true);setSearchedQuery(query());setError('');setResults([]);setReviews([]);setExcluded([]);setSourceStats({});setFilterStats({});setRawScanned(0);setChecked(0);setTotalBoards(null);setCompleted(false);setMessage('Consultando '+(sources.find(x=>x.value===source)?.label||source)+'…');
   const qs=query();const all=new Map();const uncertain=new Map();const outOfFilter=new Map();const totals={};const sourceTotals={};let inspected=0;const record=(d)=>{if(!isCurrent())return;setFlowTrace(old=>Object.fromEntries(Object.keys(old).map(k=>[k,old[k]+(d.flow_stats?.[k]||0)])));setEligibilityTrace(old=>Object.fromEntries(Object.keys(old).map(k=>[k,old[k]+(d.eligibility_fetch?.[k]||0)])));(d.details||[]).forEach(x=>{const src=(x.source||'desconhecida').toLowerCase();const n=sourceTotals[src]||{consultas:0,recebidas:0,erros:0,jdValidos:0,jdAusentes:0};n.consultas++;n.recebidas+=x.received||0;if(x.status==='error'||x.state==='pendente')n.erros++;sourceTotals[src]=n});for(const [src,v] of Object.entries(d.source_jd_stats||{})){const key=src.toLowerCase();const n=sourceTotals[key]||{consultas:0,recebidas:0,erros:0,jdValidos:0,jdAusentes:0};n.jdValidos+=(v.jd_valid||0);n.jdAusentes+=(v.jd_missing||0);sourceTotals[key]=n}setSourceStats({...sourceTotals});(d.review_items||[]).forEach(j=>uncertain.set(j.url,j));(d.excluded_items||[]).forEach(j=>{if(outOfFilter.size<300)outOfFilter.set(j.url,j)});setExcluded(visibleUndecided([...outOfFilter.values()]));for(const [key,n] of Object.entries(d.filter_stats||{})){totals[key]=(totals[key]||0)+n}inspected+=d.raw_count||0;setReviews(visibleUndecided([...uncertain.values()]));setFilterStats({...totals});setRawScanned(inspected)};let count=0;let completedAll=false;
   try{
    const requestJson=async (url,timeoutMs=30000)=>{
@@ -97,10 +97,9 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},pro
      return;
    }
    const scanBatchSize=source==='all'?8:12;
-   // The free Render service must not promise an endless full catalog crawl.
-   // Keep verified matches and name unfinished coverage explicitly.
-   const scanDeadline=Date.now()+120000;
-   let truncatedByTime=false;
+   // Each request is bounded, but the catalog cursor has no total time limit.
+   // Long searches keep streaming verified results until every board is visited
+   // or the user explicitly cancels the search.
    // Exclude only starter boards with successful initial responses.
    const starters=initialSucceeded?(d.details||[]).filter(x=>x.status==='ok'&&x.source&&x.term)
      .map(x=>String(x.source).toLowerCase()+':'+String(x.term).toLowerCase()).join(','):'';
@@ -112,8 +111,9 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},pro
    const scanWorker=async()=>{
     let offset=0;
     let expectedTotal=null;
-    for(let n=0;n<125&&isCurrent();n++){
-     if(Date.now()>scanDeadline){truncatedByTime=true;break}
+    const failedOffsets=[];
+    let consecutiveFailedBatches=0;
+    while(isCurrent()){
      let batch;
      for(let attempt=0;attempt<2&&isCurrent();attempt++){
       try{
@@ -131,27 +131,50 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},pro
      if(!isCurrent())return;
      if(!batch){
       skipped++;
-      if(skipped>2)throw Error('Três lotes de catálogo indisponíveis; resultados parciais preservados.');
-      setMessage('Falha transitória em lote; prosseguindo com as demais fontes.');
+      failedOffsets.push(offset);
+      consecutiveFailedBatches++;
+      setMessage('Falha transitória no lote '+(offset+1)+'; continuando com os demais quadros sem encerrar a busca.');
       offset+=scanBatchSize;
+      if(expectedTotal!==null&&offset>=expectedTotal){reachedEnd=true;break}
+      if(consecutiveFailedBatches>=5)throw Error('Cinco lotes consecutivos indisponíveis; resultados preservados. Verifique a disponibilidade do servidor.');
       continue;
      }
+     consecutiveFailedBatches=0;
      if(!Number.isFinite(batch.total_sources)||!Number.isFinite(batch.next_offset)||batch.next_offset<=offset)
       throw Error('Paginação inválida no catálogo; resultados parciais preservados.');
      if(expectedTotal!==null&&expectedTotal!==batch.total_sources)
       throw Error('Catálogo mudou durante a busca; execute nova consulta.');
      expectedTotal=batch.total_sources;
      expectedBoardCount=expectedTotal;
+     setTotalBoards(expectedTotal);
      (batch.items||[]).filter(j=>source==='all'||j.source?.toLowerCase()===source||(source==='greenhouse'&&j.source?.toLowerCase()==='greenhouse_eu')).forEach(j=>all.set(j.url,j));
      record(batch);
      scannedBoards+=(batch.details||[]).length;
      count+=batch.found||0;setResults(visibleUndecided([...all.values()]));setChecked(x=>x+(batch.details||[]).length);setCounts({new:all.size,total:count});
+     setMessage('Busca em andamento — '+scannedBoards+' de '+expectedTotal+' quadros verificados; resultados disponíveis conforme chegam.');
      offset=batch.next_offset;
      if(batch.complete||offset>=expectedTotal){reachedEnd=true;break}
      if(!(batch.details||[]).length)throw Error('Lote vazio antes do fim do catálogo; busca parcial preservada.');
     }
+    // Revisit transient failures once after the forward pass. Do not let one
+    // unavailable source prevent all other boards from being inspected.
+    for(const retryOffset of failedOffsets){
+     if(!isCurrent())return;
+     try{
+      const retry=await requestJson('/api/catalog/scan?offset='+retryOffset+'&limit='+scanBatchSize+'&'+qs+starterQuery,90000);
+      if(retry.total_sources!==expectedTotal)continue;
+      accumulateSourceFields(retry);
+      (retry.items||[]).filter(j=>source==='all'||j.source?.toLowerCase()===source||(source==='greenhouse'&&j.source?.toLowerCase()==='greenhouse_eu')).forEach(j=>all.set(j.url,j));
+      record(retry);
+      scannedBoards+=(retry.details||[]).length;
+      count+=retry.found||0;setResults(visibleUndecided([...all.values()]));setChecked(x=>x+(retry.details||[]).length);setCounts({new:all.size,total:count});
+      skipped--;
+     }catch(err){
+      if(!isCurrent())return;
+     }
+    }
    };
-   // Single bounded cursor avoids overlap and limits canary CPU/memory pressure.
+   // One sequential cursor avoids overlap and limits Render CPU/memory pressure.
    await scanWorker();
    if(!isCurrent())return;
    completedAll=reachedEnd&&skipped===0;
@@ -159,7 +182,7 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},pro
    const fullyComplete=completedAll&&failedSources===0;
    setCompleted(fullyComplete);
    const catalogCoverage=scannedBoards+' de '+(expectedBoardCount??'total indisponível')+' quadros do catálogo';
-   setMessage(fullyComplete?'Busca concluída — '+catalogCoverage+'.':('Busca parcial — '+catalogCoverage+', '+skipped+' lotes e '+failedSources+' quadros com falha ou dados pendentes'+(truncatedByTime?', busca interrompida por limite de tempo':'')+'. Zero resultado não significa zero vagas. Confira Fontes.'));
+   setMessage(fullyComplete?'Busca concluída — '+catalogCoverage+'.':('Busca parcial — '+catalogCoverage+', '+skipped+' lotes e '+failedSources+' quadros com falha ou dados pendentes. Zero resultado não significa zero vagas. Confira Fontes.'));
   }catch(e){if(isCurrent()){setError(e.message);setMessage('Busca parcial — os resultados encontrados continuam disponíveis. '+e.message);}}
   finally{if(activeSearchRef.current===controller){activeSearchRef.current=null;setBusy(false)}}
  }
@@ -353,8 +376,9 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},pro
       </div>)}
     </div>
   </section><p>JDs válidos e ausentes: somente vagas elegíveis ou em revisão, Não representam todos os anúncios brutos.</p><div className="table-wrap"><table><thead><tr><th>Fonte</th><th>Consultas</th><th>Anúncios brutos</th><th>JDs válidos</th><th>JDs ausentes</th><th>Pendências</th></tr></thead><tbody>{Object.entries(sourceStats).sort((a,b)=>b[1].recebidas-a[1].recebidas).map(([source,v])=><tr key={source}><td>{source}</td><td>{v.consultas}</td><td>{v.recebidas}</td><td>{v.jdValidos||0}</td><td>{v.jdAusentes||0}</td><td>{v.erros}</td></tr>)}</tbody></table></div></details>
-  {busy&&<div role="status" className="notice"><p>Busca em andamento: {checked} quadros consultados</p><progress value={checked} max={Math.max(checked+4,1)} style={{width:"100%"}} /></div>}
+  {busy&&<div role="status" className="notice"><p>Busca em andamento: {checked}{totalBoards!==null?' de '+totalBoards:''} quadros consultados</p><progress value={checked} max={Math.max(totalBoards??(checked+4),1)} style={{width:"100%"}} /></div>}
   <button className="import-btn" disabled={busy||!roles.trim()} onClick={search}>{busy?'Pesquisando vagas e verificando quadros…':'Buscar oportunidades'}</button>
+  {busy&&<button type="button" className="import-btn" onClick={()=>{cancelActiveSearch();setMessage('Busca cancelada por você. Os resultados já encontrados foram preservados.')}}>Cancelar busca</button>}
   {message&&<p className="notice" role="status">{message}{checked>0?' · Quadros verificados agora: '+checked:''}</p>}
   {error&&<p className="notice" role="alert">{error}</p>}
 

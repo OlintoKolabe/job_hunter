@@ -73,6 +73,17 @@ class OpportunityUIContracts(unittest.TestCase):
         self.assertIn("const scanBatchSize=source==='all'?8:12;",s)
         self.assertIn("await scanWorker();",s)
 
+    def test_catalog_search_is_not_stopped_by_a_global_deadline(self):
+        s=Path('src/Opportunities.jsx').read_text()
+        self.assertNotIn('scanDeadline',s)
+        self.assertNotIn('truncatedByTime',s)
+        self.assertNotIn('for(let n=0;n<125',s)
+        self.assertIn('while(isCurrent())',s)
+        self.assertIn('const failedOffsets=[]',s)
+        self.assertIn('for(const retryOffset of failedOffsets)',s)
+        self.assertIn('Cancelar busca',s)
+        self.assertIn('totalBoards??(checked+4)',s)
+
     def test_catalog_scan_does_not_start_paid_matchmaking(self):
         s=Path("src/Opportunities.jsx").read_text()
         self.assertIn("const scanWorker=async()=>",s)

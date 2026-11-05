@@ -1,4 +1,6 @@
 import unittest
+import sys
+import types
 from unittest.mock import patch
 from urllib.error import HTTPError
 
@@ -62,6 +64,33 @@ class CareersPageTests(unittest.TestCase):
         self.assertFalse(any("/jobs/irrelevant" in url for url in calls))
     def test_source_is_available(self):
         self.assertIn(("careers_page", "customertimes"), source_tasks())
+        self.assertIn(("careers_page", "nearshore-business-solutions"), source_tasks())
+        self.assertIn(("careers_page", "yoailabs"), source_tasks())
+        self.assertIn(("careers_page", "latamforce-llc"), source_tasks())
+
+    def test_scrapling_uses_verified_jsonld_without_new_requests(self):
+        class Script:
+            text = '{"@type":"JobPosting","datePosted":"2026-11-03",' \
+                   '"jobLocationType":"TELECOMMUTE","jobLocation":' \
+                   '{"address":{"addressCountry":"BR"}}}'
+        class Selector:
+            def __init__(self, raw):
+                self.raw = raw
+            def css(self, query):
+                return [Script()]
+        calls=[]
+        def read(url,size=0):
+            calls.append(url)
+            if url.endswith("/"):
+                return b'<h2>1 Open Positions</h2><a href="/jobs/pm" data-job-title="Product Manager">Role</a>',200
+            return DETAIL,200
+        with patch.dict(sys.modules,{"scrapling":types.SimpleNamespace(Selector=Selector)}):
+            jobs,state=collect_board("customertimes",read)
+        self.assertEqual(state,"ok")
+        self.assertEqual(len(calls),2)
+        self.assertEqual(jobs[0]["published"],"2026-11-03")
+        self.assertEqual(jobs[0]["location"],"BR")
+        self.assertTrue(jobs[0]["remote"])
 
     def test_extracts_details_without_application_or_cross_host(self):
         calls = []

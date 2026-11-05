@@ -6,7 +6,7 @@ from unittest.mock import patch
 from urllib.error import HTTPError
 from urllib.parse import parse_qs, urlsplit
 
-from collectors import JobgetherHTTPError, collect, pull
+from collectors import JobgetherHTTPError, collect, pull, location_text
 from search_filters import classify, search_terms
 
 
@@ -18,6 +18,21 @@ def listing(term, suffix="1"):
 
 
 class JobgetherDirectTests(unittest.TestCase):
+    def test_workable_nested_location_is_human_readable_and_filterable(self):
+        payload={"jobs":[{"title":"Product Manager","company":{"name":"Acme"},
+            "url":"https://jobs.workable.com/view/one","location":{
+                "city":"Goiânia","subregion":None,"countryName":"Brazil"},
+            "workplaceType":"remote","publishedAt":"2026-11-05T10:00:00Z"}]}
+        with patch("collectors.fetch_json",return_value=payload):
+            _,jobs=pull("Workable","product manager","Brazil")
+        self.assertEqual(jobs[0]["location"],"Goiânia, Brazil")
+        self.assertEqual(jobs[0]["countryName"],"Brazil")
+        self.assertEqual(classify(jobs[0],search_terms("Product Manager"),"BR","remote",7)[0],"confirmed")
+
+    def test_location_text_does_not_leak_object_representation(self):
+        self.assertEqual(location_text({"city":"", "subregion":None,"countryName":"Brazil"}),"Brazil")
+        self.assertEqual(location_text({"name":"Latin America","country":"USA"}),"Latin America")
+
     def test_four_critical_terms_use_supported_get_contract(self):
         terms=("product manager", "product owner", "project manager", "pmo")
         calls=[]

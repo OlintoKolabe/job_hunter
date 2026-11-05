@@ -53,6 +53,21 @@ class PublicFeedTests(unittest.TestCase):
             jobs=fetch("remotejobs_org","Business Analyst","BR")
         self.assertTrue(jobs[0]["remote"])
         self.assertEqual(jobs[0]["source"],"remotejobs_org")
+    def test_remotejobs_org_keeps_geography_from_provider_only(self):
+        response={"data":[{"title":"Product Manager","company":"Acme",
+            "url":"https://remotejobs.org/remote-jobs/example",
+            "location_normalization":{"work_arrangement":"remote","countryName":"Brazil"}}]}
+        with patch("public_remote_feeds.fetch_json",return_value=response):
+            jobs=fetch("remotejobs_org","Product Manager","BR")
+        self.assertEqual(jobs[0]["countryName"],"Brazil")
+        self.assertTrue(jobs[0]["remote"])
+    def test_leveljobs_preserves_explicit_remote_and_country_fields(self):
+        response={"data":[{"title":"Project Manager","company":"Acme",
+            "url":"https://jobsbylevel.com/jobs/pm","remote":True,"country":"Brazil"}]}
+        with patch("public_remote_feeds.fetch_json",return_value=response):
+            jobs=fetch("leveljobs","Project Manager","BR")
+        self.assertEqual(jobs[0]["country"],"Brazil")
+        self.assertTrue(jobs[0]["remote"])
     def test_public_source_one_query_failure_does_not_block_others(self):
         def response(url):
             if "Product+Owner" in url:raise TimeoutError("upstream")

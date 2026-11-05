@@ -104,7 +104,22 @@ def item(company,title,url,location,source,published="",description=""):
             published=datetime.fromtimestamp(seconds,timezone.utc).isoformat()
         except (ValueError,OverflowError,OSError):published=""
     return {"company":str(company or "")[:200],"title":str(title)[:300],"url":url[:2000],
-            "location":str(location or "")[:200],"published":str(published or "")[:80],"source":source,"description":str(description or "")[:18000]}
+            "location":location_text(location)[:200],"published":str(published or "")[:80],"source":source,"description":str(description or "")[:18000]}
+
+def location_text(value):
+    """Flatten only location labels; never render Python/JSON objects to users."""
+    if isinstance(value,str):return value.strip()
+    if isinstance(value,list):
+        return ", ".join(dict.fromkeys(filter(None,(location_text(x) for x in value))))
+    if isinstance(value,dict):
+        # Prefer named location, then geographic components. Do not interpret
+        # booleans or empty nested fields as eligibility evidence.
+        named=value.get("name") or value.get("text") or value.get("displayName")
+        if isinstance(named,str) and named.strip():return named.strip()
+        parts=[location_text(value.get(k)) for k in
+               ("city","subregion","state","region","countryName","country","countryCode")]
+        return ", ".join(dict.fromkeys(x for x in parts if x))
+    return ""
 
 def preserve_eligibility_fields(destination,source):
     """Keep only published collector metadata, without inferring missing eligibility."""
@@ -188,7 +203,11 @@ def pull(source,slug,location='brazil'):
             if isinstance(c,dict):c=c.get("name","")
             value=item(c,j.get("title") or j.get("jobTitle"),j.get("url") or j.get("jobUrl") or j.get("applicationUrl"),
                 j.get("location") or j.get("workplace"),source,j.get("publishedAt"),j.get("descriptionHtml") or j.get("description") or "")
-            if value:jobs.append(preserve_eligibility_fields(value,j))
+            if value:
+                loc=j.get("location")
+                if isinstance(loc,dict):
+                    preserve_eligibility_fields(value,loc)
+                jobs.append(preserve_eligibility_fields(value,j))
     elif source=="Ashby":
         payload=fetch_json("https://api.ashbyhq.com/posting-api/job-board/"+urllib.parse.quote(slug))
         for j in as_list(payload):

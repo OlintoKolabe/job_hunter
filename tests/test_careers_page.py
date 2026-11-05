@@ -62,6 +62,9 @@ class CareersPageTests(unittest.TestCase):
         self.assertFalse(any("/jobs/irrelevant" in url for url in calls))
     def test_source_is_available(self):
         self.assertIn(("careers_page", "customertimes"), source_tasks())
+        self.assertIn(("careers_page", "nearshore-business-solutions"), source_tasks())
+        self.assertIn(("careers_page", "yoailabs"), source_tasks())
+        self.assertIn(("careers_page", "latamforce-llc"), source_tasks())
 
     def test_extracts_details_without_application_or_cross_host(self):
         calls = []

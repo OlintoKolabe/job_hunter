@@ -4,10 +4,18 @@ No application endpoint is contacted. An empty board is different from a
 failed or unparseable response, and the caller's normal filters remain final.
 """
 import re
+import threading
+import time
+import urllib.error
 from html.parser import HTMLParser
 from urllib.parse import urljoin, urlsplit
 
 from collectors import item, TITLE_RE
+
+_CACHE = {}
+_LOCK = threading.RLock()
+_OK_TTL = 900  # Avoid fetching the same public board for every user search.
+_LIMIT_TTL = 300  # Give rate-limited boards a quiet period.
 
 
 class _PublicHTML(HTMLParser):
@@ -50,18 +58,35 @@ class _PublicHTML(HTMLParser):
             self.heading = part
 
 
-def collect_board(slug, read, *, max_pages=10, max_details=20):
+def collect_board(slug, read, *, max_pages=6, max_details=8):
     """Bounded collection of explicitly configured public employer pages."""
     if not re.fullmatch(r"[a-z0-9][a-z0-9-]{1,62}", slug):
         raise ValueError("invalid Careers Page employer slug")
+    # Only real HTTP collectors share a cache. Mocked readers remain isolated
+    # for deterministic tests, and no private user state is ever cached.
+    use_cache = getattr(read, "__module__", "") == "catalog_engine"
+    with _LOCK:
+        cached = _CACHE.get(slug) if use_cache else None
+        if cached and time.monotonic() < cached[0]:
+            return [dict(row) for row in cached[1]], cached[2]
     base = f"https://{slug}.careers-page.com/"
     links = []
     seen = set()
     relevant_links = []
+    known_titles = {}
+    rate_limited = False
+    last_board = None
     for number in range(1, max_pages + 1):
-        raw, _ = read(base + (f"?page={number}" if number > 1 else ""), size=1500000)
+        try:
+            raw, _ = read(base + (f"?page={number}" if number > 1 else ""), size=1500000)
+        except urllib.error.HTTPError as exc:
+            if exc.code != 429:
+                raise
+            rate_limited = True
+            break
         board = _PublicHTML()
         board.feed(raw.decode("utf-8", "replace"))
+        last_board = board
         for href in board.urls:
             address = urljoin(base, href)
             parts = urlsplit(address)
@@ -73,6 +98,8 @@ def collect_board(slug, read, *, max_pages=10, max_details=20):
                 # The public card publishes a reliable title; use it to avoid
                 # spending all detail requests on unrelated first-page jobs.
                 title = board.job_titles.get(href)
+                if title:
+                    known_titles[address] = title
                 if title and TITLE_RE.search(title):
                     relevant_links.append(address)
         if not any("?page=" in href for href in board.urls):
@@ -81,8 +108,8 @@ def collect_board(slug, read, *, max_pages=10, max_details=20):
     failures = 0
     # Prefer cards with matching published titles across all pages. Legacy
     # boards without card metadata retain the original bounded fallback.
-    candidates = relevant_links if relevant_links else links
-    for address in candidates[:max_details]:
+    candidates = relevant_links if known_titles else links
+    for address in ([] if rate_limited else candidates[:max_details]):
         try:
             raw, _ = read(address, size=1500000)
             page = _PublicHTML()
@@ -98,10 +125,32 @@ def collect_board(slug, read, *, max_pages=10, max_details=20):
             value = item(slug, title, address, location, "careers_page", "", content[:18000])
             if value:
                 jobs.append(value)
+        except urllib.error.HTTPError as exc:
+            if exc.code == 429:
+                rate_limited = True
+                break
+            failures += 1
         except (OSError, ValueError):
             failures += 1
-    if candidates and failures == min(len(candidates), max_details):
+    if rate_limited:
+        # Only retain the actual titles from published cards. Missing country,
+        # modality, date and JD remain unknown and go to review, not confirmed.
+        detailed = {row["url"] for row in jobs}
+        for address in candidates[:max_details]:
+            if address in detailed or not known_titles.get(address):
+                continue
+            value = item(slug,known_titles[address],address,"","careers_page")
+            if value:
+                jobs.append(value)
+    if candidates and failures == min(len(candidates), max_details) and not rate_limited:
         raise ValueError("Careers Page detail retrieval failed")
-    if not links and not ("open positions" in " ".join(board.parts).lower()):
+    if not links and not rate_limited and not (last_board and "open positions" in " ".join(last_board.parts).lower()):
         raise ValueError("Careers Page board format unrecognized")
-    return jobs, "ok" if jobs or not links else "partial"
+    # The absence of a target title is a legitimate zero, provided the board
+    # supplied card titles. Never call it a collection failure.
+    state = "rate_limited" if rate_limited else ("partial" if failures else "ok")
+    if use_cache:
+        with _LOCK:
+            _CACHE[slug] = (time.monotonic() + (_LIMIT_TTL if rate_limited else _OK_TTL),
+                            [dict(row) for row in jobs], state)
+    return jobs, state

@@ -221,8 +221,9 @@ def run_task(source,slug,allow_js=True):
     try:
         if source=="careers_page":
             jobs,state=collect_board(slug,read)
-            return {"source":source,"slug":slug,"state":"validado" if jobs else ("sem_vagas" if state=="ok" else "pendente"),
-                    "received":len(jobs),"target":len(jobs)},jobs
+            status = ("pendente" if state!="ok" else ("validado" if jobs else "sem_vagas"))
+            return {"source":source,"slug":slug,"state":status,
+                    "received":len(jobs),"target":len(jobs),"error":"429" if state=="rate_limited" else ""},jobs
         if source in ("ashby","greenhouse","inhire","lever"):
             detail,jobs=pull(source.capitalize() if source!="inhire" else "inHire",slug)
             return {"source":source,"slug":slug,"state":"validado" if detail["received"] else "sem_vagas",

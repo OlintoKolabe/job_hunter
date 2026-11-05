@@ -21,7 +21,10 @@ def read(url,headers=None,size=750000):
 def source_tasks():
     tasks=[(s,slug) for s,slugs in SEED.items() for slug in slugs]
     # Verified public employer boards; extend this inventory after validation.
-    tasks.extend(("careers_page", slug) for slug in ("customertimes", "latynlabs"))
+    tasks.extend(("careers_page", slug) for slug in (
+        "customertimes", "latynlabs", "nearshore-business-solutions",
+        "yoailabs", "latamforce-llc",
+    ))
     tasks.append(("geekhunter","public"))
     tasks.extend(("nerdin",term) for term in ("product manager","product owner", "project manager", "business analyst", "marketing", "growth", "pmo"))
     return [(source,slug) for source,slug in tasks if slug.casefold() not in ("kraken","kraken.com","payward")]

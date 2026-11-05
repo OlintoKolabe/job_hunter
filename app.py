@@ -561,7 +561,7 @@ SOURCE_CADENCE_DAYS={"inhire":3,"quickin":3,"dynamite":3,"greenhouse":7,"greenho
  "ashby":7,"lever":7,"gupy":7,"linkedin_guest":7,"teamtailor":14,"recruitee":30,
  "smartrecruiters":30,"kaszek":7,"jobbol":7,"workable_account":7,"personio":30,"bamboohr":30,
  "zoho":30,"trakstar":30,"compleo":30,"solides":30,"geekhunter":3,"nerdin":3,
- "leveljobs":1,"remotejobs_org":1,"himalayas":1,"tavily":1}
+ "leveljobs":1,"remotejobs_org":1,"himalayas":1,"tavily":1,"jobgether":1,"workable":1}
 
 def source_freshness(source, checked_at):
     from datetime import datetime,timezone,timedelta
@@ -594,8 +594,18 @@ def ordered_catalog_tasks(tasks):
     # Boards requiring a browser fallback repeatedly timed out during the
     # user's 16:33-16:41 UTC run. Keep them in the catalog, after faster APIs.
     js_slow={"quickin","kaszek","gupy","jobbol","dynamite"}
-    return starters+[task for task in interleaved if task[0].casefold() not in js_slow]+[
-        task for task in interleaved if task[0].casefold() in js_slow]
+    # A quick relevant response is more useful than waiting for the entire catalog.
+    # Keep the same tasks and stable pagination, only change their priority.
+    fast_sources=("remotejobs_org","himalayas","leveljobs","inhire","jobgether","workable")
+    by_fast={src:[task for task in interleaved if task[0].casefold()==src] for src in fast_sources}
+    rounds=max((len(entries) for entries in by_fast.values()),default=0)
+    fast=[by_fast[src][i] for i in range(rounds) for src in fast_sources if i<len(by_fast[src])]
+    remaining=[task for task in interleaved if task[0].casefold() not in fast_sources]
+    # Retain the three proven starter boards from the previous release, then
+    # rotate higher-yield feeds before the full and potentially slow catalog.
+    return starters[:3]+fast+starters[3:]+[
+        task for task in remaining if task[0].casefold() not in js_slow]+[
+        task for task in remaining if task[0].casefold() in js_slow]
 
 
 def active_source_tasks(roles=DEFAULT_ROLES):
@@ -603,7 +613,7 @@ def active_source_tasks(roles=DEFAULT_ROLES):
     # One task per selected role; the public-feed cache also serves starter search.
     for term in discovery_queries(roles,limit=4):
         if term:
-            for feed in ("leveljobs","remotejobs_org","himalayas"):
+            for feed in ("leveljobs","remotejobs_org","himalayas","jobgether","workable"):
                 tasks.add((feed,term))
             if os.getenv("TAVILY_API_KEY","").strip():tasks.add(("tavily",term))
     # Search the complete default role family on keyword-based LinkedIn guest.

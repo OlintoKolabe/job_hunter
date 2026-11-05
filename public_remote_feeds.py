@@ -40,8 +40,13 @@ def _tavily_search(query):
 _CACHE={}
 _LOCK=threading.RLock()
 _TAVILY_DISABLED_UNTIL=0.0
+_SOURCE_PAUSED_UNTIL={}
 
 def fetch(source,roles="",country="BR"):
+    started=time.monotonic()
+    with _LOCK:
+        if time.monotonic()<_SOURCE_PAUSED_UNTIL.get(source,0):
+            raise ValueError(source+": fonte temporariamente indisponível")
     selected=tuple(dict.fromkeys(term.strip()[:90] for term in roles.split(",") if term.strip()))[:12]
     queried=source in ("himalayas","leveljobs","remotejobs_org","tavily")
     cache_key=(source,selected if queried else (),country if queried else "")
@@ -61,7 +66,7 @@ def fetch(source,roles="",country="BR"):
             except Exception as exc:
                 logging.warning("JH_HIMALAYAS_ROLE_FAILED role=%r error=%s",q,type(exc).__name__)
                 return None
-        queries=selected or ("Product Manager",)
+        queries=selected[:5] or ("Product Manager",)
         with ThreadPoolExecutor(max_workers=8) as pool:
             responses=list(pool.map(search_role,queries))
         if all(response is None for response in responses):
@@ -87,7 +92,9 @@ def fetch(source,roles="",country="BR"):
         if source=="tavily" and time.monotonic()<_TAVILY_DISABLED_UNTIL:
             raise ValueError("Tavily em pausa por limite ou indisponibilidade")
         seen=set()
-        queries=(selected[:2] if source=="tavily" else selected[:5]) or ("Product Manager",)
+        # Bounded search fan-out: a single upstream must not hold the whole batch.
+        limit={"tavily":1,"leveljobs":2,"remotejobs_org":3}[source]
+        queries=selected[:limit] or ("Product Manager",)
         def search_role(q):
             try:
                 if source=="leveljobs":
@@ -101,6 +108,8 @@ def fetch(source,roles="",country="BR"):
                 if source=="tavily" and exc.code in (401,402,403,429):
                     global _TAVILY_DISABLED_UNTIL
                     with _LOCK:_TAVILY_DISABLED_UNTIL=time.monotonic()+3600
+                if source in ("leveljobs","remotejobs_org") and exc.code in (429,500,502,503,504):
+                    with _LOCK:_SOURCE_PAUSED_UNTIL[source]=time.monotonic()+300
                 logging.warning("JH_PUBLIC_FEED_HTTP_FAILED source=%s status=%d",source,exc.code)
                 return None
             except Exception as exc:
@@ -154,4 +163,5 @@ def fetch(source,roles="",country="BR"):
     else:raise ValueError("Unknown public source")
     with _LOCK:
         _CACHE[cache_key]=(time.monotonic(),list(jobs))
+    logging.info("JH_PUBLIC_FEED_COMPLETE source=%s received=%d seconds=%.2f",source,len(jobs),time.monotonic()-started)
     return jobs

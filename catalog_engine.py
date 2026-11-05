@@ -1,11 +1,11 @@
 """Catalog-driven collection: reads seed + optional private inventory in Neon."""
-import json, re, urllib.request, urllib.parse, urllib.error
+import json, re, urllib.request, urllib.parse, urllib.error, logging, time
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from html.parser import HTMLParser
 from xml.etree import ElementTree
-from collectors import pull, TITLE_RE, item, preserve_eligibility_fields
+from collectors import pull, collect, TITLE_RE, item, preserve_eligibility_fields
 from source_extensions import extra as expanded_pull
 from scrapling_fallback import js_fallback
 from careers_page import collect_board
@@ -223,6 +223,11 @@ def extra_pull(source,slug):
 
 def run_task(source,slug,allow_js=True):
     try:
+        if source in ("jobgether","workable"):
+            jobs,details=collect([slug],"BR",source)
+            failed=bool(details) and all(x.get("status")=="error" for x in details)
+            return {"source":source,"slug":slug,"state":"pendente" if failed else ("validado" if jobs else "sem_vagas"),
+                    "received":len(jobs),"target":len(jobs),"error":("upstream" if failed else "")},jobs
         if source in ("leveljobs","remotejobs_org","himalayas","tavily"):
             jobs=fetch_public_remote(source,slug)
             return {"source":source,"slug":slug,"state":"validado" if jobs else "sem_vagas",
@@ -257,6 +262,7 @@ def run_task(source,slug,allow_js=True):
 
 def scan(tasks,workers=6,allow_js=True):
     out=[];jobs=[]
+    started=time.monotonic()
     with ThreadPoolExecutor(max_workers=workers) as pool:
         # Preserve the existing two-argument task contract for callers/tests
         # unless this search explicitly suppresses expensive JS fallbacks.
@@ -266,6 +272,8 @@ def scan(tasks,workers=6,allow_js=True):
         for f in as_completed(future):
             source,slug=future[f]
             d,j=f.result()
+            logging.info("JH_CATALOG_SOURCE source=%s state=%s count=%d",source,d.get("state"),len(j))
             out.append(d)
             jobs.extend({**job,"board_slug":slug,"board_source":source} for job in j)
+    logging.info("JH_CATALOG_BATCH tasks=%d jobs=%d seconds=%.2f",len(tasks),len(jobs),time.monotonic()-started)
     return out,jobs

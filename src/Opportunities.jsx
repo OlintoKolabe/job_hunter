@@ -378,8 +378,10 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},pro
     </div>
   </section><p>JDs válidos e ausentes: somente vagas elegíveis ou em revisão, Não representam todos os anúncios brutos.</p><div className="table-wrap"><table><thead><tr><th>Fonte</th><th>Consultas</th><th>Anúncios brutos</th><th>JDs válidos</th><th>JDs ausentes</th><th>Pendências</th></tr></thead><tbody>{Object.entries(sourceStats).sort((a,b)=>b[1].recebidas-a[1].recebidas).map(([source,v])=><tr key={source}><td>{source}</td><td>{v.consultas}</td><td>{v.recebidas}</td><td>{v.jdValidos||0}</td><td>{v.jdAusentes||0}</td><td>{v.erros}</td></tr>)}</tbody></table></div></details>
   {busy&&<div role="status" className="notice"><p>Busca em andamento: {checked}{totalBoards!==null?' de '+totalBoards:''} quadros consultados</p><progress value={checked} max={Math.max(totalBoards??(checked+4),1)} style={{width:"100%"}} /></div>}
-  <button className="import-btn" disabled={busy||!roles.trim()} onClick={search}>{busy?'Pesquisando vagas e verificando quadros…':'Buscar oportunidades'}</button>
-  {busy&&<button type="button" className="import-btn" onClick={()=>{cancelActiveSearch();setMessage('Busca cancelada por você. Os resultados já encontrados foram preservados.')}}>Cancelar busca</button>}
+  <div className="search-actions">
+    <button className="import-btn" disabled={busy||!roles.trim()} onClick={search}>{busy?'Pesquisando vagas e verificando quadros…':'Buscar oportunidades'}</button>
+    {busy&&<button type="button" className="import-btn search-cancel-btn" onClick={()=>{cancelActiveSearch();setMessage('Busca cancelada por você. Os resultados já encontrados foram preservados.')}}>Cancelar busca</button>}
+  </div>
   {message&&<p className="notice" role="status">{message}{checked>0?' · Quadros verificados agora: '+checked:''}</p>}
   {error&&<p className="notice" role="alert">{error}</p>}
 

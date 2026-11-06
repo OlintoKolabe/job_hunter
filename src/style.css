@@ -2,6 +2,10 @@
 .history-pane{margin:34px 0;background:white;border:1px solid #e6ecf4;border-radius:16px;padding:25px}
 .history-pane h3{margin:0;font-size:19px}.history-pane p{color:#77869a;line-height:1.55}
 .import-btn,.password-form button{display:inline-block;background:#2e6bdf;color:white;padding:12px 17px;border:0;border-radius:9px;font-weight:700;cursor:pointer}
+.search-actions{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.search-actions .search-cancel-btn{background:#c62828;color:#fff}
+.search-actions .search-cancel-btn:hover{background:#a61f1f}
+.search-actions .search-cancel-btn:focus-visible{outline:3px solid #f87171;outline-offset:2px}
 .history-stats{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0}.history-stats span{background:#eff4fc;border-radius:20px;padding:7px 11px;font-size:12px;color:#385376}
 .filters{display:flex;gap:12px;margin:17px 0}.filters input,.filters select,.password-form input{padding:12px;border:1px solid #dce4ef;border-radius:9px;max-width:100%;background:white}.filters input{flex:1}
 .table-wrap{overflow:auto}.history-pane table{width:100%;border-collapse:collapse;min-width:620px}.history-pane th,.history-pane td{text-align:left;padding:13px 10px;border-bottom:1px solid #edf0f5;font-size:13px}.history-pane th{color:#657890}.history-pane a{color:#2e6bdf}

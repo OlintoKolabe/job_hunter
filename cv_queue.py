@@ -1,7 +1,7 @@
-"""Durable, single-consumer ATS resume queue backed by the existing PostgreSQL.
+"""Durable ATS resume queue backed by the existing PostgreSQL.
 
 The browser only enqueues and polls. Each job is stored with its owner and
-processed outside the request; two advisory-lock lanes bound AI concurrency.
+processed outside the request; row-level SKIP LOCKED claims bound AI concurrency.
 """
 import logging
 import threading
@@ -12,7 +12,6 @@ import psycopg
 from psycopg.types.json import Jsonb
 
 LOG = logging.getLogger("jh.cv_queue")
-LOCK_KEY = 2026110301
 _STALE_AFTER = "30 minutes"
 _started = False
 _guard = threading.Lock()
@@ -113,19 +112,31 @@ def delete_job(db_url, mu, owner, job_id):
 
 
 def _claim(cur):
-    # Reclaim after a process died. One advisory-lock holder runs at a time.
+    # A database lock must never stall every worker indefinitely. Each claim is
+    # a separate transaction; SKIP LOCKED safely coordinates parallel workers.
+    cur.execute("SET LOCAL lock_timeout = '1500ms'")
+    cur.execute("SET LOCAL statement_timeout = '10000ms'")
+    # Reclaim abandoned work without waiting on rows held by another worker.
     cur.execute("""
         UPDATE public.jh_cv_queue
         SET status='failed', error='Processamento interrompido; solicite novamente',
             finished_at=now()
-        WHERE status='running' AND attempts >= 2
-          AND started_at < now() - interval '30 minutes'
+        WHERE id IN (
+            SELECT id FROM public.jh_cv_queue
+            WHERE status='running' AND attempts >= 2
+              AND started_at < now() - interval '30 minutes'
+            FOR UPDATE SKIP LOCKED
+        )
     """)
     cur.execute("""
         UPDATE public.jh_cv_queue
         SET status='queued', started_at=NULL
-        WHERE status='running' AND attempts < 2
-          AND started_at < now() - interval '30 minutes'
+        WHERE id IN (
+            SELECT id FROM public.jh_cv_queue
+            WHERE status='running' AND attempts < 2
+              AND started_at < now() - interval '30 minutes'
+            FOR UPDATE SKIP LOCKED
+        )
     """)
     cur.execute("""
         UPDATE public.jh_cv_queue SET status='running',
@@ -193,33 +204,29 @@ def wake():
 
 
 def _drain(db_url, mu, generator, lane=0):
-    with _db(db_url, mu) as lock_conn:
-        lock_conn.autocommit = True
-        with lock_conn.cursor() as lock_cur:
-            lock_key=LOCK_KEY+lane
-            lock_cur.execute("SELECT pg_try_advisory_lock(%s)", (lock_key,))
-            if not lock_cur.fetchone()[0]:
-                return
-            try:
-                while True:
-                    with _db(db_url, mu) as conn:
-                        with conn.cursor() as cur:
-                            job = _claim(cur)
-                    if job is None:
-                        return
-                    print("JH_CV_QUEUE_CLAIM id="+job[0],flush=True)
-                    _process(job, db_url, mu, generator)
-            finally:
-                lock_cur.execute("SELECT pg_advisory_unlock(%s)", (lock_key,))
+    # Session-level advisory locks can outlive a worker iteration and prevent
+    # all new claims. PostgreSQL row locks already provide atomic claiming.
+    while True:
+        with _db(db_url, mu) as conn:
+            with conn.cursor() as cur:
+                job = _claim(cur)
+        if job is None:
+            return
+        print("JH_CV_QUEUE_CLAIM id="+job[0]+" lane="+str(lane),flush=True)
+        _process(job, db_url, mu, generator)
 
 
 def _loop(db_url, mu, generator, lane=0):
     global _schema_ready
     print("JH_CV_QUEUE_WORKER_STARTED lane=%d" % lane,flush=True)
+    last_heartbeat = 0.0
     while True:
         # A short fallback poll covers wakeups from another process or a restart.
         _wakeup.wait(timeout=5)
         _wakeup.clear()
+        if time.monotonic()-last_heartbeat >= 60:
+            print("JH_CV_QUEUE_WORKER_HEARTBEAT lane=%d" % lane,flush=True)
+            last_heartbeat = time.monotonic()
         try:
             if not _schema_ready:
                 with _schema_guard:

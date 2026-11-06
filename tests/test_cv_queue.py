@@ -61,6 +61,10 @@ class CvQueueTests(unittest.TestCase):
         self.assertIn("FOR UPDATE SKIP LOCKED LIMIT 1", sql)
         self.assertIn("ORDER BY created_at", sql)
         self.assertIn("started_at-created_at", sql)
+        statements=[c.args[0] for c in cursor.execute.call_args_list]
+        self.assertIn("SET LOCAL statement_timeout = '10000ms'",statements)
+        self.assertIn("SET LOCAL lock_timeout = '1500ms'",statements)
+        self.assertTrue(all("SKIP LOCKED" in s for s in statements[2:]))
 
     def test_queue_poll_does_not_repeat_schema_ddl(self):
         from pathlib import Path
@@ -70,11 +74,12 @@ class CvQueueTests(unittest.TestCase):
         self.assertIn('started_at', Path('cv_queue.py').read_text())
         self.assertIn('_wakeup.wait(timeout=5)', Path('cv_queue.py').read_text())
         self.assertIn('ensure_schema(db_url, mu)', Path('cv_queue.py').read_text())
-    def test_two_workers_use_distinct_advisory_locks(self):
+    def test_two_workers_use_atomic_row_claims_without_session_locks(self):
         from pathlib import Path
         source=Path('cv_queue.py').read_text()
         self.assertIn('for lane in range(2):',source)
-        self.assertIn('lock_key=LOCK_KEY+lane',source)
+        self.assertNotIn('pg_try_advisory_lock',source)
+        self.assertIn('JH_CV_QUEUE_WORKER_HEARTBEAT',source)
         self.assertIn('FOR UPDATE SKIP LOCKED LIMIT 1',source)
 
 

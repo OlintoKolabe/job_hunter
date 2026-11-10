@@ -170,7 +170,12 @@ def extra_pull(source,slug):
                 location=", ".join(text_field(row.get(x)) for x in ("city","region","country") if text_field(row.get(x)))
                 mode=next((text_field(row.get(x)) for x in ("workplaceType","workplace_type","workMode","modality","job_type") if text_field(row.get(x))),"")
                 description=" ".join(text_field(row.get(x)) for x in ("description","requirements"))
-                value=item(name,title,url,location,source,row.get("published_at"),description)
+                # Accept publication fields from different API revisions, but
+                # never substitute created_at/updated_at for a publication date.
+                published=next((row.get(key) for key in
+                    ("published_at","publishedAt","publication_date","publicationDate",
+                     "lastPublishedAt") if row.get(key)),None)
+                value=item(name,title,url,location,source,published,description)
                 if value:
                     if mode:value["workplaceType"]=mode
                     if isinstance(row.get("remote"),bool):value["remote"]=row["remote"]
@@ -180,6 +185,9 @@ def extra_pull(source,slug):
         except (ValueError,TypeError,KeyError,urllib.error.URLError,TimeoutError,json.JSONDecodeError):
             jobs=[]
         seen=set()
+        # HTML fallback is not an authoritative complete inventory. If the
+        # six-page safety bound is reached with more listings, report pending.
+        exhausted=False
         for page in range(1,7):
             raw=board_html if page==1 and board_html is not None else read(base+"?page="+str(page))[0]
             p=BoardHTML();p.feed(raw.decode("utf-8","replace"))
@@ -202,7 +210,9 @@ def extra_pull(source,slug):
                             pass
                     jobs.append(v)
             if new==0:break
-        return jobs,"ok"
+        else:
+            exhausted=True
+        return jobs,"pendente" if exhausted else "ok"
     if source=="solides":
         url="https://"+slug+".vagas.solides.com.br/"
     elif source=="zoho":
@@ -253,7 +263,9 @@ def run_task(source,slug,allow_js=True):
         if allow_js and not jobs and source=="quickin" and result!="sem_vagas":
             jobs=js_fallback(source,slug)
         uncertain=source in ("quickin","zoho","solides","trakstar","compleo")
-        state=("validado" if jobs else ("sem_vagas" if result=="sem_vagas" else ("pendente" if uncertain else "sem_vagas")))
+        state=("pendente" if result=="pendente" else
+               ("validado" if jobs else ("sem_vagas" if result=="sem_vagas" else
+               ("pendente" if uncertain else "sem_vagas"))))
         return {"source":source,"slug":slug,"state":state,"received":len(jobs),"target":len(jobs)},jobs
     except urllib.error.HTTPError as e:
         return {"source":source,"slug":slug,"state":"pendente","received":0,"error":str(e.code)},[]

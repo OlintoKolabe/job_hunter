@@ -9,6 +9,7 @@ import csv
 import io
 import io
 import hashlib
+import logging
 import unicodedata
 from urllib.parse import urlsplit
 
@@ -468,11 +469,13 @@ def search_jobs(request: Request, roles:str=DEFAULT_ROLES,country:str="BR",mode:
     if source not in allowed_sources:raise HTTPException(400,"Fonte não reconhecida")
     if source=="indeed":
         if not indeed_enabled():raise HTTPException(503,"Indeed indisponível")
-        queries=discovery_queries(roles,limit=2)[:2]
+        queries=discovery_queries(roles,limit=4)[:4]
         if not queries:queries=["product manager"]
         items=[]
         try:
-            for term in queries:items.extend(indeed_search(term))
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                for rows in pool.map(lambda term:indeed_search(term,mode=mode),queries):
+                    items.extend(rows)
         except Exception as exc:
             raise HTTPException(502,"Indeed indisponível: "+type(exc).__name__) from exc
         sources=[{"source":"indeed","state":"validado","received":len(items)}]
@@ -655,6 +658,11 @@ def source_filter_quality(jobs,roles,country,mode,days):
             for marker,key in (("data","review_date"),("pais","review_country"),
                                ("modalidade","review_mode"),("cargo_a_confirmar","review_role")):
                 if marker in reason.split(","):row[key]+=1
+    for source,counts in result.items():
+        logging.info("JH_FILTER_QUALITY source=%s mode=%s days=%s raw=%d confirmed=%d review=%d excluded=%d excluded_mode=%d review_mode=%d review_date=%d review_country=%d",
+                     source,mode,days,counts["raw"],counts["confirmed"],counts["review"],
+                     counts["excluded"],counts["excluded_modalidade"],counts["review_mode"],
+                     counts["review_date"],counts["review_country"])
     return result
 
 @app.post("/api/catalog/import")

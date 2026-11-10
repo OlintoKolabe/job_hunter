@@ -271,7 +271,9 @@ def pull(source,slug,location='brazil'):
             loc=j.get("location") or ""
             if isinstance(loc,dict):loc=" ".join(str(v) for v in loc.values() if isinstance(v,str))
             workplace=j.get("workplaceType") or ""
-            value=item(tenant_name,title,url,(str(loc)+" "+str(workplace)).strip(),source,j.get("lastPublishedAt") or j.get("publishedAt"),j.get("description") or j.get("jobDescription") or "")
+            published=next((j.get(k) for k in ("lastPublishedAt","publishedAt","firstPublishedAt",
+                "published_at","published_on","publicationDate") if j.get(k)),None)
+            value=item(tenant_name,title,url,(str(loc)+" "+str(workplace)).strip(),source,published,j.get("description") or j.get("jobDescription") or "")
             if value:
                 value["workplaceType"]=workplace
                 jobs.append(preserve_eligibility_fields(value,j))

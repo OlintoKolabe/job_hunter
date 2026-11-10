@@ -290,8 +290,12 @@ def extra(source,slug,mode="remote"):
         for j in jobs:j["source"]="Dynamite Jobs"
         return jobs,"validado" if jobs else "pendente",len(jobs)
     if source=="linkedin_guest":
-        from linkedin_jobspy import search
-        jobs=search(slug,mode=mode)
+        query={"keywords":slug,"location":"Brazil","f_TPR":"r604800","start":"0"}
+        provider_modes={"remote":"2","onsite":"1","hybrid":"3"}
+        if mode not in ("remote","onsite","hybrid","all"):raise ValueError("Invalid LinkedIn work mode")
+        if mode in provider_modes:query["f_WT"]=provider_modes[mode]
+        url="https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?"+urllib.parse.urlencode(query)
+        jobs=linkedin_cards(url)
         return jobs,"validado" if jobs else "pendente",len(jobs)
     if source=="gupy":
         jobs=[];received=0

@@ -4,12 +4,14 @@ from unittest.mock import patch
 from source_extensions import extra
 
 class SourceIdentityTests(unittest.TestCase):
-    def test_linkedin_query_uses_jobspy_and_selected_work_mode(self):
+    def test_linkedin_query_uses_selected_work_mode(self):
         from source_extensions import extra
-        for mode in ("remote","onsite","hybrid","all"):
-            with self.subTest(mode=mode), patch("linkedin_jobspy.search",return_value=[]) as fetch:
+        from urllib.parse import parse_qs,urlsplit
+        for mode,expected in (("remote","2"),("onsite","1"),("hybrid","3"),("all",None)):
+            with self.subTest(mode=mode), patch("source_extensions.linkedin_cards",return_value=[]) as fetch:
                 extra("linkedin_guest","product manager",mode=mode)
-                fetch.assert_called_once_with("product manager",mode=mode)
+                params=parse_qs(urlsplit(fetch.call_args.args[0]).query)
+                self.assertEqual(params.get("f_WT",[None])[0],expected)
 
     def test_linkedin_provider_filter_alone_does_not_confirm_mode(self):
         from source_extensions import linkedin_cards

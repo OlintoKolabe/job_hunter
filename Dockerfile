@@ -12,7 +12,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 RUN python -m playwright install --with-deps chromium
-COPY first_seen.py public_remote_feeds.py job_detail_evidence.py indeed_provider.py linkedin_jobspy.py app.py cv_queue.py history_read_api.py multiuser.py linkedin_pdf.py collectors.py careers_page.py catalog_engine.py source_extensions.py catalog_bootstrap.py scrapling_fallback.py search_filters.py jd_signals.py block4_score.py jd_enrichment.py eligibility_enrichment.py jd_retrieval.py ai_interpreter.py ai_resume_matcher.py score_repository.py resume_engine.py resume_hybrid.py catalog_seed.json test_phase3.py ./
+COPY first_seen.py public_remote_feeds.py job_detail_evidence.py indeed_provider.py app.py cv_queue.py history_read_api.py multiuser.py linkedin_pdf.py collectors.py careers_page.py catalog_engine.py source_extensions.py catalog_bootstrap.py scrapling_fallback.py search_filters.py jd_signals.py block4_score.py jd_enrichment.py eligibility_enrichment.py jd_retrieval.py ai_interpreter.py ai_resume_matcher.py score_repository.py resume_engine.py resume_hybrid.py catalog_seed.json test_phase3.py ./
 COPY scripts/check_scope.py ./scripts/check_scope.py
 COPY tests/test_job_detail_evidence.py ./tests/test_job_detail_evidence.py
 COPY src/Opportunities.jsx src/style.css src/main.jsx ./src/

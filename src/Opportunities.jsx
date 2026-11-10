@@ -11,7 +11,7 @@ function DecisionActions({job,pending,cvPending,cvDraft,cvError,onDecision,onGen
  </div>{cvDraft&&<div style={{display:'flex',alignItems:'center',gap:8,marginTop:6}}>
   <progress aria-label="Tempo para cancelar currículo" value={cvDraft.progress} max="100" style={{width:150}}/>
   <small>{Math.max(0,Math.ceil((100-cvDraft.progress)/20))} s para enviar</small>
-  <button type="button" onClick={()=>onCancelCv(job.url)}>Cancelar</button>
+  <button type="button" className="cv-action cv-action-danger" onClick={()=>onCancelCv(job.url)}>Cancelar</button>
  </div>}{cvError&&<small role="alert" style={{display:'block',color:'#b91c1c',whiteSpace:'normal',maxWidth:330,marginTop:5}}>{cvError}</small>}</div>;
 }
 export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},profile=null}){
@@ -263,17 +263,40 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},pro
    }catch(e){setCvErrors(v=>({...v,[job.id]:'Download indisponível: '+e.message}))}
  }
  const [deletingCvIds,setDeletingCvIds]=useState([]);
+ const [selectedCvIds,setSelectedCvIds]=useState([]);
+ const [bulkDeleting,setBulkDeleting]=useState(false);
+ const [confirmClearAll,setConfirmClearAll]=useState(false);
+ const [cvDeleteNotice,setCvDeleteNotice]=useState('');
+ useEffect(()=>{setSelectedCvIds(ids=>ids.filter(id=>queueJobs.some(job=>job.id===id&&job.status!=='running')))},[queueJobs]);
  async function deleteQueuedCv(job){
-   if(!window.confirm('Apagar permanentemente este currículo e o registro da fila? Essa ação não pode ser desfeita.'))return;
    setDeletingCvIds(v=>[...v,job.id]);
    try{
      const response=await fetch('/api/resume/queue/'+encodeURIComponent(job.id),{method:'DELETE',credentials:'same-origin'});
      if(!response.ok){const data=await response.json().catch(()=>({}));throw Error(data.detail||('HTTP '+response.status))}
      setQueueJobs(v=>v.filter(j=>j.id!==job.id));
+     setSelectedCvIds(v=>v.filter(id=>id!==job.id));
      enqueuedHereRef.current.delete(job.id);autoAttemptedRef.current.delete(job.id);
-     setMessage('Currículo apagado do banco permanentemente.');
+     setCvDeleteNotice('Currículo apagado do banco.');
    }catch(e){setCvErrors(v=>({...v,[job.id]:'Não foi possível apagar: '+e.message}))}
    finally{setDeletingCvIds(v=>v.filter(id=>id!==job.id))}
+ }
+ async function bulkDeleteCvs(all=false){
+   const ids=selectedCvIds.filter(id=>queueJobs.some(j=>j.id===id&&j.status!=='running'));
+   if(!all&&!ids.length)return;
+   setBulkDeleting(true);setCvDeleteNotice('');
+   try{
+     const response=await fetch('/api/resume/queue/delete',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(all?{all:true}:{ids})});
+     const data=await response.json().catch(()=>({}));
+     if(!response.ok)throw Error(data.detail||('HTTP '+response.status));
+     const deleted=new Set(data.deleted_ids||[]);
+     deleted.forEach(id=>{enqueuedHereRef.current.delete(id);autoAttemptedRef.current.delete(id)});
+     setQueueJobs(v=>v.filter(j=>!deleted.has(j.id)));
+     setSelectedCvIds(v=>v.filter(id=>!deleted.has(id)));
+     setCvDeleteNotice(`${data.deleted} currículo(s) apagado(s).${data.running?' '+data.running+' em geração permaneceram no banco.':''}`);
+     setConfirmClearAll(false);
+     await refreshQueue();
+   }catch(e){setCvDeleteNotice('Não foi possível excluir: '+e.message)}
+   finally{setBulkDeleting(false)}
  }
  function cancelCvDraft(url){
    const timer=cvDraftTimersRef.current.get(url);
@@ -364,14 +387,23 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},pro
   </div>
 
   <details className="catalog-diagnostics"><summary>Fontes consultadas nesta busca · Fila ATS ({queueJobs.filter(j=>j.status==='queued'||j.status==='running').length} pendentes)</summary><section aria-label="Fila de currículos ATS" style={{marginBottom:16}}><h3>Fila de currículos ATS</h3>
-    <p>Os currículos prontos ficam disponíveis aqui. Apagar remove definitivamente o DOCX e seu registro do banco.</p>
+    <p>Os currículos prontos ficam disponíveis aqui. A exclusão remove definitivamente o DOCX e o registro desta conta. Currículos em geração não podem ser apagados até terminarem.</p>
+    <div className="cv-bulk-actions">
+      <label><input type="checkbox" checked={queueJobs.some(j=>j.status!=='running')&&queueJobs.filter(j=>j.status!=='running').every(j=>selectedCvIds.includes(j.id))} onChange={e=>setSelectedCvIds(e.target.checked?queueJobs.filter(j=>j.status!=='running').map(j=>j.id):[])} disabled={bulkDeleting||!queueJobs.some(j=>j.status!=='running')}/> Selecionar todos os exibidos</label>
+      <span>{selectedCvIds.length} selecionado(s)</span>
+      <button type="button" className="cv-action cv-action-danger" disabled={bulkDeleting||!selectedCvIds.length} onClick={()=>bulkDeleteCvs(false)}>{bulkDeleting?'Excluindo…':'Apagar selecionados'}</button>
+      <button type="button" className="cv-action cv-action-danger" disabled={bulkDeleting||!queueJobs.some(j=>j.status!=='running')} onClick={()=>setConfirmClearAll(true)}>Limpar todos os currículos</button>
+    </div>
+    {confirmClearAll&&<div className="cv-delete-confirm" role="group" aria-label="Confirmação para limpar todos os currículos"><strong>Apagar todos os currículos desta conta?</strong><span>Isso inclui registros que não estão nesta lista de 100 itens e não pode ser desfeito. Currículos em geração serão preservados.</span><div className="cv-bulk-actions"><button type="button" className="cv-action cv-action-danger" disabled={bulkDeleting} onClick={()=>bulkDeleteCvs(true)}>Sim, apagar todos</button><button type="button" className="cv-action cv-action-primary" disabled={bulkDeleting} onClick={()=>setConfirmClearAll(false)}>Voltar</button></div></div>}
+    {cvDeleteNotice&&<p role="status" className="notice">{cvDeleteNotice}</p>}
     <div style={{display:'grid',gap:8,marginTop:8}}>
       {queueJobs.length===0&&<p>Nenhum currículo registrado.</p>}
       {queueJobs.map(j=><div key={j.id} style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+        <input type="checkbox" aria-label={'Selecionar currículo '+(j.title||'Vaga')} disabled={j.status==='running'||bulkDeleting||deletingCvIds.includes(j.id)} checked={selectedCvIds.includes(j.id)} onChange={e=>setSelectedCvIds(ids=>e.target.checked?[...ids,j.id]:ids.filter(id=>id!==j.id))}/>
         <span>{j.title||'Vaga'} — {j.company||'Empresa'}</span>
         <small>{({queued:'Na fila',running:'Gerando…',ready:'Pronto',failed:'Falhou'})[j.status]||j.status}{j.status==='queued'&&j.created_at?' · aguardando '+queueAge(j.created_at):''}{j.status==='running'&&j.started_at?' · processando há '+queueAge(j.started_at):''}</small>
-        {j.status==='ready'&&<button type="button" onClick={()=>downloadQueuedCv(j)}>Baixar DOCX</button>}
-        {j.status!=='running'&&<button type="button" disabled={deletingCvIds.includes(j.id)} onClick={()=>deleteQueuedCv(j)}>{deletingCvIds.includes(j.id)?'Apagando…':'Apagar do banco'}</button>}
+        {j.status==='ready'&&<button type="button" className="cv-action cv-action-success" onClick={()=>downloadQueuedCv(j)}>Baixar DOCX</button>}
+        {j.status!=='running'&&<button type="button" className="cv-action cv-action-danger" disabled={bulkDeleting||deletingCvIds.includes(j.id)} onClick={()=>deleteQueuedCv(j)}>{deletingCvIds.includes(j.id)?'Apagando…':'Apagar do banco'}</button>}
         {j.status==='failed'&&<small role="alert">{j.error}</small>}
         {cvErrors[j.id]&&<small role="alert">{cvErrors[j.id]}</small>}
       </div>)}

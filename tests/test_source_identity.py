@@ -13,7 +13,7 @@ class SourceIdentityTests(unittest.TestCase):
                 params=parse_qs(urlsplit(fetch.call_args.args[0]).query)
                 self.assertEqual(params.get("f_WT",[None])[0],expected)
 
-    def test_linkedin_provider_mode_evidence_for_each_filter(self):
+    def test_linkedin_provider_filter_alone_does_not_confirm_mode(self):
         from source_extensions import linkedin_cards
         from search_filters import classify
         from unittest.mock import MagicMock
@@ -26,9 +26,24 @@ class SourceIdentityTests(unittest.TestCase):
             response.__enter__.return_value=response
             with patch("source_extensions.urllib.request.urlopen",return_value=response):
                 job=linkedin_cards("https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?f_WT="+provider)[0]
-            self.assertEqual(classify(job,["product manager"],"BR",expected,0)[0],"confirmed")
-            for other in ("remote","onsite","hybrid"):
-                if other!=expected:self.assertEqual(classify(job,["product manager"],"BR",other,0)[0],"excluded")
+            self.assertEqual(job["providerSearchMode"],expected)
+            self.assertNotIn("workplaceType",job)
+            self.assertNotIn("remote",job)
+            for selected in ("remote","onsite","hybrid"):
+                self.assertEqual(classify(job,["product manager"],"BR",selected,0)[0],"review")
+
+    def test_linkedin_job_description_overrides_provider_mode(self):
+        from search_filters import classify
+        base={"source":"linkedin_guest","company":"Acme","title":"Product Manager",
+              "location":"Brazil","published":"2026-11-09","providerSearchMode":"remote"}
+        for description,actual in (("Our hybrid work model requires office days.","hybrid"),
+                                   ("This is an onsite position in our office.","onsite"),
+                                   ("This is a fully remote position in Brazil.","remote")):
+            job={**base,"description":description}
+            with self.subTest(description=description):
+                self.assertEqual(classify(job,["product manager"],"BR",actual,0)[0],"confirmed")
+                if actual!="remote":
+                    self.assertEqual(classify(job,["product manager"],"BR","remote",0)[0],"excluded")
 
     def test_catalog_scan_forwards_work_mode_only_to_linkedin(self):
         from catalog_engine import scan
@@ -49,7 +64,8 @@ class SourceIdentityTests(unittest.TestCase):
         with patch("source_extensions.urllib.request.urlopen",return_value=response):
             jobs=linkedin_cards("https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?f_WT=2")
         self.assertEqual(len(jobs),1)
-        self.assertTrue(jobs[0]["remote"])
+        self.assertNotIn("remote",jobs[0])
+        self.assertEqual(jobs[0]["providerSearchMode"],"remote")
 
     def test_linkedin_hybrid_card_is_not_forced_remote(self):
         from source_extensions import linkedin_cards

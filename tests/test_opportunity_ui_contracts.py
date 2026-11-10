@@ -30,7 +30,11 @@ class OpportunityUIContracts(unittest.TestCase):
         self.assertNotIn('aria-label="Fontes e fila de currículos ATS"',s)
         self.assertLess(s.index('Fontes consultadas nesta busca · Fila ATS'),s.index('{currentMatches&&(results.length'))
         self.assertIn("Apagar do banco",s)
-        self.assertIn("window.confirm(",s)
+        self.assertNotIn("window.confirm(",s)
+        self.assertIn("Apagar selecionados",s)
+        self.assertIn("Limpar todos os currículos",s)
+        self.assertIn("Sim, apagar todos",s)
+        self.assertIn("cv-action-danger",s)
 
     def test_cv_uses_existing_button_and_persistent_queue(self):
         s=Path("src/Opportunities.jsx").read_text()

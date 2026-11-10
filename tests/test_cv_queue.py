@@ -45,6 +45,33 @@ class CvQueueTests(unittest.TestCase):
         self.assertIn("status IN ('queued','ready','failed')", sql)
         self.assertEqual(args[0], 42)
 
+    def test_bulk_delete_all_is_owner_scoped_and_preserves_running(self):
+        conn=MagicMock()
+        conn.__enter__.return_value=conn
+        cursor=conn.cursor.return_value.__enter__.return_value
+        cursor.fetchall.return_value=[("one",),("two",)]
+        cursor.fetchone.return_value=(1,)
+        with patch.object(cv_queue,"_db",return_value=conn):
+            result=cv_queue.delete_jobs("unused",object(),42,all_jobs=True)
+        self.assertEqual(result,{"deleted_ids":["one","two"],"running":1})
+        statements=[call.args for call in cursor.execute.call_args_list]
+        self.assertIn("owner_id=%s",statements[0][0])
+        self.assertIn("status IN ('queued','ready','failed')",statements[0][0])
+        self.assertEqual(statements[0][1],(42,))
+
+    def test_bulk_selected_delete_requires_owner_and_ids(self):
+        conn=MagicMock()
+        conn.__enter__.return_value=conn
+        cursor=conn.cursor.return_value.__enter__.return_value
+        cursor.fetchall.return_value=[("one",)]
+        cursor.fetchone.return_value=(0,)
+        ids=["12345678-1234-1234-1234-123456789012"]
+        with patch.object(cv_queue,"_db",return_value=conn):
+            cv_queue.delete_jobs("unused",object(),42,ids=ids)
+        statements=[call.args for call in cursor.execute.call_args_list]
+        self.assertIn("id = ANY(%s::uuid[])",statements[0][0])
+        self.assertEqual(statements[0][1],(42,ids))
+
     def test_worker_starts_in_real_asgi_lifespan(self):
         from pathlib import Path
         source = Path("app.py").read_text()

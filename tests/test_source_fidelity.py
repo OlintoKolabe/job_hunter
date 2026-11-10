@@ -12,6 +12,24 @@ import json
 
 
 class SourceFidelityTests(unittest.TestCase):
+    def test_inhire_public_catalog_is_completed_from_per_job_endpoint(self):
+        from collectors import pull
+        from unittest.mock import patch
+        listing={"jobsPage":[{"jobId":"77","displayName":"Product Manager",
+            "location":"Brasil","workplaceType":"Remote","status":"published"}]}
+        detail={"jobId":"77","lastPublishedAt":"2026-11-09T10:00:00Z",
+            "description":"Product roadmap and discovery. "*20,
+            "workplaceType":"Remote"}
+        with patch("collectors.fetch_json",return_value=listing):
+            _,jobs=pull("inHire","brq")
+        self.assertEqual(len(jobs),1)
+        self.assertFalse(jobs[0]["published"])
+        with patch("eligibility_enrichment.fetch_json",return_value=detail):
+            enriched,stats=enrich_inhire_before_filter(jobs,"Product Manager")
+        self.assertEqual(stats["complete"],1)
+        self.assertEqual(enriched[0]["published"],"2026-11-09T10:00:00Z")
+        self.assertIn("discovery",enriched[0]["description"])
+
     def test_provided_metadata_survives_normalization(self):
         raw = {"workplaceType": "remote", "countryCode": "BR", "salary": {"min": 9000, "max": 14000, "currency": "BRL"},
                "seniority": "Senior", "department": "Product", "employmentType": "Full-time", "id": "requisition-101"}

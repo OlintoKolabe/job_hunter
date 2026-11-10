@@ -6,11 +6,18 @@ import re
 def enabled():
     return True
 
-def search(keyword):
+def search(keyword, mode="remote"):
     from jobspy import scrape_jobs
-    df=scrape_jobs(site_name="indeed",search_term=keyword,location="Brazil",
-                   country_indeed="Brazil",is_remote=True,results_wanted=15,
-                   fetch_description=False,verbose=0)
+    if mode not in ("remote","onsite","hybrid","all"):
+        raise ValueError("Invalid Indeed work mode")
+    options=dict(site_name="indeed",search_term=keyword,location="Brazil",
+                 country_indeed="Brazil",results_wanted=15,
+                 fetch_description=False,verbose=0)
+    # JobSpy exposes only a remote=True source filter, not distinct onsite or
+    # hybrid switches. Collect unrestricted for those modes, then classify
+    # the individual posting using its own evidence.
+    if mode=="remote":options["is_remote"]=True
+    df=scrape_jobs(**options)
     jobs=[]
     for row in df.to_dict("records"):
         loc=row.get("location")
@@ -22,10 +29,15 @@ def search(keyword):
         url=row.get("job_url") or row.get("job_url_direct")
         description=row.get("description")
         published=row.get("date_posted")
+        if str(published).strip().lower() in ("nat","nan","none","<na>"):
+            published=""
         value=item(row.get("company"),row.get("title"),url,location,"indeed",
                    str(published or ""),str(description or ""))
         if value:
             if row.get("is_remote") is True:value["remote"]=True
+            for key in ("workplaceType","workArrangement","remoteType","workMode"):
+                field=row.get(key)
+                if isinstance(field,str) and field.strip():value[key]=field.strip()[:200]
             jobs.append(value)
     return jobs
 

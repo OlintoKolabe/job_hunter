@@ -129,10 +129,16 @@ def enrich(jobs,limit=4,roles=None):
     candidates.sort(key=lambda i:(not role_match(jobs[i].get("title") or "",terms) if terms else False,
                                   bool(jobs[i].get("published")),
                                   bool(jobs[i].get("description"))))
+    # LinkedIn cards omit workplace type and JD; four detail lookups for a
+    # typical 80-card batch leave nearly every posting unclassifiable. Bound
+    # the additional requests to role-relevant candidates and parallelism.
+    linkedin_count=sum(job.get("source","").lower()=="linkedin_guest" for job in jobs)
+    if linkedin_count:
+        limit=max(limit,min(24,linkedin_count))
     targets=candidates[:limit]
     if not targets:return jobs
     result=list(jobs)
-    with ThreadPoolExecutor(max_workers=min(len(targets),4)) as pool:
+    with ThreadPoolExecutor(max_workers=min(len(targets),8)) as pool:
         for index,updated in zip(targets,pool.map(recover,(jobs[i] for i in targets))):
             result[index]=updated
     return result

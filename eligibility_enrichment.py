@@ -34,7 +34,8 @@ def enrich_inhire_before_filter(jobs, roles, limit=64):
             detail=(response.get("jobPage") or response.get("page") or response) if isinstance(response,dict) else {}
             if not isinstance(detail,dict):return i,None
             # Creation and modification timestamps are not publication events.
-            date=detail.get("lastPublishedAt") or detail.get("publishedAt")
+            date=next((detail.get(k) for k in ("lastPublishedAt","publishedAt","firstPublishedAt",
+                       "published_at","published_on","publicationDate") if detail.get(k)),None)
             jd=detail.get("description") or detail.get("jobDescription") or ""
             return i,{"published":date if parse_date(date) else "",
                       "description":jd[:18000] if isinstance(jd,str) else "",

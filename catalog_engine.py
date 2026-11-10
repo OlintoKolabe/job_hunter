@@ -168,13 +168,16 @@ def extra_pull(source,slug):
                 def text_field(value):
                     return value if isinstance(value,str) else ""
                 location=", ".join(text_field(row.get(x)) for x in ("city","region","country") if text_field(row.get(x)))
-                mode=next((text_field(row.get(x)) for x in ("workplaceType","workplace_type","workMode","modality","job_type") if text_field(row.get(x))),"")
+                # job_type describes employment contract (CLT, PJ...), not
+                # necessarily onsite/hybrid/remote workplace arrangement.
+                mode=next((text_field(row.get(x)) for x in ("workplaceType","workplace_type","workMode","modality") if text_field(row.get(x))),"")
                 description=" ".join(text_field(row.get(x)) for x in ("description","requirements"))
                 # Accept publication fields from different API revisions, but
                 # never substitute created_at/updated_at for a publication date.
                 published=next((row.get(key) for key in
                     ("published_at","publishedAt","publication_date","publicationDate",
-                     "lastPublishedAt") if row.get(key)),None)
+                     "lastPublishedAt","firstPublishedAt","date_published",
+                     "published_on","publicated_at","publicatedAt") if row.get(key)),None)
                 value=item(name,title,url,location,source,published,description)
                 if value:
                     if mode:value["workplaceType"]=mode

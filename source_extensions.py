@@ -201,20 +201,23 @@ def linkedin_cards(url):
         base=resp.url
     parsed=LinkedInCards();parsed.feed(body.decode("utf-8","replace"))
     filters=urllib.parse.parse_qs(urllib.parse.urlsplit(url).query)
-    remote_only=filters.get("f_WT")==["2"]
+    provider_mode={"1":"onsite","2":"remote","3":"hybrid"}.get((filters.get("f_WT") or [""])[0])
     jobs=[]
     for card in parsed.cards:
         link=urllib.parse.urljoin(base,card["url"])
         value=item(card["company"].strip(),card["title"].strip(),link,card["location"].strip(),"linkedin_guest",card["published"])
         if value:
-            # f_WT=2 is LinkedIn's remote-only search filter. Retain this
-            # provider evidence, but never override conflicting card text.
-            if remote_only and not re.search(r"(?i)\b(hybrid|h[ií]brido|presencial|on.?site)\b",value["location"]):
-                value["remote"]=True
+            # The provider's selected work-type is evidence only if the card
+            # does not contradict it. Do not label a mixed result as eligible.
+            from search_filters import detect_work_mode
+            card_mode=detect_work_mode(value)
+            if provider_mode and (not card_mode or card_mode==provider_mode):
+                value["workplaceType"]={"remote":"Remote","onsite":"On-site","hybrid":"Hybrid"}[provider_mode]
+                if provider_mode=="remote":value["remote"]=True
             jobs.append(value)
     return jobs
 
-def extra(source,slug):
+def extra(source,slug,mode="remote"):
     if source in ("geekhunter","nerdin"):
         return public_jobs(source,slug)
     jobs=[]
@@ -286,8 +289,11 @@ def extra(source,slug):
         for j in jobs:j["source"]="Dynamite Jobs"
         return jobs,"validado" if jobs else "pendente",len(jobs)
     if source=="linkedin_guest":
-        url="https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?"+urllib.parse.urlencode(
-            {"keywords":slug,"location":"Brazil","f_WT":"2","f_TPR":"r604800","start":"0"})
+        query={"keywords":slug,"location":"Brazil","f_TPR":"r604800","start":"0"}
+        provider_modes={"remote":"2","onsite":"1","hybrid":"3"}
+        if mode not in ("remote","onsite","hybrid","all"):raise ValueError("Invalid LinkedIn work mode")
+        if mode in provider_modes:query["f_WT"]=provider_modes[mode]
+        url="https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?"+urllib.parse.urlencode(query)
         jobs=linkedin_cards(url)
         return jobs,"validado" if jobs else "pendente",len(jobs)
     if source=="gupy":

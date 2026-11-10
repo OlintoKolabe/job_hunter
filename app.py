@@ -773,7 +773,7 @@ def catalog_scan(request: Request, offset:int=0,limit:int=12,due_only:bool=False
     batch=tasks[offset:offset+limit]
     # An all-source search must not wait on Scrapling's three browser retries
     # for each blocked board. Targeted source scans retain the JS fallback.
-    details,found=scan(batch,workers=4,allow_js=source!="all")
+    details,found=scan(batch,workers=4,allow_js=source!="all",mode=mode)
     # Only deduplicate identical URLs. Company + role can represent distinct
     # openings, offices or requisition IDs and must not discard jobs here.
     unique=unique_jobs_by_url(found)

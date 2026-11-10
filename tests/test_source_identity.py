@@ -4,6 +4,39 @@ from unittest.mock import patch
 from source_extensions import extra
 
 class SourceIdentityTests(unittest.TestCase):
+    def test_linkedin_query_uses_selected_work_mode(self):
+        from source_extensions import extra
+        from urllib.parse import parse_qs,urlsplit
+        for mode,expected in (("remote","2"),("onsite","1"),("hybrid","3"),("all",None)):
+            with self.subTest(mode=mode), patch("source_extensions.linkedin_cards",return_value=[]) as fetch:
+                extra("linkedin_guest","product manager",mode=mode)
+                params=parse_qs(urlsplit(fetch.call_args.args[0]).query)
+                self.assertEqual(params.get("f_WT",[None])[0],expected)
+
+    def test_linkedin_provider_mode_evidence_for_each_filter(self):
+        from source_extensions import linkedin_cards
+        from search_filters import classify
+        from unittest.mock import MagicMock
+        markup=b'''<li class="base-card"><a href="/jobs/view/123"><h3>Product Manager</h3></a>
+          <h4>Acme</h4><span class="job-search-card__location">Brazil</span>
+          <time datetime="2026-11-09"></time></li>'''
+        for provider,expected in (("1","onsite"),("2","remote"),("3","hybrid")):
+            response=MagicMock();response.read.return_value=markup
+            response.url="https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search"
+            response.__enter__.return_value=response
+            with patch("source_extensions.urllib.request.urlopen",return_value=response):
+                job=linkedin_cards("https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?f_WT="+provider)[0]
+            self.assertEqual(classify(job,["product manager"],"BR",expected,0)[0],"confirmed")
+            for other in ("remote","onsite","hybrid"):
+                if other!=expected:self.assertEqual(classify(job,["product manager"],"BR",other,0)[0],"excluded")
+
+    def test_catalog_scan_forwards_work_mode_only_to_linkedin(self):
+        from catalog_engine import scan
+        with patch("catalog_engine.run_task",return_value=({"source":"linkedin_guest","state":"validado"},[])) as task:
+            scan([("linkedin_guest","product manager")],workers=1,allow_js=False,mode="hybrid")
+            self.assertEqual(task.call_args.args,("linkedin_guest","product manager",False,"hybrid"))
+
+
     def test_linkedin_remote_search_preserves_provider_mode_evidence(self):
         from source_extensions import linkedin_cards
         markup=b'''<li class="base-card"><a href="/jobs/view/123"><h3>Product Manager</h3></a>

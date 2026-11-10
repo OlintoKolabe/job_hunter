@@ -200,11 +200,18 @@ def linkedin_cards(url):
         if len(body)>2_000_000:raise ValueError("response too large")
         base=resp.url
     parsed=LinkedInCards();parsed.feed(body.decode("utf-8","replace"))
+    filters=urllib.parse.parse_qs(urllib.parse.urlsplit(url).query)
+    remote_only=filters.get("f_WT")==["2"]
     jobs=[]
     for card in parsed.cards:
         link=urllib.parse.urljoin(base,card["url"])
         value=item(card["company"].strip(),card["title"].strip(),link,card["location"].strip(),"linkedin_guest",card["published"])
-        if value:jobs.append(value)
+        if value:
+            # f_WT=2 is LinkedIn's remote-only search filter. Retain this
+            # provider evidence, but never override conflicting card text.
+            if remote_only and not re.search(r"(?i)\b(hybrid|h[ií]brido|presencial|on.?site)\b",value["location"]):
+                value["remote"]=True
+            jobs.append(value)
     return jobs
 
 def extra(source,slug):

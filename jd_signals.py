@@ -11,6 +11,14 @@ JD_PATTERNS={
 }
 REMOTE_EVIDENCE=("fully remote","100% remote","100% remoto","work from home","home office","home based","remote first","remote-first","work remotely","work remotely from","work from anywhere","work anywhere","wfh","telecommute","telecommuting","trabalho a distancia","trabalho à distância","trabalho em casa","trabalho de casa","trabalho remoto","remote position","remote role","remote working","teletrabalho","remoto para todo o brasil","trabalho de qualquer lugar do brasil","work remotely from brazil","remote within brazil","remote brazil","brasil - remoto","brazil - remote")
 ONSITE_EVIDENCE=("on site only","onsite only","must work from office","presencial obrigatorio","exclusivamente presencial")
+HYBRID_EVIDENCE=("hybrid work model","hybrid working model","hybrid work arrangement",
+                 "hybrid position","hybrid role","hybrid workplace","work in hybrid mode",
+                 "modelo hibrido","regime hibrido","modalidade hibrida","trabalho hibrido",
+                 "atuacao hibrida","vaga hibrida","posicao hibrida","formato hibrido")
+ONSITE_MODE_EVIDENCE=("onsite position","on-site position","on site position",
+                      "onsite role","on-site role","in office position","office-based position",
+                      "modelo presencial","regime presencial","modalidade presencial",
+                      "trabalho presencial","vaga presencial","atuacao presencial")
 FOREIGN_ONLY=("us only","usa only","united states only","must reside in the us","must be based in the us","europe only","canada only")
 BRAZIL_EVIDENCE=("based in brazil","located in brazil","reside in brazil","work from brazil","brazilian residents","candidatos do brasil","residir no brasil","atuar do brasil","brazil or latam","remote within brazil","work remotely from brazil","remoto para todo o brasil","trabalho de qualquer lugar do brasil","remote brazil","brasil - remoto","brazil - remote")
 SPANISH_REQ=("fluent spanish required","fluent in spanish","spanish fluency required","fluency in spanish","espanhol fluente obrigatorio","fluencia em espanhol obrigatoria")
@@ -33,6 +41,8 @@ def signals(job,roles):
     work=[]
     if any(x in jd for x in REMOTE_EVIDENCE):work.append("remote")
     if any(x in jd for x in ONSITE_EVIDENCE):work.append("onsite_only")
+    if any(x in jd for x in HYBRID_EVIDENCE):work.append("hybrid")
+    if any(x in jd for x in ONSITE_MODE_EVIDENCE):work.append("onsite")
     geo=[]
     if any(x in jd for x in BRAZIL_EVIDENCE):geo.append("brazil")
     if any(x in jd for x in FOREIGN_ONLY):geo.append("foreign_only")

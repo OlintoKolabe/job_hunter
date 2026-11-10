@@ -111,6 +111,46 @@ def delete_job(db_url, mu, owner, job_id):
             return "running" if cur.fetchone() else "missing"
 
 
+def delete_jobs(db_url, mu, owner, *, ids=None, all_jobs=False):
+    """Delete this account's non-running CVs in one transaction.
+
+    The running worker must retain its row; queued work can be removed before
+    being claimed. The result reports in-flight CVs not deleted.
+    """
+    if all_jobs == (ids is not None):
+        raise ValueError("Escolha todos ou uma lista de currículos")
+    with _db(db_url, mu) as conn:
+        with conn.cursor() as cur:
+            if all_jobs:
+                cur.execute("""
+                    DELETE FROM public.jh_cv_queue
+                    WHERE owner_id=%s AND status IN ('queued','ready','failed')
+                    RETURNING id::text
+                """, (owner,))
+                deleted=[row[0] for row in cur.fetchall()]
+                cur.execute("""
+                    SELECT count(*) FROM public.jh_cv_queue
+                    WHERE owner_id=%s AND status='running'
+                """, (owner,))
+            else:
+                if not ids:
+                    return {"deleted_ids":[],"running":0}
+                cur.execute("""
+                    DELETE FROM public.jh_cv_queue
+                    WHERE owner_id=%s AND id = ANY(%s::uuid[])
+                      AND status IN ('queued','ready','failed')
+                    RETURNING id::text
+                """, (owner,ids))
+                deleted=[row[0] for row in cur.fetchall()]
+                cur.execute("""
+                    SELECT count(*) FROM public.jh_cv_queue
+                    WHERE owner_id=%s AND id = ANY(%s::uuid[])
+                      AND status='running'
+                """, (owner,ids))
+            running=cur.fetchone()[0]
+    return {"deleted_ids":deleted,"running":running}
+
+
 def _claim(cur):
     # A database lock must never stall every worker indefinitely. Each claim is
     # a separate transaction; SKIP LOCKED safely coordinates parallel workers.

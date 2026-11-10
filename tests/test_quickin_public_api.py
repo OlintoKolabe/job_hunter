@@ -46,4 +46,14 @@ class QuickinPublicApiTests(unittest.TestCase):
         self.assertIn("backlog",jobs[0]["description"])
         self.assertEqual(read.call_count,1)
 
+    def test_public_api_keeps_publication_and_not_contract_as_mode(self):
+        payload=[{"_id":"id1","title":"Product Manager","publicate":"published",
+                 "career_url":"https://jobs.quickin.io/example/jobs/id1",
+                 "job_type":"CLT","published_on":"2026-11-09"}]
+        with patch("catalog_engine.read",return_value=(json.dumps(payload).encode(),200)):
+            jobs,state=extra_pull("quickin","example")
+        self.assertEqual(state,"ok")
+        self.assertEqual(jobs[0]["published"],"2026-11-09")
+        self.assertNotIn("workplaceType",jobs[0])
+
 if __name__=="__main__":unittest.main()

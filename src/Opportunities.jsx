@@ -386,7 +386,7 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},pro
    <label style={{display:"inline-flex",alignItems:"center",gap:8,fontWeight:700,cursor:"pointer",gridColumn:"1 / -1"}}><input type="checkbox" checked={onlyNew} onChange={e=>setOnlyNew(e.target.checked)}/> Somente vagas novas <small style={{fontWeight:400,opacity:.8}}>(primeira descoberta)</small></label>
   </div>
 
-  <details className="catalog-diagnostics"><summary>Fontes consultadas nesta busca · Fila ATS ({queueJobs.filter(j=>j.status==='queued'||j.status==='running').length} pendentes)</summary><section aria-label="Fila de currículos ATS" style={{marginBottom:16}}><h3>Fila de currículos ATS</h3>
+  <details className="catalog-diagnostics"><summary>Currículos criados</summary><section aria-label="Fila de currículos ATS" style={{marginBottom:16}}><h3>Fila de currículos ATS</h3>
     <p>Os currículos prontos ficam disponíveis aqui. A exclusão remove definitivamente o DOCX e o registro desta conta. Currículos em geração não podem ser apagados até terminarem.</p>
     <div className="cv-bulk-actions">
       <label><input type="checkbox" checked={queueJobs.some(j=>j.status!=='running')&&queueJobs.filter(j=>j.status!=='running').every(j=>selectedCvIds.includes(j.id))} onChange={e=>setSelectedCvIds(e.target.checked?queueJobs.filter(j=>j.status!=='running').map(j=>j.id):[])} disabled={bulkDeleting||!queueJobs.some(j=>j.status!=='running')}/> Selecionar todos os exibidos</label>

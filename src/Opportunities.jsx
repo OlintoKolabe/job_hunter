@@ -396,16 +396,21 @@ export function OpportunitiesPanel({historyStats=null,onDecisionSaved=()=>{},pro
     </div>
     {confirmClearAll&&<div className="cv-delete-confirm" role="group" aria-label="Confirmação para limpar todos os currículos"><strong>Apagar todos os currículos desta conta?</strong><span>Isso inclui registros que não estão nesta lista de 100 itens e não pode ser desfeito. Currículos em geração serão preservados.</span><div className="cv-bulk-actions"><button type="button" className="cv-action cv-action-danger" disabled={bulkDeleting} onClick={()=>bulkDeleteCvs(true)}>Sim, apagar todos</button><button type="button" className="cv-action cv-action-primary" disabled={bulkDeleting} onClick={()=>setConfirmClearAll(false)}>Voltar</button></div></div>}
     {cvDeleteNotice&&<p role="status" className="notice">{cvDeleteNotice}</p>}
-    <div style={{display:'grid',gap:8,marginTop:8}}>
+    <div className="cv-card-list">
       {queueJobs.length===0&&<p>Nenhum currículo registrado.</p>}
-      {queueJobs.map(j=><div key={j.id} style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
-        <input type="checkbox" aria-label={'Selecionar currículo '+(j.title||'Vaga')} disabled={j.status==='running'||bulkDeleting||deletingCvIds.includes(j.id)} checked={selectedCvIds.includes(j.id)} onChange={e=>setSelectedCvIds(ids=>e.target.checked?[...ids,j.id]:ids.filter(id=>id!==j.id))}/>
-        <span>{j.title||'Vaga'} — {j.company||'Empresa'}</span>
-        <small>{({queued:'Na fila',running:'Gerando…',ready:'Pronto',failed:'Falhou'})[j.status]||j.status}{j.status==='queued'&&j.created_at?' · aguardando '+queueAge(j.created_at):''}{j.status==='running'&&j.started_at?' · processando há '+queueAge(j.started_at):''}</small>
-        {j.status==='ready'&&<button type="button" className="cv-action cv-action-success" onClick={()=>downloadQueuedCv(j)}>Baixar DOCX</button>}
-        {j.status!=='running'&&<button type="button" className="cv-action cv-action-danger" disabled={bulkDeleting||deletingCvIds.includes(j.id)} onClick={()=>deleteQueuedCv(j)}>{deletingCvIds.includes(j.id)?'Apagando…':'Apagar do banco'}</button>}
-        {j.status==='failed'&&<small role="alert">{j.error}</small>}
-        {cvErrors[j.id]&&<small role="alert">{cvErrors[j.id]}</small>}
+      {queueJobs.map(j=><div key={j.id} className="cv-job-card">
+        <input className="cv-job-select" type="checkbox" aria-label={'Selecionar currículo '+(j.title||'Vaga')} disabled={j.status==='running'||bulkDeleting||deletingCvIds.includes(j.id)} checked={selectedCvIds.includes(j.id)} onChange={e=>setSelectedCvIds(ids=>e.target.checked?[...ids,j.id]:ids.filter(id=>id!==j.id))}/>
+        <div className="cv-job-info">
+          <strong>{j.title||'Vaga'}</strong>
+          <span>{j.company||'Empresa'}</span>
+          <small>{({queued:'Na fila',running:'Gerando…',ready:'Pronto',failed:'Falhou'})[j.status]||j.status}{j.status==='queued'&&j.created_at?' · aguardando '+queueAge(j.created_at):''}{j.status==='running'&&j.started_at?' · processando há '+queueAge(j.started_at):''}</small>
+          {j.status==='failed'&&<small role="alert">{j.error}</small>}
+          {cvErrors[j.id]&&<small role="alert">{cvErrors[j.id]}</small>}
+        </div>
+        <div className="cv-job-actions">
+          {j.status==='ready'&&<button type="button" className="cv-action cv-action-success" onClick={()=>downloadQueuedCv(j)}>Baixar DOCX</button>}
+          {j.status!=='running'&&<button type="button" className="cv-action cv-action-danger" disabled={bulkDeleting||deletingCvIds.includes(j.id)} onClick={()=>deleteQueuedCv(j)}>{deletingCvIds.includes(j.id)?'Apagando…':'Apagar do banco'}</button>}
+        </div>
       </div>)}
     </div>
   </section><p>JDs válidos e ausentes: somente vagas elegíveis ou em revisão, Não representam todos os anúncios brutos.</p><div className="table-wrap"><table><thead><tr><th>Fonte</th><th>Consultas</th><th>Anúncios brutos</th><th>JDs válidos</th><th>JDs ausentes</th><th>Pendências</th></tr></thead><tbody>{Object.entries(sourceStats).sort((a,b)=>b[1].recebidas-a[1].recebidas).map(([source,v])=><tr key={source}><td>{source}</td><td>{v.consultas}</td><td>{v.recebidas}</td><td>{v.jdValidos||0}</td><td>{v.jdAusentes||0}</td><td>{v.erros}</td></tr>)}</tbody></table></div></details>

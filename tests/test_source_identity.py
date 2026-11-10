@@ -4,6 +4,48 @@ from unittest.mock import patch
 from source_extensions import extra
 
 class SourceIdentityTests(unittest.TestCase):
+    def test_linkedin_remote_search_preserves_provider_mode_evidence(self):
+        from source_extensions import linkedin_cards
+        markup=b'''<li class="base-card"><a href="/jobs/view/123"><h3>Product Manager</h3></a>
+          <h4>Acme</h4><span class="job-search-card__location">Brazil</span>
+          <time datetime="2026-11-09"></time></li>'''
+        from unittest.mock import MagicMock
+        response=MagicMock();response.read.return_value=markup
+        response.url="https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search"
+        response.__enter__.return_value=response
+        with patch("source_extensions.urllib.request.urlopen",return_value=response):
+            jobs=linkedin_cards("https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?f_WT=2")
+        self.assertEqual(len(jobs),1)
+        self.assertTrue(jobs[0]["remote"])
+
+    def test_linkedin_hybrid_card_is_not_forced_remote(self):
+        from source_extensions import linkedin_cards
+        from unittest.mock import MagicMock
+        response=MagicMock();response.read.return_value=b'''<li class="base-card">
+        <a href="/jobs/view/123"><h3>Product Owner</h3></a>
+        <span class="job-search-card__location">Sao Paulo (Hybrid)</span></li>'''
+        response.url="https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search"
+        response.__enter__.return_value=response
+        with patch("source_extensions.urllib.request.urlopen",return_value=response):
+            jobs=linkedin_cards("https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?f_WT=2")
+        self.assertNotIn("remote",jobs[0])
+
+    def test_linkedin_public_detail_recovers_description(self):
+        from job_detail_evidence import recover
+        from unittest.mock import MagicMock
+        response=MagicMock()
+        response.read.return_value=b'''<div class="show-more-less-html__markup"><p>
+        Product discovery, roadmap, backlog prioritization and stakeholder management.
+        </p></div>'''
+        response.headers={"Content-Type":"text/html; charset=utf-8"}
+        response.__enter__.return_value=response
+        job={"source":"linkedin_guest","title":"Product Manager",
+             "url":"https://www.linkedin.com/jobs/view/123"}
+        with patch("job_detail_evidence.urllib.request.urlopen",return_value=response) as fetch:
+            result=recover(job)
+        self.assertIn("roadmap",result["description"])
+        self.assertIn("/jobPosting/123",fetch.call_args.args[0].full_url)
+
     def test_linkedin_card_fields_feed_country_filter(self):
         from source_extensions import LinkedInCards
         from search_filters import classify,search_terms,DEFAULT_ROLES

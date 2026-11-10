@@ -231,7 +231,7 @@ def extra_pull(source,slug):
             if v:jobs.append(v)
     return jobs,"ok"
 
-def run_task(source,slug,allow_js=True):
+def run_task(source,slug,allow_js=True,mode="remote"):
     try:
         if source in ("jobgether","workable"):
             jobs,details=collect([slug],"BR",source)
@@ -252,7 +252,7 @@ def run_task(source,slug,allow_js=True):
             return {"source":source,"slug":slug,"state":"validado" if detail["received"] else "sem_vagas",
                 "received":detail["received"],"target":len(jobs)},jobs
         if source in ("smartrecruiters","teamtailor","recruitee","personio","workable_account","dynamite","linkedin_guest","gupy","kaszek","jobbol","geekhunter","nerdin"):
-            jobs,state,count=expanded_pull(source,slug)
+            jobs,state,count=(expanded_pull(source,slug,mode=mode) if source=="linkedin_guest" else expanded_pull(source,slug))
             if allow_js and not jobs and source in ("dynamite","gupy","kaszek","jobbol"):
                 try:
                     fallback=js_fallback(source,slug)
@@ -272,14 +272,15 @@ def run_task(source,slug,allow_js=True):
     except Exception as e:
         return {"source":source,"slug":slug,"state":"pendente","received":0,"error":str(e)[:140]},[]
 
-def scan(tasks,workers=6,allow_js=True):
+def scan(tasks,workers=6,allow_js=True,mode="remote"):
     out=[];jobs=[]
     started=time.monotonic()
     with ThreadPoolExecutor(max_workers=workers) as pool:
         # Preserve the existing two-argument task contract for callers/tests
         # unless this search explicitly suppresses expensive JS fallbacks.
-        future={(pool.submit(run_task,source,slug) if allow_js
-                 else pool.submit(run_task,source,slug,False)):(source,slug)
+        future={(pool.submit(run_task,source,slug,allow_js,mode) if source=="linkedin_guest"
+                 else (pool.submit(run_task,source,slug) if allow_js
+                       else pool.submit(run_task,source,slug,False))):(source,slug)
                 for source,slug in tasks}
         for f in as_completed(future):
             source,slug=future[f]

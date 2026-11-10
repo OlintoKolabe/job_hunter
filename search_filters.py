@@ -180,6 +180,8 @@ def detect_work_mode(job,evidence=None):
     # Explicitly conflicting signals are not proof of remote eligibility.
     jd=evidence.get("work_evidence") or []
     if "onsite_only" in jd:return "onsite"
+    if "hybrid" in jd:return "hybrid"
+    if "onsite" in jd:return "onsite"
     structured=[]
     for key in ("workplaceType","workArrangement","remoteType","workMode","workplace"):
         value=job.get(key)

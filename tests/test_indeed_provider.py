@@ -18,6 +18,18 @@ class IndeedProviderTests(unittest.TestCase):
         self.assertIn("Brasil",rows[0]["location"])
         self.assertEqual(spy.call_args.kwargs["country_indeed"],"Brazil")
         self.assertEqual(spy.call_args.kwargs["results_wanted"],15)
+        self.assertTrue(spy.call_args.kwargs["is_remote"])
+    def test_indeed_other_modes_do_not_force_remote_search(self):
+        for mode in ("onsite","hybrid","all"):
+            with self.subTest(mode=mode),patch("jobspy.scrape_jobs",return_value=pd.DataFrame()) as spy:
+                indeed_provider.search("product owner",mode=mode)
+                self.assertNotIn("is_remote",spy.call_args.kwargs)
+    def test_indeed_date_nat_is_not_pretended_publication(self):
+        sample=pd.DataFrame([{"title":"Product Manager","company":"Acme","job_url":"https://br.indeed.com/viewjob?jk=abc",
+                              "location":"Brazil","date_posted":pd.NaT}])
+        with patch("jobspy.scrape_jobs",return_value=sample):
+            row=indeed_provider.search("product manager")[0]
+        self.assertEqual(row["published"],"")
     def test_empty_results_remain_empty(self):
         with patch("jobspy.scrape_jobs",return_value=pd.DataFrame()):
             self.assertEqual(indeed_provider.search("product owner"),[])

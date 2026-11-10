@@ -207,13 +207,14 @@ def linkedin_cards(url):
         link=urllib.parse.urljoin(base,card["url"])
         value=item(card["company"].strip(),card["title"].strip(),link,card["location"].strip(),"linkedin_guest",card["published"])
         if value:
-            # The provider's selected work-type is evidence only if the card
-            # does not contradict it. Do not label a mixed result as eligible.
+            # LinkedIn's search filter is not authoritative evidence of each
+            # posting's workplace type. Use only the card's own explicit label;
+            # otherwise leave the modality unknown pending job-detail evidence.
             from search_filters import detect_work_mode
             card_mode=detect_work_mode(value)
-            if provider_mode and (not card_mode or card_mode==provider_mode):
-                value["workplaceType"]={"remote":"Remote","onsite":"On-site","hybrid":"Hybrid"}[provider_mode]
-                if provider_mode=="remote":value["remote"]=True
+            if card_mode:
+                value["workplaceType"]={"remote":"Remote","onsite":"On-site","hybrid":"Hybrid"}[card_mode]
+            value["providerSearchMode"]=provider_mode or "all"
             jobs.append(value)
     return jobs
 

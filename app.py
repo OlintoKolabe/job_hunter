@@ -1233,6 +1233,32 @@ def resume_queue_delete(job_id: str, request: Request):
     return {"deleted":True}
 
 
+class ResumeBulkDeleteRequest(BaseModel):
+    ids: list[str] | None = None
+    all: bool = False
+
+
+@app.post("/api/resume/queue/delete")
+def resume_queue_bulk_delete(payload: ResumeBulkDeleteRequest, request: Request):
+    authenticated_uid=require_auth(request)
+    if payload.all == (payload.ids is not None):
+        raise HTTPException(400,"Selecione currículos ou escolha limpar todos")
+    if payload.ids is not None:
+        from uuid import UUID
+        if len(payload.ids)>500:
+            raise HTTPException(400,"Selecione no máximo 500 currículos por operação")
+        try:
+            ids=list(dict.fromkeys(str(UUID(identifier)) for identifier in payload.ids))
+        except (ValueError,TypeError):
+            raise HTTPException(400,"Há um identificador de currículo inválido")
+    else:
+        ids=None
+    from cv_queue import delete_jobs
+    result=delete_jobs(DATABASE,mu,authenticated_uid if mu.enabled else 0,
+                       ids=ids,all_jobs=payload.all)
+    return {"deleted":len(result["deleted_ids"]),**result}
+
+
 @app.get("/api/resume/queue/{job_id}/download")
 def resume_queue_download(job_id: str, request: Request):
     authenticated_uid=require_auth(request)
